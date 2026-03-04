@@ -1,30 +1,69 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, Save, Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
+import { Plus, Trash2, Save, Eye, EyeOff, Loader2 } from "lucide-react";
+import { useSettings, useSaveSettings } from "@/hooks/useSettings";
 
 interface Supplier {
   prefix: string;
   url: string;
 }
 
+const SETTING_KEYS = {
+  openai_key: "openai_api_key",
+  anthropic_key: "anthropic_api_key",
+  default_model: "default_model",
+  woo_url: "woocommerce_url",
+  woo_key: "woocommerce_consumer_key",
+  woo_secret: "woocommerce_consumer_secret",
+  s3_key: "s3_access_key_id",
+  s3_secret: "s3_secret_access_key",
+  s3_bucket: "s3_bucket_name",
+  s3_region: "s3_region",
+  suppliers: "suppliers_json",
+};
+
 const SettingsPage = () => {
+  const { data: settings, isLoading } = useSettings();
+  const saveSettings = useSaveSettings();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [form, setForm] = useState<Record<string, string>>({});
   const [suppliers, setSuppliers] = useState<Supplier[]>([{ prefix: "", url: "" }]);
 
+  // Load settings into form when fetched
+  useEffect(() => {
+    if (settings) {
+      setForm(settings);
+      try {
+        const parsed = JSON.parse(settings[SETTING_KEYS.suppliers] ?? "[]");
+        if (Array.isArray(parsed) && parsed.length > 0) setSuppliers(parsed);
+      } catch { /* keep default */ }
+    }
+  }, [settings]);
+
   const toggleShow = (key: string) => setShowKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const updateField = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const addSupplier = () => setSuppliers((prev) => [...prev, { prefix: "", url: "" }]);
   const removeSupplier = (index: number) => setSuppliers((prev) => prev.filter((_, i) => i !== index));
 
   const handleSave = () => {
-    toast.success("Configurações guardadas com sucesso!");
+    const data = { ...form, [SETTING_KEYS.suppliers]: JSON.stringify(suppliers) };
+    saveSettings.mutate(data);
   };
+
+  if (isLoading) {
+    return (
+      <div className="p-6 lg:p-8 flex justify-center py-20">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-3xl">
@@ -39,11 +78,11 @@ const SettingsPage = () => {
           <CardTitle className="text-base">🤖 Modelos de IA</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <SecretField label="API Key OpenAI" id="openai" showKeys={showKeys} toggleShow={toggleShow} />
-          <SecretField label="API Key Anthropic" id="anthropic" showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="API Key OpenAI" id="openai" settingKey={SETTING_KEYS.openai_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="API Key Anthropic" id="anthropic" settingKey={SETTING_KEYS.anthropic_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
           <div className="space-y-2">
             <Label>Modelo Padrão</Label>
-            <Select defaultValue="gemini-flash">
+            <Select value={form[SETTING_KEYS.default_model] ?? "gemini-flash"} onValueChange={(v) => updateField(SETTING_KEYS.default_model, v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="gemini-flash">Gemini 3 Flash (Recomendado)</SelectItem>
@@ -64,10 +103,10 @@ const SettingsPage = () => {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>URL do Site</Label>
-            <Input placeholder="https://hotelequip.pt" />
+            <Input placeholder="https://hotelequip.pt" value={form[SETTING_KEYS.woo_url] ?? ""} onChange={(e) => updateField(SETTING_KEYS.woo_url, e.target.value)} />
           </div>
-          <SecretField label="Consumer Key" id="woo_key" showKeys={showKeys} toggleShow={toggleShow} />
-          <SecretField label="Consumer Secret" id="woo_secret" showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="Consumer Key" id="woo_key" settingKey={SETTING_KEYS.woo_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="Consumer Secret" id="woo_secret" settingKey={SETTING_KEYS.woo_secret} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
         </CardContent>
       </Card>
 
@@ -77,15 +116,15 @@ const SettingsPage = () => {
           <CardTitle className="text-base">☁️ Amazon S3</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <SecretField label="Access Key ID" id="s3_key" showKeys={showKeys} toggleShow={toggleShow} />
-          <SecretField label="Secret Access Key" id="s3_secret" showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="Access Key ID" id="s3_key" settingKey={SETTING_KEYS.s3_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="Secret Access Key" id="s3_secret" settingKey={SETTING_KEYS.s3_secret} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
           <div className="space-y-2">
             <Label>Nome do Bucket</Label>
-            <Input placeholder="hotelequip-images" />
+            <Input placeholder="hotelequip-images" value={form[SETTING_KEYS.s3_bucket] ?? ""} onChange={(e) => updateField(SETTING_KEYS.s3_bucket, e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label>Região</Label>
-            <Input placeholder="eu-west-1" />
+            <Input placeholder="eu-west-1" value={form[SETTING_KEYS.s3_region] ?? ""} onChange={(e) => updateField(SETTING_KEYS.s3_region, e.target.value)} />
           </div>
         </CardContent>
       </Card>
@@ -141,8 +180,9 @@ const SettingsPage = () => {
       <Separator />
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} size="lg">
-          <Save className="w-4 h-4 mr-2" /> Guardar Configurações
+        <Button onClick={handleSave} size="lg" disabled={saveSettings.isPending}>
+          {saveSettings.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+          Guardar Configurações
         </Button>
       </div>
     </div>
@@ -152,11 +192,17 @@ const SettingsPage = () => {
 function SecretField({
   label,
   id,
+  settingKey,
+  form,
+  updateField,
   showKeys,
   toggleShow,
 }: {
   label: string;
   id: string;
+  settingKey: string;
+  form: Record<string, string>;
+  updateField: (key: string, value: string) => void;
   showKeys: Record<string, boolean>;
   toggleShow: (key: string) => void;
 }) {
@@ -164,7 +210,13 @@ function SecretField({
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="flex gap-2">
-        <Input type={showKeys[id] ? "text" : "password"} placeholder="••••••••••••" className="flex-1" />
+        <Input
+          type={showKeys[id] ? "text" : "password"}
+          placeholder="••••••••••••"
+          className="flex-1"
+          value={form[settingKey] ?? ""}
+          onChange={(e) => updateField(settingKey, e.target.value)}
+        />
         <Button variant="ghost" size="icon" onClick={() => toggleShow(id)}>
           {showKeys[id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </Button>

@@ -1,20 +1,30 @@
-import { Package, CheckCircle, Clock, Activity } from "lucide-react";
+import { Package, CheckCircle, Clock, Activity, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useProductStats } from "@/hooks/useProducts";
+import { useRecentActivity } from "@/hooks/useActivityLog";
+import { formatDistanceToNow } from "date-fns";
+import { pt } from "date-fns/locale";
 
-const stats = [
-  { label: "Produtos Pendentes", value: "0", icon: Clock, color: "text-warning" },
-  { label: "Produtos Aprovados", value: "0", icon: CheckCircle, color: "text-success" },
-  { label: "Total Processados", value: "0", icon: Package, color: "text-primary" },
-];
-
-const recentActivity = [
-  { action: "Aplicação iniciada", time: "Agora", status: "info" },
-];
+const actionLabels: Record<string, string> = {
+  upload: "Ficheiro carregado",
+  optimize: "Produto otimizado",
+  publish: "Produto publicado",
+  settings_change: "Configurações alteradas",
+  error: "Erro ocorrido",
+};
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { data: stats, isLoading: statsLoading } = useProductStats();
+  const { data: activity, isLoading: activityLoading } = useRecentActivity();
+
+  const statCards = [
+    { label: "Produtos Pendentes", value: stats?.pending ?? 0, icon: Clock, color: "text-warning" },
+    { label: "Produtos Otimizados", value: stats?.optimized ?? 0, icon: CheckCircle, color: "text-success" },
+    { label: "Total Processados", value: stats?.total ?? 0, icon: Package, color: "text-primary" },
+  ];
 
   return (
     <div className="p-6 lg:p-8 space-y-8 animate-fade-in">
@@ -25,13 +35,15 @@ const Dashboard = () => {
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">{stat.label}</p>
-                  <p className="text-3xl font-bold mt-1">{stat.value}</p>
+                  <p className="text-3xl font-bold mt-1">
+                    {statsLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : stat.value}
+                  </p>
                 </div>
                 <stat.icon className={`w-10 h-10 ${stat.color} opacity-80`} />
               </div>
@@ -65,14 +77,22 @@ const Dashboard = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                <span className="text-sm">{item.action}</span>
-                <span className="text-xs text-muted-foreground">{item.time}</span>
-              </div>
-            ))}
-          </div>
+          {activityLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : !activity || activity.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Sem atividade registada.</p>
+          ) : (
+            <div className="space-y-3">
+              {activity.map((item) => (
+                <div key={item.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                  <span className="text-sm">{actionLabels[item.action] ?? item.action}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDistanceToNow(new Date(item.created_at), { addSuffix: true, locale: pt })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
