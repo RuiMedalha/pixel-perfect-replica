@@ -1,7 +1,8 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Upload, Package, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Upload, Package, Settings, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -13,6 +14,7 @@ const navItems = [
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { signOut, user } = useAuth();
 
   return (
     <aside
@@ -60,6 +62,21 @@ export function AppSidebar() {
           );
         })}
       </nav>
+
+      <div className="border-t border-sidebar-border px-2 py-2 space-y-1">
+        {!collapsed && user && (
+          <p className="text-sidebar-muted text-xs truncate px-3 py-1">{user.email}</p>
+        )}
+        <button
+          onClick={signOut}
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-destructive transition-colors w-full",
+          )}
+        >
+          <LogOut className="w-5 h-5 shrink-0" />
+          {!collapsed && <span>Sair</span>}
+        </button>
+      </div>
 
       <button
         onClick={() => setCollapsed(!collapsed)}
