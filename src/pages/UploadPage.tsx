@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useUploadCatalog, type FileUploadType } from "@/hooks/useUploadCatalog";
 import { useUploadedFiles } from "@/hooks/useUploadedFiles";
+import { useDeleteUploadedFile } from "@/hooks/useDeleteUploadedFile";
 import { ColumnMapper } from "@/components/ColumnMapper";
 import { format } from "date-fns";
 
@@ -21,6 +22,7 @@ const UploadPage = () => {
     allFields, customFields, addCustomField, removeCustomField,
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
+  const deleteUploadedFile = useDeleteUploadedFile();
   const [dragOver, setDragOver] = useState(false);
   const [activeTab, setActiveTab] = useState<FileUploadType>("products");
   const [newFieldKey, setNewFieldKey] = useState("");
@@ -299,6 +301,15 @@ const UploadPage = () => {
                   <span className="text-xs text-muted-foreground shrink-0">
                     {format(new Date(record.created_at), "dd/MM/yyyy HH:mm")}
                   </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                    onClick={() => deleteUploadedFile.mutate(record.id)}
+                    disabled={deleteUploadedFile.isPending}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               ))}
             </div>

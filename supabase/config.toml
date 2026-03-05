@@ -2,3 +2,9 @@ project_id = "hkmfwfxwgalcvfmvgtoj"
 
 [functions.optimize-product]
 verify_jwt = false
+
+[functions.publish-woocommerce]
+verify_jwt = false
+
+[functions.parse-catalog]
+verify_jwt = false

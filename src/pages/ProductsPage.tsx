@@ -7,10 +7,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2 } from "lucide-react";
+import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2, Download, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts } from "@/hooks/useOptimizeProducts";
+import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
+import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import type { Enums } from "@/integrations/supabase/types";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
@@ -35,6 +37,7 @@ const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
+  const publishWoo = usePublishWooCommerce();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -76,22 +79,37 @@ const ProductsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Painel de Produtos</h1>
           <p className="text-muted-foreground mt-1">{products?.length ?? 0} produtos no total</p>
         </div>
-        {selected.size > 0 && (
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => bulkAction("optimized")}>
-              <Check className="w-4 h-4 mr-1" /> Aprovar ({selected.size})
-            </Button>
-            <Button size="sm" variant="destructive" onClick={() => bulkAction("error")}>
-              <X className="w-4 h-4 mr-1" /> Rejeitar ({selected.size})
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => bulkAction("published")}>
-              <ExternalLink className="w-4 h-4 mr-1" /> Publicar ({selected.size})
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => { optimizeProducts.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={optimizeProducts.isPending}>
-              <Sparkles className="w-4 h-4 mr-1" /> Otimizar IA ({selected.size})
-            </Button>
-          </div>
-        )}
+        <div className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => {
+            const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
+            exportProductsToExcel(selectedProducts);
+          }}>
+            <Download className="w-4 h-4 mr-1" /> Exportar Excel
+          </Button>
+          {selected.size > 0 && (
+            <>
+              <Button size="sm" onClick={() => bulkAction("optimized")}>
+                <Check className="w-4 h-4 mr-1" /> Aprovar ({selected.size})
+              </Button>
+              <Button size="sm" variant="destructive" onClick={() => bulkAction("error")}>
+                <X className="w-4 h-4 mr-1" /> Rejeitar ({selected.size})
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
+                <Send className="w-4 h-4 mr-1" /> Publicar WooCommerce ({selected.size})
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => { optimizeProducts.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={optimizeProducts.isPending}>
+                <Sparkles className="w-4 h-4 mr-1" /> Otimizar IA ({selected.size})
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => {
+                const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
+                exportProductsToExcel(selectedProducts, "produtos-selecionados");
+                setSelected(new Set());
+              }}>
+                <Download className="w-4 h-4 mr-1" /> Exportar Seleção ({selected.size})
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
