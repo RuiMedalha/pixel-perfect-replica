@@ -7,11 +7,15 @@ export function useDeleteProducts() {
 
   return useMutation({
     mutationFn: async (ids: string[]) => {
-      const { error } = await supabase
-        .from("products")
-        .delete()
-        .in("id", ids);
-      if (error) throw error;
+      const batchSize = 500;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const { error } = await supabase
+          .from("products")
+          .delete()
+          .in("id", batch);
+        if (error) throw error;
+      }
     },
     onSuccess: (_, ids) => {
       qc.invalidateQueries({ queryKey: ["products"] });
