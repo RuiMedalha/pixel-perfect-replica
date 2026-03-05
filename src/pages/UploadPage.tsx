@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2 } from "lucide-react";
+import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -14,6 +14,9 @@ import { useUploadedFiles } from "@/hooks/useUploadedFiles";
 import { useDeleteUploadedFile } from "@/hooks/useDeleteUploadedFile";
 import { ColumnMapper } from "@/components/ColumnMapper";
 import { format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 const UploadPage = () => {
   const {
@@ -23,11 +26,16 @@ const UploadPage = () => {
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
   const deleteUploadedFile = useDeleteUploadedFile();
+  const qc = useQueryClient();
   const [dragOver, setDragOver] = useState(false);
   const [activeTab, setActiveTab] = useState<FileUploadType>("products");
   const [newFieldKey, setNewFieldKey] = useState("");
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [addFieldOpen, setAddFieldOpen] = useState(false);
+
+  // Scraping state
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [isScraping, setIsScraping] = useState(false);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -45,6 +53,26 @@ const UploadPage = () => {
     },
     [addFiles, activeTab]
   );
+
+  const handleScrapeUrl = async () => {
+    if (!scrapeUrl.trim()) return;
+    setIsScraping(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("scrape-supplier", {
+        body: { url: scrapeUrl.trim(), action: "scrape" },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro ao extrair conteúdo");
+
+      toast.success(`Conteúdo extraído de "${data.title}" (${data.chars} caracteres). Guardado como conhecimento.`);
+      setScrapeUrl("");
+      qc.invalidateQueries({ queryKey: ["uploaded-files"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao fazer scraping");
+    } finally {
+      setIsScraping(false);
+    }
+  };
 
   const hasPending = files.some((f) => f.status === "aguardando");
   const isProcessing = files.some((f) => f.status === "a_enviar" || f.status === "a_processar");
@@ -72,7 +100,7 @@ const UploadPage = () => {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Upload de Ficheiros</h1>
         <p className="text-muted-foreground mt-1">
-          Carregue catálogos de produtos ou ficheiros de conhecimento (fichas técnicas, tabelas de preços).
+          Carregue catálogos de produtos, ficheiros de conhecimento, ou extraia dados de sites de fornecedores.
         </p>
       </div>
 
@@ -94,8 +122,40 @@ const UploadPage = () => {
         </TabsContent>
         <TabsContent value="knowledge" className="space-y-4 mt-4">
           <p className="text-sm text-muted-foreground">
-            Ficheiros de referência: tabelas de preços, fichas técnicas, catálogos de marca. Serão usados como contexto nas otimizações.
+            Ficheiros de referência ou sites de fornecedores. O conteúdo será extraído e usado como contexto nas otimizações.
           </p>
+
+          {/* Web Scraping Section */}
+          <Card className="border-primary/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Globe className="w-4 h-4 text-primary" />
+                Extrair de Site de Fornecedor
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">
+                Cole a URL de uma página de produto ou catálogo do fornecedor. O conteúdo será extraído automaticamente e guardado como conhecimento para enriquecer as otimizações.
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://fornecedor.com/catalogo/produto-xyz"
+                  value={scrapeUrl}
+                  onChange={(e) => setScrapeUrl(e.target.value)}
+                  className="flex-1"
+                  onKeyDown={(e) => e.key === "Enter" && handleScrapeUrl()}
+                />
+                <Button onClick={handleScrapeUrl} disabled={isScraping || !scrapeUrl.trim()} size="sm">
+                  {isScraping ? (
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                  ) : (
+                    <Search className="w-4 h-4 mr-1" />
+                  )}
+                  {isScraping ? "A extrair..." : "Extrair"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
@@ -301,29 +361,40 @@ const UploadPage = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {uploadHistory.map((record: any) => (
-                <div key={record.id} className="flex items-center gap-3 p-2 rounded bg-muted/30 text-sm">
-                  <Badge variant={record.file_type === "knowledge" ? "outline" : "secondary"} className="text-[10px] shrink-0">
-                    {record.file_type === "knowledge" ? "Conhecimento" : "Produtos"}
-                  </Badge>
-                  <span className="truncate flex-1">{record.file_name}</span>
-                  {record.products_count > 0 && (
-                    <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
-                  )}
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {format(new Date(record.created_at), "dd/MM/yyyy HH:mm")}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                    onClick={() => deleteUploadedFile.mutate(record.id)}
-                    disabled={deleteUploadedFile.isPending}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              ))}
+              {uploadHistory.map((record: any) => {
+                const isWebScrape = record.metadata?.type === "web_scrape";
+                return (
+                  <div key={record.id} className="flex items-center gap-3 p-2 rounded bg-muted/30 text-sm">
+                    <Badge
+                      variant={isWebScrape ? "default" : record.file_type === "knowledge" ? "outline" : "secondary"}
+                      className="text-[10px] shrink-0"
+                    >
+                      {isWebScrape ? "🌐 Web" : record.file_type === "knowledge" ? "Conhecimento" : "Produtos"}
+                    </Badge>
+                    <span className="truncate flex-1">{record.file_name}</span>
+                    {record.extracted_text && (
+                      <Badge variant="outline" className="text-[10px] shrink-0 text-green-600 border-green-600/30">
+                        Texto extraído
+                      </Badge>
+                    )}
+                    {record.products_count > 0 && (
+                      <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
+                    )}
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {format(new Date(record.created_at), "dd/MM/yyyy HH:mm")}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => deleteUploadedFile.mutate(record.id)}
+                      disabled={deleteUploadedFile.isPending}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
