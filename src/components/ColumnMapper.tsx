@@ -20,6 +20,9 @@ interface ColumnMapperProps {
   headers: string[];
   previewRows: Record<string, unknown>[];
   mapping: ColumnMapping;
+  sheetNames?: string[];
+  selectedSheet?: string;
+  onSheetChange?: (sheet: string) => void;
   onMappingChange: (mapping: ColumnMapping) => void;
   onConfirm: () => void;
 }
@@ -29,6 +32,9 @@ export function ColumnMapper({
   headers,
   previewRows,
   mapping,
+  sheetNames,
+  selectedSheet,
+  onSheetChange,
   onMappingChange,
   onConfirm,
 }: ColumnMapperProps) {
@@ -59,6 +65,23 @@ export function ColumnMapper({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Sheet selector */}
+        {sheetNames && sheetNames.length > 1 && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-foreground">Folha (Sheet)</label>
+            <Select value={selectedSheet || ""} onValueChange={(v) => onSheetChange?.(v)}>
+              <SelectTrigger className="h-8 text-xs w-full sm:w-64">
+                <SelectValue placeholder="Selecionar folha" />
+              </SelectTrigger>
+              <SelectContent>
+                {sheetNames.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         {/* Mapping selects */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {PRODUCT_FIELDS.map((field) => (

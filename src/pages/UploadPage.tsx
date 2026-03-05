@@ -8,7 +8,7 @@ import { useUploadCatalog } from "@/hooks/useUploadCatalog";
 import { ColumnMapper } from "@/components/ColumnMapper";
 
 const UploadPage = () => {
-  const { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping } = useUploadCatalog();
+  const { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping, selectSheet } = useUploadCatalog();
   const [dragOver, setDragOver] = useState(false);
 
   const onDrop = useCallback(
@@ -91,6 +91,9 @@ const UploadPage = () => {
             headers={file.excelHeaders!}
             previewRows={file.previewRows || []}
             mapping={file.columnMapping || {}}
+            sheetNames={file.sheetNames}
+            selectedSheet={file.selectedSheet}
+            onSheetChange={(s) => selectSheet(file.id, s)}
             onMappingChange={(m) => setColumnMapping(file.id, m)}
             onConfirm={() => confirmMapping(file.id)}
           />
