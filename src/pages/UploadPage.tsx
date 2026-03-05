@@ -1,31 +1,47 @@
 import { useCallback, useState } from "react";
-import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play } from "lucide-react";
+import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { useUploadCatalog } from "@/hooks/useUploadCatalog";
+import { useUploadCatalog, type FileUploadType } from "@/hooks/useUploadCatalog";
+import { useUploadedFiles } from "@/hooks/useUploadedFiles";
 import { ColumnMapper } from "@/components/ColumnMapper";
+import { format } from "date-fns";
 
 const UploadPage = () => {
-  const { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping, selectSheet } = useUploadCatalog();
+  const {
+    files, addFiles, processAll, processFile, removeFile,
+    setColumnMapping, confirmMapping, selectSheet,
+    allFields, customFields, addCustomField, removeCustomField,
+  } = useUploadCatalog();
+  const { data: uploadHistory } = useUploadedFiles();
   const [dragOver, setDragOver] = useState(false);
+  const [activeTab, setActiveTab] = useState<FileUploadType>("products");
+  const [newFieldKey, setNewFieldKey] = useState("");
+  const [newFieldLabel, setNewFieldLabel] = useState("");
+  const [addFieldOpen, setAddFieldOpen] = useState(false);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragOver(false);
-      if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+      if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files, activeTab);
     },
-    [addFiles]
+    [addFiles, activeTab]
   );
 
   const onFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files?.length) addFiles(e.target.files);
+      if (e.target.files?.length) addFiles(e.target.files, activeTab);
       e.target.value = "";
     },
-    [addFiles]
+    [addFiles, activeTab]
   );
 
   const hasPending = files.some((f) => f.status === "aguardando");
@@ -40,14 +56,46 @@ const UploadPage = () => {
     erro: { label: "Erro", icon: AlertCircle, className: "text-destructive" },
   };
 
+  const handleAddField = () => {
+    if (newFieldKey && newFieldLabel) {
+      addCustomField(newFieldKey.toLowerCase().replace(/\s+/g, "_"), newFieldLabel);
+      setNewFieldKey("");
+      setNewFieldLabel("");
+      setAddFieldOpen(false);
+    }
+  };
+
   return (
     <div className="p-6 lg:p-8 space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Upload de Ficheiros</h1>
         <p className="text-muted-foreground mt-1">
-          Carregue catálogos em PDF ou listas de produtos em Excel para importar produtos automaticamente.
+          Carregue catálogos de produtos ou ficheiros de conhecimento (fichas técnicas, tabelas de preços).
         </p>
       </div>
+
+      {/* File type tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FileUploadType)}>
+        <TabsList>
+          <TabsTrigger value="products" className="gap-2">
+            <Package className="w-4 h-4" /> Produtos
+          </TabsTrigger>
+          <TabsTrigger value="knowledge" className="gap-2">
+            <BookOpen className="w-4 h-4" /> Conhecimento
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="products" className="space-y-4 mt-4">
+          <p className="text-sm text-muted-foreground">
+            Ficheiros com listas de produtos para importar (Excel com mapeamento de colunas, ou PDF processado com IA).
+          </p>
+        </TabsContent>
+        <TabsContent value="knowledge" className="space-y-4 mt-4">
+          <p className="text-sm text-muted-foreground">
+            Ficheiros de referência: tabelas de preços, fichas técnicas, catálogos de marca. Serão usados como contexto nas otimizações.
+          </p>
+        </TabsContent>
+      </Tabs>
 
       {/* Drop zone */}
       <Card
@@ -60,8 +108,14 @@ const UploadPage = () => {
         onDrop={onDrop}
       >
         <CardContent className="flex flex-col items-center justify-center py-16">
-          <UploadIcon className="w-12 h-12 text-muted-foreground mb-4" />
-          <p className="text-lg font-medium mb-1">Arraste ficheiros para aqui</p>
+          {activeTab === "products" ? (
+            <Package className="w-12 h-12 text-muted-foreground mb-4" />
+          ) : (
+            <BookOpen className="w-12 h-12 text-muted-foreground mb-4" />
+          )}
+          <p className="text-lg font-medium mb-1">
+            Arraste ficheiros {activeTab === "products" ? "de produtos" : "de conhecimento"} para aqui
+          </p>
           <p className="text-sm text-muted-foreground mb-4">ou clique para selecionar</p>
           <Button variant="outline" asChild>
             <label className="cursor-pointer">
@@ -76,10 +130,54 @@ const UploadPage = () => {
             </label>
           </Button>
           <p className="text-xs text-muted-foreground mt-3">
-            Formatos aceites: PDF, XLSX, XLS — PDFs são processados com IA, Excel permite mapeamento de colunas
+            Formatos aceites: PDF, XLSX, XLS
+            {activeTab === "products" && " — Excel permite mapeamento de colunas"}
           </p>
         </CardContent>
       </Card>
+
+      {/* Custom fields management for products */}
+      {activeTab === "products" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-muted-foreground">Campos mapeáveis:</span>
+          {allFields.map((f) => (
+            <Badge key={f.key} variant="secondary" className="text-xs gap-1">
+              {f.label}
+              {customFields.some((cf) => cf.key === f.key) && (
+                <button onClick={() => removeCustomField(f.key)} className="ml-1 hover:text-destructive">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </Badge>
+          ))}
+          <Dialog open={addFieldOpen} onOpenChange={setAddFieldOpen}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-6 text-xs gap-1">
+                <Plus className="w-3 h-3" /> Adicionar Campo
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Adicionar Campo Personalizado</DialogTitle>
+                <DialogDescription>Crie um novo campo para mapear colunas do Excel.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Chave (sem espaços)</Label>
+                  <Input placeholder="ex: weight" value={newFieldKey} onChange={(e) => setNewFieldKey(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Nome visível</Label>
+                  <Input placeholder="ex: Peso" value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} />
+                </div>
+                <Button onClick={handleAddField} disabled={!newFieldKey || !newFieldLabel} size="sm">
+                  Adicionar
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      )}
 
       {/* Column mapping cards for Excel files */}
       {files
@@ -93,6 +191,7 @@ const UploadPage = () => {
             mapping={file.columnMapping || {}}
             sheetNames={file.sheetNames}
             selectedSheet={file.selectedSheet}
+            fields={allFields}
             onSheetChange={(s) => selectSheet(file.id, s)}
             onMappingChange={(m) => setColumnMapping(file.id, m)}
             onConfirm={() => confirmMapping(file.id)}
@@ -119,12 +218,21 @@ const UploadPage = () => {
                 return (
                   <div key={file.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/50">
                     <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center shrink-0">
-                      <span className="text-xs font-mono font-medium text-accent-foreground">
-                        {file.type}
-                      </span>
+                      {file.uploadType === "knowledge" ? (
+                        <BookOpen className="w-4 h-4 text-accent-foreground" />
+                      ) : (
+                        <span className="text-xs font-mono font-medium text-accent-foreground">
+                          {file.type}
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{file.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{file.name}</p>
+                        <Badge variant={file.uploadType === "knowledge" ? "outline" : "secondary"} className="text-[10px]">
+                          {file.uploadType === "knowledge" ? "Conhecimento" : "Produtos"}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {(file.size / 1024).toFixed(0)} KB
                         {file.productsCount != null && ` · ${file.productsCount} produto(s)`}
@@ -164,6 +272,35 @@ const UploadPage = () => {
                   </div>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Upload history */}
+      {uploadHistory && uploadHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="w-4 h-4" /> Histórico de Uploads
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {uploadHistory.map((record: any) => (
+                <div key={record.id} className="flex items-center gap-3 p-2 rounded bg-muted/30 text-sm">
+                  <Badge variant={record.file_type === "knowledge" ? "outline" : "secondary"} className="text-[10px] shrink-0">
+                    {record.file_type === "knowledge" ? "Conhecimento" : "Produtos"}
+                  </Badge>
+                  <span className="truncate flex-1">{record.file_name}</span>
+                  {record.products_count > 0 && (
+                    <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
+                  )}
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {format(new Date(record.created_at), "dd/MM/yyyy HH:mm")}
+                  </span>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

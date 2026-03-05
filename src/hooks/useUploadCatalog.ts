@@ -6,12 +6,15 @@ import * as XLSX from "xlsx";
 
 export type ColumnMapping = Record<string, string>; // productField -> excelColumn
 
+export type FileUploadType = "products" | "knowledge";
+
 export interface UploadedFile {
   id: string;
   file: File;
   name: string;
   size: number;
   type: "PDF" | "Excel";
+  uploadType: FileUploadType;
   status: "aguardando" | "a_mapear" | "a_enviar" | "a_processar" | "concluido" | "erro";
   progress: number;
   productsCount?: number;
@@ -23,14 +26,26 @@ export interface UploadedFile {
   columnMapping?: ColumnMapping;
 }
 
-export const PRODUCT_FIELDS = [
+export interface ProductField {
+  key: string;
+  label: string;
+  required: boolean;
+}
+
+export const DEFAULT_PRODUCT_FIELDS: ProductField[] = [
   { key: "title", label: "Título", required: true },
   { key: "description", label: "Descrição", required: false },
+  { key: "short_description", label: "Descrição Curta", required: false },
+  { key: "technical_specs", label: "Características Técnicas", required: false },
   { key: "price", label: "Preço", required: false },
   { key: "sku", label: "SKU / Referência", required: false },
   { key: "category", label: "Categoria", required: false },
   { key: "supplier_ref", label: "Ref. Fornecedor", required: false },
-] as const;
+  { key: "image_urls", label: "URLs de Imagens", required: false },
+];
+
+// Keep PRODUCT_FIELDS for backward compat
+export const PRODUCT_FIELDS = DEFAULT_PRODUCT_FIELDS;
 
 function readExcelFile(file: File): Promise<XLSX.WorkBook> {
   return file.arrayBuffer().then((buf) => XLSX.read(new Uint8Array(buf), { type: "array" }));
@@ -50,11 +65,14 @@ function autoMapColumns(headers: string[]): ColumnMapping {
 
   const patterns: Record<string, RegExp> = {
     title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
-    description: /^(description|descri[cç][aã]o|desc|detalhe|details)$/i,
+    description: /^(description|descri[cç][aã]o|desc|detalhe|details|content|conteudo|conteúdo)$/i,
+    short_description: /^(short_description|descri[cç][aã]o_curta|resumo|summary|excerpt)$/i,
+    technical_specs: /^(technical_specs|especifica[cç][oõ]es|specs|caracter[ií]sticas|ficha_t[eé]cnica)$/i,
     price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price)$/i,
     sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
-    category: /^(category|categoria|cat|tipo|type|grupo|group|fam[ií]lia)$/i,
-    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
+    category: /^(category|categoria|cat|tipo|type|grupo|group|fam[ií]lia|categorias_de_produto)$/i,
+    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand|short_description)$/i,
+    image_urls: /^(image|imagem|images|imagens|image_url|foto|photo|thumbnail)$/i,
   };
 
   for (const [field, regex] of Object.entries(patterns)) {
@@ -65,15 +83,43 @@ function autoMapColumns(headers: string[]): ColumnMapping {
   return mapping;
 }
 
+async function computeFileHash(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function useUploadCatalog() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [customFields, setCustomFields] = useState<ProductField[]>([]);
   const qc = useQueryClient();
+
+  const allFields = [...DEFAULT_PRODUCT_FIELDS, ...customFields];
 
   const updateFile = (id: string, update: Partial<UploadedFile>) => {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...update } : f)));
   };
 
-  const addFiles = async (fileList: FileList) => {
+  const addCustomField = (key: string, label: string) => {
+    if (allFields.some((f) => f.key === key)) return;
+    setCustomFields((prev) => [...prev, { key, label, required: false }]);
+  };
+
+  const removeCustomField = (key: string) => {
+    setCustomFields((prev) => prev.filter((f) => f.key !== key));
+  };
+
+  const checkDuplicate = async (fileName: string, fileHash: string): Promise<boolean> => {
+    const { data } = await supabase
+      .from("uploaded_files")
+      .select("id, file_name")
+      .or(`file_hash.eq.${fileHash},file_name.eq.${fileName}`)
+      .limit(1);
+    return (data?.length ?? 0) > 0;
+  };
+
+  const addFiles = async (fileList: FileList, uploadType: FileUploadType = "products") => {
     const accepted = Array.from(fileList).filter(
       (f) =>
         f.name.endsWith(".pdf") ||
@@ -88,6 +134,14 @@ export function useUploadCatalog() {
     const newFiles: UploadedFile[] = [];
 
     for (const f of accepted) {
+      // Check for duplicates
+      const hash = await computeFileHash(f);
+      const isDuplicate = await checkDuplicate(f.name, hash);
+      if (isDuplicate) {
+        toast.warning(`"${f.name}" já foi carregado anteriormente. A ignorar.`);
+        continue;
+      }
+
       const isPdf = f.name.endsWith(".pdf");
       const base: UploadedFile = {
         id: crypto.randomUUID(),
@@ -95,11 +149,12 @@ export function useUploadCatalog() {
         name: f.name,
         size: f.size,
         type: isPdf ? "PDF" : "Excel",
-        status: isPdf ? "aguardando" : "a_mapear",
+        uploadType,
+        status: isPdf ? "aguardando" : (uploadType === "knowledge" ? "aguardando" : "a_mapear"),
         progress: 0,
       };
 
-      if (!isPdf) {
+      if (!isPdf && uploadType === "products") {
         try {
           const workbook = await readExcelFile(f);
           base.sheetNames = workbook.SheetNames;
@@ -148,6 +203,25 @@ export function useUploadCatalog() {
     }
   };
 
+  const registerUpload = async (uploadedFile: UploadedFile, userId: string, storagePath: string, productsCount: number) => {
+    const hash = await computeFileHash(uploadedFile.file);
+    await supabase.from("uploaded_files").insert({
+      user_id: userId,
+      file_name: uploadedFile.name,
+      file_size: uploadedFile.size,
+      file_hash: hash,
+      file_type: uploadedFile.uploadType,
+      storage_path: storagePath,
+      status: "processed",
+      products_count: productsCount,
+      metadata: {
+        type: uploadedFile.type,
+        columnMapping: uploadedFile.columnMapping,
+        selectedSheet: uploadedFile.selectedSheet,
+      },
+    } as any);
+  };
+
   const processFile = async (uploadedFile: UploadedFile) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
@@ -167,6 +241,16 @@ export function useUploadCatalog() {
       if (uploadError) throw new Error("Erro no upload: " + uploadError.message);
 
       updateFile(uploadedFile.id, { status: "a_processar", progress: 50 });
+
+      if (uploadedFile.uploadType === "knowledge") {
+        // Knowledge files: just store, no parsing
+        await registerUpload(uploadedFile, user.id, filePath, 0);
+        updateFile(uploadedFile.id, { status: "concluido", progress: 100, productsCount: 0 });
+        toast.success(`Ficheiro de conhecimento "${uploadedFile.name}" carregado com sucesso.`);
+        qc.invalidateQueries({ queryKey: ["uploaded-files"] });
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("parse-catalog", {
         body: {
           filePath,
@@ -180,6 +264,8 @@ export function useUploadCatalog() {
       if (data?.error && data?.count === undefined) throw new Error(data.error);
 
       const count = data?.count || 0;
+      await registerUpload(uploadedFile, user.id, filePath, count);
+
       updateFile(uploadedFile.id, {
         status: "concluido",
         progress: 100,
@@ -190,6 +276,7 @@ export function useUploadCatalog() {
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["product-stats"] });
       qc.invalidateQueries({ queryKey: ["recent-activity"] });
+      qc.invalidateQueries({ queryKey: ["uploaded-files"] });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro desconhecido";
       updateFile(uploadedFile.id, { status: "erro", progress: 0, error: msg });
@@ -208,5 +295,18 @@ export function useUploadCatalog() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  return { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping, selectSheet };
+  return {
+    files,
+    addFiles,
+    processAll,
+    processFile,
+    removeFile,
+    setColumnMapping,
+    confirmMapping,
+    selectSheet,
+    allFields,
+    customFields,
+    addCustomField,
+    removeCustomField,
+  };
 }

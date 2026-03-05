@@ -89,10 +89,13 @@ serve(async (req) => {
         user_id: userId,
         original_title: toStr(p.title, 500),
         original_description: toStr(p.description, 5000),
+        short_description: toStr(p.short_description, 1000),
+        technical_specs: toStr(p.technical_specs, 5000),
         original_price: parsePrice(p.price),
         sku: toStr(p.sku, 100),
         category: toStr(p.category, 200),
         supplier_ref: toStr(p.supplier_ref, 200),
+        image_urls: p.image_urls ? (Array.isArray(p.image_urls) ? p.image_urls : [String(p.image_urls)]) : null,
         source_file: fileName,
         status: "pending" as const,
       }));

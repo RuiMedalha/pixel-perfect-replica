@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Check, ArrowRight } from "lucide-react";
-import { PRODUCT_FIELDS, type ColumnMapping } from "@/hooks/useUploadCatalog";
+import { type ColumnMapping, type ProductField, DEFAULT_PRODUCT_FIELDS } from "@/hooks/useUploadCatalog";
 import {
   Table,
   TableBody,
@@ -22,6 +22,7 @@ interface ColumnMapperProps {
   mapping: ColumnMapping;
   sheetNames?: string[];
   selectedSheet?: string;
+  fields?: ProductField[];
   onSheetChange?: (sheet: string) => void;
   onMappingChange: (mapping: ColumnMapping) => void;
   onConfirm: () => void;
@@ -34,10 +35,13 @@ export function ColumnMapper({
   mapping,
   sheetNames,
   selectedSheet,
+  fields,
   onSheetChange,
   onMappingChange,
   onConfirm,
 }: ColumnMapperProps) {
+  const productFields = fields || DEFAULT_PRODUCT_FIELDS;
+
   const setField = (productField: string, excelColumn: string) => {
     const newMapping = { ...mapping };
     if (excelColumn === IGNORE_VALUE) {
@@ -50,8 +54,7 @@ export function ColumnMapper({
 
   const hasTitleMapped = !!mapping.title;
 
-  // Get the mapped headers for preview
-  const mappedHeaders = PRODUCT_FIELDS.filter((f) => mapping[f.key]).map((f) => ({
+  const mappedHeaders = productFields.filter((f) => mapping[f.key]).map((f) => ({
     field: f,
     excelCol: mapping[f.key],
   }));
@@ -84,7 +87,7 @@ export function ColumnMapper({
 
         {/* Mapping selects */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {PRODUCT_FIELDS.map((field) => (
+          {productFields.map((field) => (
             <div key={field.key} className="space-y-1.5">
               <label className="text-xs font-medium text-foreground flex items-center gap-1">
                 {field.label}
