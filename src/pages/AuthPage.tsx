@@ -6,9 +6,13 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+
+type View = "login" | "register" | "forgot";
 
 const AuthPage = () => {
-  const [isLogin, setIsLogin] = useState(true);
+  const [view, setView] = useState<View>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,33 +20,46 @@ const AuthPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
-
     setLoading(true);
-    const { error } = isLogin
+
+    if (view === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      setLoading(false);
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Email de recuperação enviado! Verifique a sua caixa de entrada.");
+        setView("login");
+      }
+      return;
+    }
+
+    const { error } = view === "login"
       ? await signIn(email.trim(), password)
       : await signUp(email.trim(), password);
     setLoading(false);
 
     if (error) {
       toast.error(error.message);
-    } else if (!isLogin) {
+    } else if (view === "register") {
       toast.success("Conta criada com sucesso!");
     }
+  };
+
+  const titles: Record<View, { title: string; desc: string }> = {
+    login: { title: "Entrar", desc: "Introduza as suas credenciais para aceder." },
+    register: { title: "Criar Conta", desc: "Preencha para criar a sua conta." },
+    forgot: { title: "Recuperar Password", desc: "Introduza o seu email para receber um link de recuperação." },
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-xl font-bold">
-            {isLogin ? "Entrar" : "Criar Conta"}
-          </CardTitle>
-          <CardDescription>
-            {isLogin
-              ? "Introduza as suas credenciais para aceder."
-              : "Preencha para criar a sua conta."}
-          </CardDescription>
+          <CardTitle className="text-xl font-bold">{titles[view].title}</CardTitle>
+          <CardDescription>{titles[view].desc}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -58,34 +75,63 @@ const AuthPage = () => {
                 autoComplete="email"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                autoComplete={isLogin ? "current-password" : "new-password"}
-              />
-            </div>
+            {view !== "forgot" && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  autoComplete={view === "login" ? "current-password" : "new-password"}
+                />
+              </div>
+            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {isLogin ? "Entrar" : "Criar Conta"}
+              {view === "login" ? "Entrar" : view === "register" ? "Criar Conta" : "Enviar Email"}
             </Button>
           </form>
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-              onClick={() => setIsLogin(!isLogin)}
-            >
-              {isLogin
-                ? "Não tem conta? Criar conta"
-                : "Já tem conta? Entrar"}
-            </button>
+          <div className="mt-4 text-center space-y-2">
+            {view === "login" && (
+              <>
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors block mx-auto"
+                  onClick={() => setView("forgot")}
+                >
+                  Esqueceu a password?
+                </button>
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors block mx-auto"
+                  onClick={() => setView("register")}
+                >
+                  Não tem conta? Criar conta
+                </button>
+              </>
+            )}
+            {view === "register" && (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setView("login")}
+              >
+                Já tem conta? Entrar
+              </button>
+            )}
+            {view === "forgot" && (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setView("login")}
+              >
+                Voltar ao login
+              </button>
+            )}
           </div>
         </CardContent>
       </Card>
