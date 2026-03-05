@@ -6,8 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Trash2, Save, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Plus, Trash2, Save, Eye, EyeOff, Loader2, Zap } from "lucide-react";
 import { useSettings, useSaveSettings } from "@/hooks/useSettings";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface Supplier {
   prefix: string;
@@ -51,7 +55,9 @@ const SettingsPage = () => {
   const [form, setForm] = useState<Record<string, string>>({});
   const [suppliers, setSuppliers] = useState<Supplier[]>([{ prefix: "", url: "" }]);
   const [knowledgeUrls, setKnowledgeUrls] = useState<string[]>([""]);
-
+  const [testingSku, setTestingSku] = useState<Record<number, string>>({});
+  const [testingLoading, setTestingLoading] = useState<Record<number, boolean>>({});
+  const [testResult, setTestResult] = useState<{ index: number; preview: string; chars: number; url: string } | null>(null);
   useEffect(() => {
     if (settings) {
       setForm(settings);
@@ -71,6 +77,41 @@ const SettingsPage = () => {
 
   const addSupplier = () => setSuppliers((prev) => [...prev, { prefix: "", url: "" }]);
   const removeSupplier = (index: number) => setSuppliers((prev) => prev.filter((_, i) => i !== index));
+
+  const testSupplierScrape = async (index: number) => {
+    const supplier = suppliers[index];
+    const sku = testingSku[index];
+    if (!supplier.url || !sku) {
+      toast.error("Preencha o URL e um SKU de teste.");
+      return;
+    }
+    const cleanSku = supplier.prefix && sku.toUpperCase().startsWith(supplier.prefix.toUpperCase())
+      ? sku.substring(supplier.prefix.length)
+      : sku;
+    const testUrl = supplier.url.endsWith("=") || supplier.url.endsWith("/")
+      ? `${supplier.url}${encodeURIComponent(cleanSku)}`
+      : `${supplier.url}/${encodeURIComponent(cleanSku)}`;
+
+    setTestingLoading((prev) => ({ ...prev, [index]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("scrape-supplier", {
+        body: { url: testUrl, action: "scrape" },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha no scrape");
+      setTestResult({
+        index,
+        preview: data.preview || data.title || "Sem conteúdo",
+        chars: data.chars || 0,
+        url: testUrl,
+      });
+      toast.success(`Scrape OK — ${data.chars || 0} caracteres extraídos`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro no teste de scrape");
+    } finally {
+      setTestingLoading((prev) => ({ ...prev, [index]: false }));
+    }
+  };
 
   const addKnowledgeUrl = () => setKnowledgeUrls((prev) => [...prev, ""]);
   const removeKnowledgeUrl = (index: number) => setKnowledgeUrls((prev) => prev.filter((_, i) => i !== index));
@@ -220,39 +261,66 @@ const SettingsPage = () => {
             Configure o prefixo de SKU de cada fornecedor e o URL de pesquisa. Durante a otimização, o sistema remove o prefixo do SKU e pesquisa automaticamente no site do fornecedor. O URL deve terminar com <code className="bg-muted px-1 rounded">/</code> ou <code className="bg-muted px-1 rounded">=</code> (ex: <code className="bg-muted px-1 rounded">https://www.udex.pt/pt/pesquisa/</code>).
           </p>
           {suppliers.map((supplier, index) => (
-            <div key={index} className="flex gap-3 items-end">
-              <div className="w-28 space-y-1">
-                <Label className="text-xs">Prefixo SKU</Label>
-                <Input
-                  placeholder="AB"
-                  value={supplier.prefix}
-                  onChange={(e) => {
-                    const updated = [...suppliers];
-                    updated[index].prefix = e.target.value;
-                    setSuppliers(updated);
-                  }}
-                />
+            <div key={index} className="space-y-2 border rounded-lg p-3">
+              <div className="flex gap-3 items-end">
+                <div className="w-28 space-y-1">
+                  <Label className="text-xs">Prefixo SKU</Label>
+                  <Input
+                    placeholder="UD"
+                    value={supplier.prefix}
+                    onChange={(e) => {
+                      const updated = [...suppliers];
+                      updated[index].prefix = e.target.value.toUpperCase();
+                      setSuppliers(updated);
+                    }}
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <Label className="text-xs">URL de Pesquisa</Label>
+                  <Input
+                    placeholder="https://www.udex.pt/pt/pesquisa/"
+                    value={supplier.url}
+                    onChange={(e) => {
+                      const updated = [...suppliers];
+                      updated[index].url = e.target.value;
+                      setSuppliers(updated);
+                    }}
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeSupplier(index)}
+                  disabled={suppliers.length === 1}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs">URL de Pesquisa</Label>
-                <Input
-                  placeholder="https://fornecedor.com/search?q="
-                  value={supplier.url}
-                  onChange={(e) => {
-                    const updated = [...suppliers];
-                    updated[index].url = e.target.value;
-                    setSuppliers(updated);
-                  }}
-                />
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => removeSupplier(index)}
-                disabled={suppliers.length === 1}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              {/* Test scrape row */}
+              {supplier.prefix && supplier.url && (
+                <div className="flex gap-2 items-center pt-1">
+                  <Input
+                    placeholder={`SKU de teste (ex: ${supplier.prefix}12345)`}
+                    value={testingSku[index] ?? ""}
+                    className="flex-1 h-8 text-xs"
+                    onChange={(e) => setTestingSku((prev) => ({ ...prev, [index]: e.target.value }))}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1"
+                    disabled={!testingSku[index] || testingLoading[index]}
+                    onClick={() => testSupplierScrape(index)}
+                  >
+                    {testingLoading[index] ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Zap className="w-3 h-3" />
+                    )}
+                    Testar Scrape
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
           <Button variant="outline" size="sm" onClick={addSupplier}>
@@ -269,6 +337,28 @@ const SettingsPage = () => {
           Guardar Configurações
         </Button>
       </div>
+
+      {/* Test Result Dialog */}
+      <Dialog open={!!testResult} onOpenChange={() => setTestResult(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Resultado do Teste de Scrape</DialogTitle>
+          </DialogHeader>
+          {testResult && (
+            <div className="space-y-3">
+              <div className="text-xs text-muted-foreground break-all">
+                <strong>URL:</strong> {testResult.url}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                <strong>Caracteres extraídos:</strong> {testResult.chars.toLocaleString()}
+              </div>
+              <ScrollArea className="h-64 border rounded-lg p-3">
+                <pre className="text-xs whitespace-pre-wrap font-mono">{testResult.preview}</pre>
+              </ScrollArea>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
