@@ -86,6 +86,7 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          faq: Json | null
           id: string
           image_urls: string[] | null
           meta_description: string | null
@@ -112,6 +113,7 @@ export type Database = {
         Insert: {
           category?: string | null
           created_at?: string
+          faq?: Json | null
           id?: string
           image_urls?: string[] | null
           meta_description?: string | null
@@ -138,6 +140,7 @@ export type Database = {
         Update: {
           category?: string | null
           created_at?: string
+          faq?: Json | null
           id?: string
           image_urls?: string[] | null
           meta_description?: string | null
@@ -193,6 +196,7 @@ export type Database = {
       uploaded_files: {
         Row: {
           created_at: string
+          extracted_text: string | null
           file_hash: string | null
           file_name: string
           file_size: number | null
@@ -206,6 +210,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          extracted_text?: string | null
           file_hash?: string | null
           file_name: string
           file_size?: number | null
@@ -219,6 +224,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          extracted_text?: string | null
           file_hash?: string | null
           file_name?: string
           file_size?: number | null

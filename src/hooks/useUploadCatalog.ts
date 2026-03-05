@@ -243,10 +243,37 @@ export function useUploadCatalog() {
       updateFile(uploadedFile.id, { status: "a_processar", progress: 50 });
 
       if (uploadedFile.uploadType === "knowledge") {
-        // Knowledge files: just store, no parsing
-        await registerUpload(uploadedFile, user.id, filePath, 0);
+        // Knowledge files: parse to extract text content
+        updateFile(uploadedFile.id, { status: "a_processar", progress: 60 });
+        
+        let extractedText = "";
+        try {
+          const { data: parseData, error: parseError } = await supabase.functions.invoke("parse-catalog", {
+            body: { filePath, fileName: uploadedFile.name, parseKnowledge: true },
+          });
+          if (!parseError && parseData?.extractedText) {
+            extractedText = parseData.extractedText;
+          }
+        } catch (e) {
+          console.warn("Knowledge parsing failed, storing without text:", e);
+        }
+
+        const hash = await computeFileHash(uploadedFile.file);
+        await supabase.from("uploaded_files").insert({
+          user_id: user.id,
+          file_name: uploadedFile.name,
+          file_size: uploadedFile.size,
+          file_hash: hash,
+          file_type: uploadedFile.uploadType,
+          storage_path: filePath,
+          status: "processed",
+          products_count: 0,
+          extracted_text: extractedText || null,
+          metadata: { type: uploadedFile.type },
+        } as any);
+
         updateFile(uploadedFile.id, { status: "concluido", progress: 100, productsCount: 0 });
-        toast.success(`Ficheiro de conhecimento "${uploadedFile.name}" carregado com sucesso.`);
+        toast.success(`Ficheiro de conhecimento "${uploadedFile.name}" processado com sucesso.${extractedText ? " Texto extraído para contexto." : ""}`);
         qc.invalidateQueries({ queryKey: ["uploaded-files"] });
         return;
       }
