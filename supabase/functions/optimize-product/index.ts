@@ -160,7 +160,7 @@ serve(async (req) => {
               const scrapeData = await scrapeResponse.json();
               const markdown = scrapeData.data?.markdown || scrapeData.markdown || "";
               if (markdown.length > 100) {
-                supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR (página do produto - ${matchedSupplier.prefix}):\n${markdown.substring(0, 8000)}`;
+                supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR "${matchedSupplier.name || matchedSupplier.prefix}" (página do produto):\n${markdown.substring(0, 8000)}`;
                 console.log(`Got ${markdown.length} chars from supplier page`);
               }
             } else {
@@ -323,11 +323,21 @@ IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensõ
           results.push({ id: product.id, status: "optimized" });
         }
 
-        // Log activity
+        // Log activity - find supplier name for this product
+        const matchedForLog = supplierMappings.find((s) => 
+          product.sku?.toUpperCase().startsWith(s.prefix.toUpperCase())
+        );
         await supabase.from("activity_log").insert({
           user_id: userId,
           action: "optimize",
-          details: { product_id: product.id, sku: product.sku, fields, had_supplier_context: !!supplierContext, had_knowledge_context: !!knowledgeContext },
+          details: { 
+            product_id: product.id, 
+            sku: product.sku, 
+            fields, 
+            supplier_name: matchedForLog?.name || matchedForLog?.prefix || null,
+            had_supplier_context: !!supplierContext, 
+            had_knowledge_context: !!knowledgeContext,
+          },
         });
       } catch (productError) {
         console.error(`Error optimizing product ${product.id}:`, productError);

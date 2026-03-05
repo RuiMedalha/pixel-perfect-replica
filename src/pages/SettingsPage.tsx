@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Supplier {
+  name: string;
   prefix: string;
   url: string;
 }
@@ -53,7 +54,7 @@ const SettingsPage = () => {
   const saveSettings = useSaveSettings();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<Record<string, string>>({});
-  const [suppliers, setSuppliers] = useState<Supplier[]>([{ prefix: "", url: "" }]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([{ name: "", prefix: "", url: "" }]);
   const [knowledgeUrls, setKnowledgeUrls] = useState<string[]>([""]);
   const [testingSku, setTestingSku] = useState<Record<number, string>>({});
   const [testingLoading, setTestingLoading] = useState<Record<number, boolean>>({});
@@ -75,7 +76,7 @@ const SettingsPage = () => {
   const toggleShow = (key: string) => setShowKeys((prev) => ({ ...prev, [key]: !prev[key] }));
   const updateField = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
-  const addSupplier = () => setSuppliers((prev) => [...prev, { prefix: "", url: "" }]);
+  const addSupplier = () => setSuppliers((prev) => [...prev, { name: "", prefix: "", url: "" }]);
   const removeSupplier = (index: number) => setSuppliers((prev) => prev.filter((_, i) => i !== index));
 
   const testSupplierScrape = async (index: number) => {
@@ -263,7 +264,19 @@ const SettingsPage = () => {
           {suppliers.map((supplier, index) => (
             <div key={index} className="space-y-2 border rounded-lg p-3">
               <div className="flex gap-3 items-end">
-                <div className="w-28 space-y-1">
+              <div className="w-36 space-y-1">
+                  <Label className="text-xs">Nome</Label>
+                  <Input
+                    placeholder="Udex"
+                    value={supplier.name}
+                    onChange={(e) => {
+                      const updated = [...suppliers];
+                      updated[index].name = e.target.value;
+                      setSuppliers(updated);
+                    }}
+                  />
+                </div>
+                <div className="w-24 space-y-1">
                   <Label className="text-xs">Prefixo SKU</Label>
                   <Input
                     placeholder="UD"

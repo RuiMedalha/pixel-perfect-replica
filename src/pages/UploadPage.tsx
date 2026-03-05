@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search } from "lucide-react";
+import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useUploadCatalog, type FileUploadType } from "@/hooks/useUploadCatalog";
@@ -36,6 +37,7 @@ const UploadPage = () => {
   // Scraping state
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [isScraping, setIsScraping] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ name: string; text: string } | null>(null);
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -373,9 +375,15 @@ const UploadPage = () => {
                     </Badge>
                     <span className="truncate flex-1">{record.file_name}</span>
                     {record.extracted_text && (
-                      <Badge variant="outline" className="text-[10px] shrink-0 text-green-600 border-green-600/30">
-                        Texto extraído
-                      </Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-6 text-[10px] shrink-0 gap-1"
+                        onClick={() => setPreviewFile({ name: record.file_name, text: record.extracted_text })}
+                      >
+                        <Eye className="w-3 h-3" />
+                        Ver Conteúdo
+                      </Button>
                     )}
                     {record.products_count > 0 && (
                       <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
@@ -399,6 +407,21 @@ const UploadPage = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Knowledge preview dialog */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-sm truncate">{previewFile?.name}</DialogTitle>
+            <DialogDescription className="text-xs">
+              Conteúdo extraído ({previewFile?.text.length.toLocaleString()} caracteres)
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-[60vh] border rounded-lg p-4">
+            <pre className="text-xs whitespace-pre-wrap font-mono text-foreground">{previewFile?.text}</pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
