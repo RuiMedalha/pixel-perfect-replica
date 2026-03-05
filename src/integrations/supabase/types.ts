@@ -82,6 +82,47 @@ export type Database = {
           },
         ]
       }
+      knowledge_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          created_at: string
+          file_id: string
+          id: string
+          source_name: string | null
+          tsv: unknown
+          user_id: string
+        }
+        Insert: {
+          chunk_index?: number
+          content: string
+          created_at?: string
+          file_id: string
+          id?: string
+          source_name?: string | null
+          tsv?: unknown
+          user_id: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          created_at?: string
+          file_id?: string
+          id?: string
+          source_name?: string | null
+          tsv?: unknown
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_chunks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "uploaded_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string | null
@@ -243,7 +284,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      search_knowledge: {
+        Args: { _limit?: number; _query: string; _user_id: string }
+        Returns: {
+          content: string
+          id: string
+          rank: number
+          source_name: string
+        }[]
+      }
     }
     Enums: {
       activity_action:

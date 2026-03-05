@@ -45,7 +45,6 @@ serve(async (req) => {
       });
     }
 
-    // Default fields to optimize if not specified
     const fields = fieldsToOptimize || [
       "title", "description", "short_description",
       "meta_title", "meta_description", "seo_slug", "tags", "price", "faq"
@@ -74,24 +73,6 @@ serve(async (req) => {
 
     const customPrompt = promptSetting?.value || null;
 
-    // Fetch knowledge context from uploaded knowledge files
-    let knowledgeContext = "";
-    const { data: knowledgeFiles } = await supabase
-      .from("uploaded_files")
-      .select("file_name, extracted_text")
-      .eq("file_type", "knowledge")
-      .not("extracted_text", "is", null);
-
-    if (knowledgeFiles && knowledgeFiles.length > 0) {
-      const parts = knowledgeFiles
-        .filter((f: any) => f.extracted_text)
-        .map((f: any) => `--- ${f.file_name} ---\n${f.extracted_text}`)
-        .join("\n\n");
-      if (parts) {
-        knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (fichas técnicas, catálogos do fornecedor):\n${parts.substring(0, 15000)}`;
-      }
-    }
-
     // Mark as processing
     await supabase
       .from("products")
@@ -101,10 +82,69 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
+    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+
     const results = [];
 
     for (const product of products) {
-      const productInfo = `Produto original:
+      try {
+        // 1. Search relevant knowledge chunks using full-text search
+        let knowledgeContext = "";
+        const searchQuery = [product.original_title, product.sku, product.category, product.supplier_ref]
+          .filter(Boolean)
+          .join(" ");
+
+        if (searchQuery) {
+          const { data: chunks } = await supabase.rpc("search_knowledge", {
+            _user_id: userId,
+            _query: searchQuery,
+            _limit: 8,
+          });
+
+          if (chunks && chunks.length > 0) {
+            const parts = chunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
+            knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado):\n${parts.substring(0, 12000)}`;
+          }
+        }
+
+        // 2. Auto-scrape supplier page by SKU if Firecrawl is available
+        let supplierContext = "";
+        if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
+          try {
+            const cleanSku = product.sku.substring(2); // Remove 2-char supplier prefix
+            const supplierUrl = `https://www.udex.pt/pt/pesquisa/${encodeURIComponent(cleanSku)}`;
+            console.log(`Auto-scraping supplier for SKU ${product.sku}: ${supplierUrl}`);
+
+            const scrapeResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                url: supplierUrl,
+                formats: ["markdown"],
+                onlyMainContent: true,
+                waitFor: 3000,
+              }),
+            });
+
+            if (scrapeResponse.ok) {
+              const scrapeData = await scrapeResponse.json();
+              const markdown = scrapeData.data?.markdown || scrapeData.markdown || "";
+              if (markdown.length > 100) {
+                supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR (página do produto em udex.pt):\n${markdown.substring(0, 8000)}`;
+                console.log(`Got ${markdown.length} chars from supplier page`);
+              }
+            } else {
+              console.warn(`Supplier scrape failed: ${scrapeResponse.status}`);
+            }
+          } catch (scrapeErr) {
+            console.warn("Auto-scrape error (non-fatal):", scrapeErr);
+          }
+        }
+
+        const productInfo = `Produto original:
 - Título: ${product.original_title || "N/A"}
 - Descrição: ${product.original_description || "N/A"}
 - Descrição Curta: ${product.short_description || "N/A"}
@@ -114,155 +154,156 @@ serve(async (req) => {
 - SKU: ${product.sku || "N/A"}
 - Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
 
-      // Build field-specific instructions
-      const fieldInstructions: string[] = [];
-      if (fields.includes("title")) fieldInstructions.push("1. Um título otimizado (máx 70 chars, com keyword principal)");
-      if (fields.includes("description")) fieldInstructions.push("2. Uma descrição otimizada (200-400 chars, persuasiva, com benefícios e keywords)");
-      if (fields.includes("short_description")) fieldInstructions.push("3. Uma descrição curta otimizada (máx 160 chars, resumo conciso)");
-      if (fields.includes("meta_title")) fieldInstructions.push("4. Meta title SEO (máx 60 chars)");
-      if (fields.includes("meta_description")) fieldInstructions.push("5. Meta description SEO (máx 155 chars, com call-to-action)");
-      if (fields.includes("seo_slug")) fieldInstructions.push("6. SEO slug (url-friendly, lowercase, hífens)");
-      if (fields.includes("tags")) fieldInstructions.push("7. Tags relevantes (3-6 palavras-chave)");
-      if (fields.includes("price")) fieldInstructions.push("8. Preço sugerido (pode manter o original ou ajustar ligeiramente)");
-      if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}). As perguntas devem ser naturais, como um cliente perguntaria, e as respostas informativas.");
+        // Build field-specific instructions
+        const fieldInstructions: string[] = [];
+        if (fields.includes("title")) fieldInstructions.push("1. Um título otimizado (máx 70 chars, com keyword principal)");
+        if (fields.includes("description")) fieldInstructions.push("2. Uma descrição otimizada (200-400 chars, persuasiva, com benefícios e keywords)");
+        if (fields.includes("short_description")) fieldInstructions.push("3. Uma descrição curta otimizada (máx 160 chars, resumo conciso)");
+        if (fields.includes("meta_title")) fieldInstructions.push("4. Meta title SEO (máx 60 chars)");
+        if (fields.includes("meta_description")) fieldInstructions.push("5. Meta description SEO (máx 155 chars, com call-to-action)");
+        if (fields.includes("seo_slug")) fieldInstructions.push("6. SEO slug (url-friendly, lowercase, hífens)");
+        if (fields.includes("tags")) fieldInstructions.push("7. Tags relevantes (3-6 palavras-chave)");
+        if (fields.includes("price")) fieldInstructions.push("8. Preço sugerido (pode manter o original ou ajustar ligeiramente)");
+        if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}).");
 
-      const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
+        const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
 
-${productInfo}${knowledgeContext}
+${productInfo}${knowledgeContext}${supplierContext}
 
 Gera:
 ${fieldInstructions.join("\n")}
 
-IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica. Se existir informação de referência acima, usa-a para enriquecer o produto. Traduz para português europeu se necessário.`;
+IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica. Se existir informação de referência ou do fornecedor acima, usa-a para enriquecer o produto com dados reais. Traduz para português europeu se necessário.`;
 
-      const finalPrompt = customPrompt
-        ? `${customPrompt}\n\n${productInfo}${knowledgeContext}`
-        : defaultPrompt;
+        const finalPrompt = customPrompt
+          ? `${customPrompt}\n\n${productInfo}${knowledgeContext}${supplierContext}`
+          : defaultPrompt;
 
-      // Build tool properties dynamically based on selected fields
-      const toolProperties: Record<string, any> = {};
-      const requiredFields: string[] = [];
+        // Build tool properties dynamically
+        const toolProperties: Record<string, any> = {};
+        const requiredFields: string[] = [];
 
-      if (fields.includes("title")) { toolProperties.optimized_title = { type: "string" }; requiredFields.push("optimized_title"); }
-      if (fields.includes("description")) { toolProperties.optimized_description = { type: "string" }; requiredFields.push("optimized_description"); }
-      if (fields.includes("short_description")) { toolProperties.optimized_short_description = { type: "string" }; requiredFields.push("optimized_short_description"); }
-      if (fields.includes("meta_title")) { toolProperties.meta_title = { type: "string" }; requiredFields.push("meta_title"); }
-      if (fields.includes("meta_description")) { toolProperties.meta_description = { type: "string" }; requiredFields.push("meta_description"); }
-      if (fields.includes("seo_slug")) { toolProperties.seo_slug = { type: "string" }; requiredFields.push("seo_slug"); }
-      if (fields.includes("tags")) { toolProperties.tags = { type: "array", items: { type: "string" } }; requiredFields.push("tags"); }
-      if (fields.includes("price")) { toolProperties.optimized_price = { type: "number" }; }
-      if (fields.includes("faq")) {
-        toolProperties.faq = {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              question: { type: "string" },
-              answer: { type: "string" },
+        if (fields.includes("title")) { toolProperties.optimized_title = { type: "string" }; requiredFields.push("optimized_title"); }
+        if (fields.includes("description")) { toolProperties.optimized_description = { type: "string" }; requiredFields.push("optimized_description"); }
+        if (fields.includes("short_description")) { toolProperties.optimized_short_description = { type: "string" }; requiredFields.push("optimized_short_description"); }
+        if (fields.includes("meta_title")) { toolProperties.meta_title = { type: "string" }; requiredFields.push("meta_title"); }
+        if (fields.includes("meta_description")) { toolProperties.meta_description = { type: "string" }; requiredFields.push("meta_description"); }
+        if (fields.includes("seo_slug")) { toolProperties.seo_slug = { type: "string" }; requiredFields.push("seo_slug"); }
+        if (fields.includes("tags")) { toolProperties.tags = { type: "array", items: { type: "string" } }; requiredFields.push("tags"); }
+        if (fields.includes("price")) { toolProperties.optimized_price = { type: "number" }; }
+        if (fields.includes("faq")) {
+          toolProperties.faq = {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { question: { type: "string" }, answer: { type: "string" } },
+              required: ["question", "answer"],
             },
-            required: ["question", "answer"],
+          };
+          requiredFields.push("faq");
+        }
+
+        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
           },
-        };
-        requiredFields.push("faq");
-      }
-
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            {
-              role: "system",
-              content: "És um especialista em e-commerce e SEO. Responde APENAS com a tool call pedida, sem texto adicional. Mantém sempre as características técnicas do produto. Traduz tudo para português europeu.",
-            },
-            { role: "user", content: finalPrompt },
-          ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "optimize_product",
-                description: "Devolve os campos otimizados do produto",
-                parameters: {
-                  type: "object",
-                  properties: toolProperties,
-                  required: requiredFields,
-                  additionalProperties: false,
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [
+              {
+                role: "system",
+                content: "És um especialista em e-commerce e SEO. Responde APENAS com a tool call pedida, sem texto adicional. Mantém sempre as características técnicas do produto. Traduz tudo para português europeu.",
+              },
+              { role: "user", content: finalPrompt },
+            ],
+            tools: [
+              {
+                type: "function",
+                function: {
+                  name: "optimize_product",
+                  description: "Devolve os campos otimizados do produto",
+                  parameters: {
+                    type: "object",
+                    properties: toolProperties,
+                    required: requiredFields,
+                    additionalProperties: false,
+                  },
                 },
               },
-            },
-          ],
-          tool_choice: { type: "function", function: { name: "optimize_product" } },
-        }),
-      });
+            ],
+            tool_choice: { type: "function", function: { name: "optimize_product" } },
+          }),
+        });
 
-      if (!aiResponse.ok) {
-        const status = aiResponse.status;
-        if (status === 429) {
-          await supabase.from("products").update({ status: "pending" }).in("id", productIds);
-          return new Response(JSON.stringify({ error: "Limite de pedidos excedido. Tente novamente mais tarde." }), {
-            status: 429,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        if (!aiResponse.ok) {
+          const status = aiResponse.status;
+          if (status === 429) {
+            await supabase.from("products").update({ status: "pending" }).in("id", productIds);
+            return new Response(JSON.stringify({ error: "Limite de pedidos excedido. Tente novamente mais tarde." }), {
+              status: 429,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          if (status === 402) {
+            await supabase.from("products").update({ status: "pending" }).in("id", productIds);
+            return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
+              status: 402,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          const errText = await aiResponse.text();
+          console.error("AI error:", status, errText);
+          await supabase.from("products").update({ status: "error" }).eq("id", product.id);
+          results.push({ id: product.id, status: "error", error: errText });
+          continue;
         }
-        if (status === 402) {
-          await supabase.from("products").update({ status: "pending" }).in("id", productIds);
-          return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
-            status: 402,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+
+        const aiData = await aiResponse.json();
+        const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+        if (!toolCall) {
+          await supabase.from("products").update({ status: "error" }).eq("id", product.id);
+          results.push({ id: product.id, status: "error", error: "No tool call in response" });
+          continue;
         }
-        const errText = await aiResponse.text();
-        console.error("AI error:", status, errText);
+
+        const optimized = JSON.parse(toolCall.function.arguments);
+
+        const updateData: Record<string, any> = { status: "optimized" };
+        if (optimized.optimized_title) updateData.optimized_title = optimized.optimized_title;
+        if (optimized.optimized_description) updateData.optimized_description = optimized.optimized_description;
+        if (optimized.optimized_short_description !== undefined) updateData.optimized_short_description = optimized.optimized_short_description || null;
+        if (optimized.meta_title) updateData.meta_title = optimized.meta_title;
+        if (optimized.meta_description) updateData.meta_description = optimized.meta_description;
+        if (optimized.seo_slug) updateData.seo_slug = optimized.seo_slug;
+        if (optimized.tags) updateData.tags = optimized.tags;
+        if (optimized.optimized_price !== undefined) updateData.optimized_price = optimized.optimized_price ?? product.original_price;
+        if (optimized.faq) updateData.faq = optimized.faq;
+
+        const { error: updateError } = await supabase
+          .from("products")
+          .update(updateData)
+          .eq("id", product.id);
+
+        if (updateError) {
+          console.error("Update error:", updateError);
+          results.push({ id: product.id, status: "error", error: updateError.message });
+        } else {
+          results.push({ id: product.id, status: "optimized" });
+        }
+
+        // Log activity
+        await supabase.from("activity_log").insert({
+          user_id: userId,
+          action: "optimize",
+          details: { product_id: product.id, sku: product.sku, fields, had_supplier_context: !!supplierContext, had_knowledge_context: !!knowledgeContext },
+        });
+      } catch (productError) {
+        console.error(`Error optimizing product ${product.id}:`, productError);
         await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-        results.push({ id: product.id, status: "error", error: errText });
-        continue;
+        results.push({ id: product.id, status: "error", error: productError instanceof Error ? productError.message : "Unknown" });
       }
-
-      const aiData = await aiResponse.json();
-      const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall) {
-        await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-        results.push({ id: product.id, status: "error", error: "No tool call in response" });
-        continue;
-      }
-
-      const optimized = JSON.parse(toolCall.function.arguments);
-
-      // Build update object with only the fields that were optimized
-      const updateData: Record<string, any> = { status: "optimized" };
-      if (optimized.optimized_title) updateData.optimized_title = optimized.optimized_title;
-      if (optimized.optimized_description) updateData.optimized_description = optimized.optimized_description;
-      if (optimized.optimized_short_description !== undefined) updateData.optimized_short_description = optimized.optimized_short_description || null;
-      if (optimized.meta_title) updateData.meta_title = optimized.meta_title;
-      if (optimized.meta_description) updateData.meta_description = optimized.meta_description;
-      if (optimized.seo_slug) updateData.seo_slug = optimized.seo_slug;
-      if (optimized.tags) updateData.tags = optimized.tags;
-      if (optimized.optimized_price !== undefined) updateData.optimized_price = optimized.optimized_price ?? product.original_price;
-      if (optimized.faq) updateData.faq = optimized.faq;
-
-      const { error: updateError } = await supabase
-        .from("products")
-        .update(updateData)
-        .eq("id", product.id);
-
-      if (updateError) {
-        console.error("Update error:", updateError);
-        results.push({ id: product.id, status: "error", error: updateError.message });
-      } else {
-        results.push({ id: product.id, status: "optimized" });
-      }
-
-      // Log activity
-      await supabase.from("activity_log").insert({
-        user_id: userId,
-        action: "optimize",
-        details: { product_id: product.id, sku: product.sku, fields },
-      });
     }
 
     return new Response(JSON.stringify({ results }), {

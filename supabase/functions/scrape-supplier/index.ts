@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
       const extractedText = markdown.substring(0, 50000);
 
       // Save as knowledge file
-      await supabase.from("uploaded_files").insert({
+      const { data: fileRecord } = await supabase.from("uploaded_files").insert({
         user_id: userId,
         file_name: `🌐 ${title}`,
         file_size: extractedText.length,
@@ -92,7 +92,23 @@ Deno.serve(async (req) => {
         products_count: 0,
         extracted_text: extractedText,
         metadata: { type: "web_scrape", source_url: formattedUrl },
-      } as any);
+      } as any).select("id").single();
+
+      // Chunk and store for full-text search
+      if (fileRecord) {
+        const chunks = chunkText(extractedText, 1500);
+        const chunkRows = chunks.map((content: string, idx: number) => ({
+          file_id: fileRecord.id,
+          user_id: userId,
+          chunk_index: idx,
+          content,
+          source_name: `🌐 ${title}`,
+        }));
+        for (let i = 0; i < chunkRows.length; i += 50) {
+          await supabase.from("knowledge_chunks").insert(chunkRows.slice(i, i + 50) as any);
+        }
+        console.log(`Stored ${chunkRows.length} knowledge chunks from web scrape`);
+      }
 
       // Log activity
       await supabase.from("activity_log").insert({
@@ -173,3 +189,19 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+function chunkText(text: string, chunkSize: number): string[] {
+  const chunks: string[] = [];
+  const paragraphs = text.split(/\n{2,}/);
+  let current = "";
+  for (const para of paragraphs) {
+    if ((current + "\n\n" + para).length > chunkSize && current) {
+      chunks.push(current.trim());
+      current = para;
+    } else {
+      current = current ? current + "\n\n" + para : para;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}

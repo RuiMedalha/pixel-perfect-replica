@@ -70,6 +70,44 @@ serve(async (req) => {
         extractedText = await extractExcelText(fileData);
       }
 
+      // Chunk the extracted text and store for full-text search
+      if (extractedText) {
+        const chunks = chunkText(extractedText, 1500);
+        // First get or create the uploaded_file record to get its ID
+        const { data: fileRecord } = await supabase
+          .from("uploaded_files")
+          .select("id")
+          .eq("file_name", fileName)
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (fileRecord) {
+          const chunkRows = chunks.map((content, idx) => ({
+            file_id: fileRecord.id,
+            user_id: userId,
+            chunk_index: idx,
+            content,
+            source_name: fileName,
+          }));
+
+          // Delete old chunks for this file first
+          await supabase
+            .from("knowledge_chunks")
+            .delete()
+            .eq("file_id", fileRecord.id);
+
+          // Insert in batches of 50
+          for (let i = 0; i < chunkRows.length; i += 50) {
+            await supabase
+              .from("knowledge_chunks")
+              .insert(chunkRows.slice(i, i + 50) as any);
+          }
+          console.log(`Stored ${chunkRows.length} knowledge chunks for ${fileName}`);
+        }
+      }
+
       return new Response(
         JSON.stringify({ extractedText, count: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -244,7 +282,23 @@ async function parseExcel(
       for (const [productField, excelColumn] of Object.entries(columnMapping)) {
         if (excelColumn && row[excelColumn] !== undefined) {
           mapped[productField] = row[excelColumn];
-        }
+}
+
+function chunkText(text: string, chunkSize: number): string[] {
+  const chunks: string[] = [];
+  const paragraphs = text.split(/\n{2,}/);
+  let current = "";
+  for (const para of paragraphs) {
+    if ((current + "\n\n" + para).length > chunkSize && current) {
+      chunks.push(current.trim());
+      current = para;
+    } else {
+      current = current ? current + "\n\n" + para : para;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
       }
       return mapped;
     });
