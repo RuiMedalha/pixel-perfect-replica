@@ -38,7 +38,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { filePath, fileName, columnMapping } = await req.json();
+    const { filePath, fileName, columnMapping, sheetName } = await req.json();
     if (!filePath || !fileName) {
       return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
         status: 400,
@@ -62,7 +62,7 @@ serve(async (req) => {
     let products: Array<Record<string, unknown>> = [];
 
     if (ext === "xlsx" || ext === "xls") {
-      products = await parseExcel(fileData, columnMapping);
+      products = await parseExcel(fileData, columnMapping, sheetName);
     } else if (ext === "pdf") {
       products = await parsePdfWithAI(fileData, fileName);
     } else {
@@ -143,11 +143,14 @@ function parsePrice(value: unknown): number | null {
 
 async function parseExcel(
   fileData: Blob,
-  columnMapping?: Record<string, string>
+  columnMapping?: Record<string, string>,
+  targetSheet?: string
 ): Promise<Array<Record<string, unknown>>> {
   const buffer = await fileData.arrayBuffer();
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
-  const sheetName = workbook.SheetNames[0];
+  const sheetName = targetSheet && workbook.SheetNames.includes(targetSheet)
+    ? targetSheet
+    : workbook.SheetNames[0];
   if (!sheetName) return [];
 
   const sheet = workbook.Sheets[sheetName];

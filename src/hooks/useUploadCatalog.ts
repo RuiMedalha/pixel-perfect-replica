@@ -16,6 +16,8 @@ export interface UploadedFile {
   progress: number;
   productsCount?: number;
   error?: string;
+  sheetNames?: string[];
+  selectedSheet?: string;
   excelHeaders?: string[];
   previewRows?: Record<string, unknown>[];
   columnMapping?: ColumnMapping;
@@ -30,18 +32,16 @@ export const PRODUCT_FIELDS = [
   { key: "supplier_ref", label: "Ref. Fornecedor", required: false },
 ] as const;
 
-async function readExcelHeaders(file: File): Promise<{ headers: string[]; previewRows: Record<string, unknown>[] }> {
-  const buffer = await file.arrayBuffer();
-  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
-  const sheetName = workbook.SheetNames[0];
-  if (!sheetName) return { headers: [], previewRows: [] };
+function readExcelFile(file: File): Promise<XLSX.WorkBook> {
+  return file.arrayBuffer().then((buf) => XLSX.read(new Uint8Array(buf), { type: "array" }));
+}
 
+function readSheetData(workbook: XLSX.WorkBook, sheetName: string): { headers: string[]; previewRows: Record<string, unknown>[] } {
   const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return { headers: [], previewRows: [] };
   const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
   if (rows.length === 0) return { headers: [], previewRows: [] };
-
-  const headers = Object.keys(rows[0]);
-  return { headers, previewRows: rows.slice(0, 3) };
+  return { headers: Object.keys(rows[0]), previewRows: rows.slice(0, 3) };
 }
 
 function autoMapColumns(headers: string[]): ColumnMapping {
@@ -101,10 +101,16 @@ export function useUploadCatalog() {
 
       if (!isPdf) {
         try {
-          const { headers, previewRows } = await readExcelHeaders(f);
-          base.excelHeaders = headers;
-          base.previewRows = previewRows;
-          base.columnMapping = autoMapColumns(headers);
+          const workbook = await readExcelFile(f);
+          base.sheetNames = workbook.SheetNames;
+          const firstSheet = workbook.SheetNames[0];
+          if (firstSheet) {
+            base.selectedSheet = firstSheet;
+            const { headers, previewRows } = readSheetData(workbook, firstSheet);
+            base.excelHeaders = headers;
+            base.previewRows = previewRows;
+            base.columnMapping = autoMapColumns(headers);
+          }
         } catch {
           base.status = "erro";
           base.error = "Não foi possível ler o ficheiro Excel";
@@ -123,6 +129,23 @@ export function useUploadCatalog() {
 
   const confirmMapping = (id: string) => {
     updateFile(id, { status: "aguardando" });
+  };
+
+  const selectSheet = async (id: string, sheetName: string) => {
+    const file = files.find((f) => f.id === id);
+    if (!file) return;
+    try {
+      const workbook = await readExcelFile(file.file);
+      const { headers, previewRows } = readSheetData(workbook, sheetName);
+      updateFile(id, {
+        selectedSheet: sheetName,
+        excelHeaders: headers,
+        previewRows,
+        columnMapping: autoMapColumns(headers),
+      });
+    } catch {
+      toast.error("Erro ao ler a folha selecionada.");
+    }
   };
 
   const processFile = async (uploadedFile: UploadedFile) => {
@@ -149,6 +172,7 @@ export function useUploadCatalog() {
           filePath,
           fileName: uploadedFile.name,
           columnMapping: uploadedFile.columnMapping || undefined,
+          sheetName: uploadedFile.selectedSheet || undefined,
         },
       });
 
@@ -184,5 +208,5 @@ export function useUploadCatalog() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  return { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping };
+  return { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping, selectSheet };
 }
