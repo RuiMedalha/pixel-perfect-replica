@@ -113,7 +113,6 @@ serve(async (req) => {
 
         if (searchQuery) {
           const { data: chunks } = await supabase.rpc("search_knowledge", {
-            _user_id: userId,
             _query: searchQuery,
             _limit: 8,
           });

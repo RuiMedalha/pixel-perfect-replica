@@ -284,15 +284,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      search_knowledge: {
-        Args: { _limit?: number; _query: string; _user_id: string }
-        Returns: {
-          content: string
-          id: string
-          rank: number
-          source_name: string
-        }[]
-      }
+      search_knowledge:
+        | {
+            Args: { _limit?: number; _query: string }
+            Returns: {
+              content: string
+              id: string
+              rank: number
+              source_name: string
+            }[]
+          }
+        | {
+            Args: { _limit?: number; _query: string; _user_id: string }
+            Returns: {
+              content: string
+              id: string
+              rank: number
+              source_name: string
+            }[]
+          }
     }
     Enums: {
       activity_action:
