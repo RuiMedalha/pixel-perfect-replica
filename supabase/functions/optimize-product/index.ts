@@ -84,6 +84,23 @@ serve(async (req) => {
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
 
+    // Fetch supplier mappings from settings
+    let supplierMappings: Array<{ prefix: string; url: string }> = [];
+    const { data: suppliersConfig } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "suppliers_json")
+      .maybeSingle();
+
+    if (suppliersConfig?.value) {
+      try {
+        const parsed = JSON.parse(suppliersConfig.value);
+        if (Array.isArray(parsed)) {
+          supplierMappings = parsed.filter((s: any) => s.prefix && s.url);
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     const results = [];
 
     for (const product of products) {
@@ -107,13 +124,23 @@ serve(async (req) => {
           }
         }
 
-        // 2. Auto-scrape supplier page by SKU if Firecrawl is available
+        // 2. Auto-scrape supplier page by SKU using configured supplier mappings
         let supplierContext = "";
         if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
-          try {
-            const cleanSku = product.sku.substring(2); // Remove 2-char supplier prefix
-            const supplierUrl = `https://www.udex.pt/pt/pesquisa/${encodeURIComponent(cleanSku)}`;
-            console.log(`Auto-scraping supplier for SKU ${product.sku}: ${supplierUrl}`);
+          // Find matching supplier by SKU prefix
+          const skuUpper = product.sku.toUpperCase();
+          const matchedSupplier = supplierMappings.find((s) => 
+            skuUpper.startsWith(s.prefix.toUpperCase())
+          );
+
+          if (matchedSupplier) {
+            try {
+              const prefixLen = matchedSupplier.prefix.length;
+              const cleanSku = product.sku.substring(prefixLen);
+              const supplierUrl = matchedSupplier.url.endsWith("=") || matchedSupplier.url.endsWith("/")
+                ? `${matchedSupplier.url}${encodeURIComponent(cleanSku)}`
+                : `${matchedSupplier.url}/${encodeURIComponent(cleanSku)}`;
+              console.log(`Auto-scraping supplier [${matchedSupplier.prefix}] for SKU ${product.sku}: ${supplierUrl}`);
 
             const scrapeResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
               method: "POST",
@@ -133,14 +160,17 @@ serve(async (req) => {
               const scrapeData = await scrapeResponse.json();
               const markdown = scrapeData.data?.markdown || scrapeData.markdown || "";
               if (markdown.length > 100) {
-                supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR (página do produto em udex.pt):\n${markdown.substring(0, 8000)}`;
+                supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR (página do produto - ${matchedSupplier.prefix}):\n${markdown.substring(0, 8000)}`;
                 console.log(`Got ${markdown.length} chars from supplier page`);
               }
             } else {
               console.warn(`Supplier scrape failed: ${scrapeResponse.status}`);
             }
-          } catch (scrapeErr) {
-            console.warn("Auto-scrape error (non-fatal):", scrapeErr);
+            } catch (scrapeErr) {
+              console.warn("Auto-scrape error (non-fatal):", scrapeErr);
+            }
+          } else {
+            console.log(`No supplier mapping found for SKU prefix of: ${product.sku}`);
           }
         }
 

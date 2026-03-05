@@ -213,9 +213,12 @@ const SettingsPage = () => {
       {/* Suppliers */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">🏭 Fornecedores</CardTitle>
+          <CardTitle className="text-base">🏭 Fornecedores (Auto-Scrape por SKU)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Configure o prefixo de SKU de cada fornecedor e o URL de pesquisa. Durante a otimização, o sistema remove o prefixo do SKU e pesquisa automaticamente no site do fornecedor. O URL deve terminar com <code className="bg-muted px-1 rounded">/</code> ou <code className="bg-muted px-1 rounded">=</code> (ex: <code className="bg-muted px-1 rounded">https://www.udex.pt/pt/pesquisa/</code>).
+          </p>
           {suppliers.map((supplier, index) => (
             <div key={index} className="flex gap-3 items-end">
               <div className="w-28 space-y-1">
