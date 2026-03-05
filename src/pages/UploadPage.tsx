@@ -282,10 +282,22 @@ const UploadPage = () => {
       {/* Upload history */}
       {uploadHistory && uploadHistory.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
               <Clock className="w-4 h-4" /> Histórico de Uploads
             </CardTitle>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (confirm(`Tem a certeza que deseja eliminar todos os ${uploadHistory.length} ficheiro(s) do histórico?`)) {
+                  uploadHistory.forEach((r: any) => deleteUploadedFile.mutate(r.id));
+                }
+              }}
+              disabled={deleteUploadedFile.isPending}
+            >
+              <Trash2 className="w-4 h-4 mr-1" /> Apagar Todos
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
