@@ -38,7 +38,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { filePath, fileName } = await req.json();
+    const { filePath, fileName, columnMapping } = await req.json();
     if (!filePath || !fileName) {
       return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
         status: 400,
@@ -62,7 +62,7 @@ serve(async (req) => {
     let products: Array<Record<string, unknown>> = [];
 
     if (ext === "xlsx" || ext === "xls") {
-      products = await parseExcel(fileData);
+      products = await parseExcel(fileData, columnMapping);
     } else if (ext === "pdf") {
       products = await parsePdfWithAI(fileData, fileName);
     } else {
@@ -87,12 +87,12 @@ serve(async (req) => {
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize).map((p) => ({
         user_id: userId,
-        original_title: String(p.title || p.nome || p.produto || p.name || "").substring(0, 500) || null,
-        original_description: String(p.description || p.descricao || p.desc || "").substring(0, 5000) || null,
-        original_price: parsePrice(p.price || p.preco || p.valor || p.pvp),
-        sku: String(p.sku || p.ref || p.referencia || p.codigo || "").substring(0, 100) || null,
-        category: String(p.category || p.categoria || p.cat || "").substring(0, 200) || null,
-        supplier_ref: String(p.supplier_ref || p.ref_fornecedor || p.fornecedor || "").substring(0, 200) || null,
+        original_title: toStr(p.title, 500),
+        original_description: toStr(p.description, 5000),
+        original_price: parsePrice(p.price),
+        sku: toStr(p.sku, 100),
+        category: toStr(p.category, 200),
+        supplier_ref: toStr(p.supplier_ref, 200),
         source_file: fileName,
         status: "pending" as const,
       }));
@@ -129,6 +129,11 @@ serve(async (req) => {
   }
 });
 
+function toStr(value: unknown, maxLen: number): string | null {
+  if (value == null || value === "") return null;
+  return String(value).substring(0, maxLen) || null;
+}
+
 function parsePrice(value: unknown): number | null {
   if (value == null || value === "") return null;
   const str = String(value).replace(/[€$\s]/g, "").replace(",", ".");
@@ -136,7 +141,10 @@ function parsePrice(value: unknown): number | null {
   return isNaN(num) ? null : num;
 }
 
-async function parseExcel(fileData: Blob): Promise<Array<Record<string, unknown>>> {
+async function parseExcel(
+  fileData: Blob,
+  columnMapping?: Record<string, string>
+): Promise<Array<Record<string, unknown>>> {
   const buffer = await fileData.arrayBuffer();
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
   const sheetName = workbook.SheetNames[0];
@@ -145,13 +153,42 @@ async function parseExcel(fileData: Blob): Promise<Array<Record<string, unknown>
   const sheet = workbook.Sheets[sheetName];
   const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-  // Normalize column names to lowercase
+  // If we have a column mapping from the user, use it
+  if (columnMapping && Object.keys(columnMapping).length > 0) {
+    return rows.map((row) => {
+      const mapped: Record<string, unknown> = {};
+      for (const [productField, excelColumn] of Object.entries(columnMapping)) {
+        if (excelColumn && row[excelColumn] !== undefined) {
+          mapped[productField] = row[excelColumn];
+        }
+      }
+      return mapped;
+    });
+  }
+
+  // Fallback: auto-detect by normalizing column names
+  const autoMap: Record<string, RegExp> = {
+    title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
+    description: /^(description|descri[cç][aã]o|desc|detalhe|details)$/i,
+    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price)$/i,
+    sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
+    category: /^(category|categoria|cat|tipo|type|grupo|group|fam[ií]lia)$/i,
+    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
+  };
+
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const detectedMapping: Record<string, string> = {};
+  for (const [field, regex] of Object.entries(autoMap)) {
+    const found = headers.find((h) => regex.test(h.trim()));
+    if (found) detectedMapping[field] = found;
+  }
+
   return rows.map((row) => {
-    const normalized: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(row)) {
-      normalized[key.toLowerCase().trim().replace(/\s+/g, "_")] = value;
+    const mapped: Record<string, unknown> = {};
+    for (const [productField, excelColumn] of Object.entries(detectedMapping)) {
+      mapped[productField] = row[excelColumn];
     }
-    return normalized;
+    return mapped;
   });
 }
 

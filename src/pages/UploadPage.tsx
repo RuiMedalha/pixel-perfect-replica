@@ -1,14 +1,14 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { useUploadCatalog } from "@/hooks/useUploadCatalog";
-import { useState } from "react";
+import { ColumnMapper } from "@/components/ColumnMapper";
 
 const UploadPage = () => {
-  const { files, addFiles, processAll, processFile, removeFile } = useUploadCatalog();
+  const { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping } = useUploadCatalog();
   const [dragOver, setDragOver] = useState(false);
 
   const onDrop = useCallback(
@@ -31,8 +31,9 @@ const UploadPage = () => {
   const hasPending = files.some((f) => f.status === "aguardando");
   const isProcessing = files.some((f) => f.status === "a_enviar" || f.status === "a_processar");
 
-  const statusConfig = {
-    aguardando: { label: "Aguardando", icon: File, className: "text-muted-foreground" },
+  const statusConfig: Record<string, { label: string; icon: typeof File; className: string }> = {
+    aguardando: { label: "Pronto", icon: File, className: "text-muted-foreground" },
+    a_mapear: { label: "A mapear", icon: File, className: "text-primary" },
     a_enviar: { label: "A enviar...", icon: Loader2, className: "text-primary animate-spin" },
     a_processar: { label: "A processar...", icon: Loader2, className: "text-primary animate-spin" },
     concluido: { label: "Concluído", icon: CheckCircle, className: "text-green-600" },
@@ -75,10 +76,25 @@ const UploadPage = () => {
             </label>
           </Button>
           <p className="text-xs text-muted-foreground mt-3">
-            Formatos aceites: PDF, XLSX, XLS — PDFs são processados com IA, Excel é lido diretamente
+            Formatos aceites: PDF, XLSX, XLS — PDFs são processados com IA, Excel permite mapeamento de colunas
           </p>
         </CardContent>
       </Card>
+
+      {/* Column mapping cards for Excel files */}
+      {files
+        .filter((f) => f.status === "a_mapear" && f.excelHeaders)
+        .map((file) => (
+          <ColumnMapper
+            key={file.id}
+            fileName={file.name}
+            headers={file.excelHeaders!}
+            previewRows={file.previewRows || []}
+            mapping={file.columnMapping || {}}
+            onMappingChange={(m) => setColumnMapping(file.id, m)}
+            onConfirm={() => confirmMapping(file.id)}
+          />
+        ))}
 
       {/* File list */}
       {files.length > 0 && (
@@ -131,7 +147,7 @@ const UploadPage = () => {
                       <span className={cn("text-xs font-medium whitespace-nowrap", config.className)}>
                         {config.label}
                       </span>
-                      {(file.status === "aguardando" || file.status === "concluido" || file.status === "erro") && (
+                      {(file.status === "aguardando" || file.status === "a_mapear" || file.status === "concluido" || file.status === "erro") && (
                         <Button
                           variant="ghost"
                           size="icon"

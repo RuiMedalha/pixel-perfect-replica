@@ -2,17 +2,67 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+export type ColumnMapping = Record<string, string>; // productField -> excelColumn
 
 export interface UploadedFile {
   id: string;
   file: File;
   name: string;
   size: number;
-  type: string;
-  status: "aguardando" | "a_enviar" | "a_processar" | "concluido" | "erro";
+  type: "PDF" | "Excel";
+  status: "aguardando" | "a_mapear" | "a_enviar" | "a_processar" | "concluido" | "erro";
   progress: number;
   productsCount?: number;
   error?: string;
+  excelHeaders?: string[];
+  previewRows?: Record<string, unknown>[];
+  columnMapping?: ColumnMapping;
+}
+
+export const PRODUCT_FIELDS = [
+  { key: "title", label: "Título", required: true },
+  { key: "description", label: "Descrição", required: false },
+  { key: "price", label: "Preço", required: false },
+  { key: "sku", label: "SKU / Referência", required: false },
+  { key: "category", label: "Categoria", required: false },
+  { key: "supplier_ref", label: "Ref. Fornecedor", required: false },
+] as const;
+
+async function readExcelHeaders(file: File): Promise<{ headers: string[]; previewRows: Record<string, unknown>[] }> {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return { headers: [], previewRows: [] };
+
+  const sheet = workbook.Sheets[sheetName];
+  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  if (rows.length === 0) return { headers: [], previewRows: [] };
+
+  const headers = Object.keys(rows[0]);
+  return { headers, previewRows: rows.slice(0, 3) };
+}
+
+function autoMapColumns(headers: string[]): ColumnMapping {
+  const mapping: ColumnMapping = {};
+  const lower = headers.map((h) => h.toLowerCase().trim().replace(/\s+/g, "_"));
+
+  const patterns: Record<string, RegExp> = {
+    title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
+    description: /^(description|descri[cç][aã]o|desc|detalhe|details)$/i,
+    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price)$/i,
+    sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
+    category: /^(category|categoria|cat|tipo|type|grupo|group|fam[ií]lia)$/i,
+    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
+  };
+
+  for (const [field, regex] of Object.entries(patterns)) {
+    const idx = lower.findIndex((h) => regex.test(h));
+    if (idx !== -1) mapping[field] = headers[idx];
+  }
+
+  return mapping;
 }
 
 export function useUploadCatalog() {
@@ -23,7 +73,7 @@ export function useUploadCatalog() {
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...update } : f)));
   };
 
-  const addFiles = (fileList: FileList) => {
+  const addFiles = async (fileList: FileList) => {
     const accepted = Array.from(fileList).filter(
       (f) =>
         f.name.endsWith(".pdf") ||
@@ -34,16 +84,45 @@ export function useUploadCatalog() {
       toast.error("Apenas ficheiros PDF, XLSX e XLS são aceites.");
       return;
     }
-    const newFiles: UploadedFile[] = accepted.map((f) => ({
-      id: crypto.randomUUID(),
-      file: f,
-      name: f.name,
-      size: f.size,
-      type: f.name.endsWith(".pdf") ? "PDF" : "Excel",
-      status: "aguardando",
-      progress: 0,
-    }));
+
+    const newFiles: UploadedFile[] = [];
+
+    for (const f of accepted) {
+      const isPdf = f.name.endsWith(".pdf");
+      const base: UploadedFile = {
+        id: crypto.randomUUID(),
+        file: f,
+        name: f.name,
+        size: f.size,
+        type: isPdf ? "PDF" : "Excel",
+        status: isPdf ? "aguardando" : "a_mapear",
+        progress: 0,
+      };
+
+      if (!isPdf) {
+        try {
+          const { headers, previewRows } = await readExcelHeaders(f);
+          base.excelHeaders = headers;
+          base.previewRows = previewRows;
+          base.columnMapping = autoMapColumns(headers);
+        } catch {
+          base.status = "erro";
+          base.error = "Não foi possível ler o ficheiro Excel";
+        }
+      }
+
+      newFiles.push(base);
+    }
+
     setFiles((prev) => [...prev, ...newFiles]);
+  };
+
+  const setColumnMapping = (id: string, mapping: ColumnMapping) => {
+    updateFile(id, { columnMapping: mapping });
+  };
+
+  const confirmMapping = (id: string) => {
+    updateFile(id, { status: "aguardando" });
   };
 
   const processFile = async (uploadedFile: UploadedFile) => {
@@ -56,7 +135,6 @@ export function useUploadCatalog() {
     }
 
     try {
-      // 1. Upload to storage
       updateFile(uploadedFile.id, { status: "a_enviar", progress: 20 });
       const filePath = `${user.id}/${Date.now()}_${uploadedFile.name}`;
       const { error: uploadError } = await supabase.storage
@@ -65,10 +143,13 @@ export function useUploadCatalog() {
 
       if (uploadError) throw new Error("Erro no upload: " + uploadError.message);
 
-      // 2. Call edge function to parse
       updateFile(uploadedFile.id, { status: "a_processar", progress: 50 });
       const { data, error } = await supabase.functions.invoke("parse-catalog", {
-        body: { filePath, fileName: uploadedFile.name },
+        body: {
+          filePath,
+          fileName: uploadedFile.name,
+          columnMapping: uploadedFile.columnMapping || undefined,
+        },
       });
 
       if (error) throw new Error(error.message || "Erro ao processar ficheiro");
@@ -82,7 +163,6 @@ export function useUploadCatalog() {
       });
       toast.success(`${count} produto(s) importado(s) de "${uploadedFile.name}"`);
 
-      // Invalidate queries
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["product-stats"] });
       qc.invalidateQueries({ queryKey: ["recent-activity"] });
@@ -104,5 +184,5 @@ export function useUploadCatalog() {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  return { files, addFiles, processAll, processFile, removeFile };
+  return { files, addFiles, processAll, processFile, removeFile, setColumnMapping, confirmMapping };
 }
