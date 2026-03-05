@@ -7,11 +7,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2, Download, Send } from "lucide-react";
+import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2, Download, Send, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
+import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import type { Enums } from "@/integrations/supabase/types";
 
@@ -38,6 +39,7 @@ const ProductsPage = () => {
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const publishWoo = usePublishWooCommerce();
+  const deleteProducts = useDeleteProducts();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -62,6 +64,21 @@ const ProductsPage = () => {
   const bulkAction = (status: Enums<"product_status">) => {
     updateStatus.mutate({ ids: Array.from(selected), status });
     setSelected(new Set());
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((p) => p.id)));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (confirm(`Tem a certeza que deseja eliminar ${selected.size} produto(s)? Esta ação é irreversível.`)) {
+      deleteProducts.mutate(Array.from(selected));
+      setSelected(new Set());
+    }
   };
 
   const statuses: { value: FilterStatus; label: string }[] = [
@@ -93,6 +110,9 @@ const ProductsPage = () => {
               </Button>
               <Button size="sm" variant="destructive" onClick={() => bulkAction("error")}>
                 <X className="w-4 h-4 mr-1" /> Rejeitar ({selected.size})
+              </Button>
+              <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={deleteProducts.isPending}>
+                <Trash2 className="w-4 h-4 mr-1" /> Eliminar ({selected.size})
               </Button>
               <Button size="sm" variant="outline" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
                 <Send className="w-4 h-4 mr-1" /> Publicar WooCommerce ({selected.size})
@@ -151,7 +171,12 @@ const ProductsPage = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/50">
-                    <th className="p-3 w-10"></th>
+                    <th className="p-3 w-10">
+                      <Checkbox
+                        checked={filtered.length > 0 && selected.size === filtered.length}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </th>
                     <th className="p-3 text-left font-medium text-muted-foreground">SKU</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Original</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Otimizado</th>
