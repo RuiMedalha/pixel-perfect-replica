@@ -1,1 +1,4 @@
 project_id = "hkmfwfxwgalcvfmvgtoj"
+
+[functions.optimize-product]
+verify_jwt = false

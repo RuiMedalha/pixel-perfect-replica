@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
+import { useOptimizeProducts } from "@/hooks/useOptimizeProducts";
 import type { Enums } from "@/integrations/supabase/types";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
@@ -33,6 +34,7 @@ type FilterStatus = Enums<"product_status"> | "all";
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const updateStatus = useUpdateProductStatus();
+  const optimizeProducts = useOptimizeProducts();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -84,6 +86,9 @@ const ProductsPage = () => {
             </Button>
             <Button size="sm" variant="outline" onClick={() => bulkAction("published")}>
               <ExternalLink className="w-4 h-4 mr-1" /> Publicar ({selected.size})
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { optimizeProducts.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={optimizeProducts.isPending}>
+              <Sparkles className="w-4 h-4 mr-1" /> Otimizar IA ({selected.size})
             </Button>
           </div>
         )}
@@ -164,7 +169,7 @@ const ProductsPage = () => {
                           <Button size="sm" variant="ghost" onClick={() => setDetailProduct(product)}>
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
-                          <Button size="sm" variant="ghost">
+                          <Button size="sm" variant="ghost" onClick={() => optimizeProducts.mutate([product.id])} disabled={optimizeProducts.isPending}>
                             <Sparkles className="w-3.5 h-3.5" />
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => updateStatus.mutate({ ids: [product.id], status: "optimized" })}>
