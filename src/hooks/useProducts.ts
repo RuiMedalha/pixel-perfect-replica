@@ -9,12 +9,21 @@ export function useProducts() {
   return useQuery({
     queryKey: ["products"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      const all: any[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        all.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      return all;
     },
   });
 }
@@ -42,12 +51,20 @@ export function useProductStats() {
   return useQuery({
     queryKey: ["product-stats"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("products").select("status");
-      if (error) throw error;
-      const pending = data.filter((p) => p.status === "pending" || p.status === "processing").length;
-      const optimized = data.filter((p) => p.status === "optimized").length;
-      const published = data.filter((p) => p.status === "published").length;
-      return { pending, optimized, published, total: data.length };
+      const all: { status: string }[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabase.from("products").select("status").range(from, from + pageSize - 1);
+        if (error) throw error;
+        all.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+      const pending = all.filter((p) => p.status === "pending" || p.status === "processing").length;
+      const optimized = all.filter((p) => p.status === "optimized").length;
+      const published = all.filter((p) => p.status === "published").length;
+      return { pending, optimized, published, total: all.length };
     },
   });
 }
