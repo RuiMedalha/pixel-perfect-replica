@@ -87,20 +87,24 @@ export type Database = {
           category: string | null
           created_at: string
           id: string
+          image_urls: string[] | null
           meta_description: string | null
           meta_title: string | null
           optimized_description: string | null
           optimized_price: number | null
+          optimized_short_description: string | null
           optimized_title: string | null
           original_description: string | null
           original_price: number | null
           original_title: string | null
           seo_slug: string | null
+          short_description: string | null
           sku: string | null
           source_file: string | null
           status: Database["public"]["Enums"]["product_status"]
           supplier_ref: string | null
           tags: string[] | null
+          technical_specs: string | null
           updated_at: string
           user_id: string
           woocommerce_id: number | null
@@ -109,20 +113,24 @@ export type Database = {
           category?: string | null
           created_at?: string
           id?: string
+          image_urls?: string[] | null
           meta_description?: string | null
           meta_title?: string | null
           optimized_description?: string | null
           optimized_price?: number | null
+          optimized_short_description?: string | null
           optimized_title?: string | null
           original_description?: string | null
           original_price?: number | null
           original_title?: string | null
           seo_slug?: string | null
+          short_description?: string | null
           sku?: string | null
           source_file?: string | null
           status?: Database["public"]["Enums"]["product_status"]
           supplier_ref?: string | null
           tags?: string[] | null
+          technical_specs?: string | null
           updated_at?: string
           user_id: string
           woocommerce_id?: number | null
@@ -131,20 +139,24 @@ export type Database = {
           category?: string | null
           created_at?: string
           id?: string
+          image_urls?: string[] | null
           meta_description?: string | null
           meta_title?: string | null
           optimized_description?: string | null
           optimized_price?: number | null
+          optimized_short_description?: string | null
           optimized_title?: string | null
           original_description?: string | null
           original_price?: number | null
           original_title?: string | null
           seo_slug?: string | null
+          short_description?: string | null
           sku?: string | null
           source_file?: string | null
           status?: Database["public"]["Enums"]["product_status"]
           supplier_ref?: string | null
           tags?: string[] | null
+          technical_specs?: string | null
           updated_at?: string
           user_id?: string
           woocommerce_id?: number | null
@@ -175,6 +187,48 @@ export type Database = {
           updated_at?: string
           user_id?: string
           value?: string | null
+        }
+        Relationships: []
+      }
+      uploaded_files: {
+        Row: {
+          created_at: string
+          file_hash: string | null
+          file_name: string
+          file_size: number | null
+          file_type: string
+          id: string
+          metadata: Json | null
+          products_count: number | null
+          status: string
+          storage_path: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_hash?: string | null
+          file_name: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          metadata?: Json | null
+          products_count?: number | null
+          status?: string
+          storage_path?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_hash?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          metadata?: Json | null
+          products_count?: number | null
+          status?: string
+          storage_path?: string | null
+          user_id?: string
         }
         Relationships: []
       }

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, Save, Eye, EyeOff, Loader2 } from "lucide-react";
@@ -25,7 +26,23 @@ const SETTING_KEYS = {
   s3_bucket: "s3_bucket_name",
   s3_region: "s3_region",
   suppliers: "suppliers_json",
+  optimization_prompt: "optimization_prompt",
+  knowledge_urls: "knowledge_urls_json",
 };
+
+const DEFAULT_OPTIMIZATION_PROMPT = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
+
+Gera:
+1. Um título otimizado (máx 70 chars, com keyword principal)
+2. Uma descrição otimizada (200-400 chars, persuasiva, com benefícios e keywords)
+3. Uma descrição curta (máx 160 chars, resumo conciso)
+4. Meta title SEO (máx 60 chars)
+5. Meta description SEO (máx 155 chars, com call-to-action)
+6. SEO slug (url-friendly, lowercase, hífens)
+7. Tags relevantes (3-6 palavras-chave)
+8. Preço sugerido (pode manter o original ou ajustar ligeiramente)
+
+IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica.`;
 
 const SettingsPage = () => {
   const { data: settings, isLoading } = useSettings();
@@ -33,8 +50,8 @@ const SettingsPage = () => {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState<Record<string, string>>({});
   const [suppliers, setSuppliers] = useState<Supplier[]>([{ prefix: "", url: "" }]);
+  const [knowledgeUrls, setKnowledgeUrls] = useState<string[]>([""]);
 
-  // Load settings into form when fetched
   useEffect(() => {
     if (settings) {
       setForm(settings);
@@ -42,18 +59,28 @@ const SettingsPage = () => {
         const parsed = JSON.parse(settings[SETTING_KEYS.suppliers] ?? "[]");
         if (Array.isArray(parsed) && parsed.length > 0) setSuppliers(parsed);
       } catch { /* keep default */ }
+      try {
+        const parsed = JSON.parse(settings[SETTING_KEYS.knowledge_urls] ?? "[]");
+        if (Array.isArray(parsed) && parsed.length > 0) setKnowledgeUrls(parsed);
+      } catch { /* keep default */ }
     }
   }, [settings]);
 
   const toggleShow = (key: string) => setShowKeys((prev) => ({ ...prev, [key]: !prev[key] }));
-
   const updateField = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const addSupplier = () => setSuppliers((prev) => [...prev, { prefix: "", url: "" }]);
   const removeSupplier = (index: number) => setSuppliers((prev) => prev.filter((_, i) => i !== index));
 
+  const addKnowledgeUrl = () => setKnowledgeUrls((prev) => [...prev, ""]);
+  const removeKnowledgeUrl = (index: number) => setKnowledgeUrls((prev) => prev.filter((_, i) => i !== index));
+
   const handleSave = () => {
-    const data = { ...form, [SETTING_KEYS.suppliers]: JSON.stringify(suppliers) };
+    const data = {
+      ...form,
+      [SETTING_KEYS.suppliers]: JSON.stringify(suppliers),
+      [SETTING_KEYS.knowledge_urls]: JSON.stringify(knowledgeUrls.filter(Boolean)),
+    };
     saveSettings.mutate(data);
   };
 
@@ -71,6 +98,60 @@ const SettingsPage = () => {
         <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
         <p className="text-muted-foreground mt-1">Gerir credenciais e preferências da aplicação.</p>
       </div>
+
+      {/* Optimization Prompt */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">✍️ Prompt de Otimização</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Prompt Global</Label>
+            <p className="text-xs text-muted-foreground">
+              Este prompt é usado pela IA para otimizar todos os produtos. Personalize-o conforme as suas necessidades.
+            </p>
+            <Textarea
+              rows={12}
+              className="font-mono text-xs"
+              placeholder={DEFAULT_OPTIMIZATION_PROMPT}
+              value={form[SETTING_KEYS.optimization_prompt] ?? DEFAULT_OPTIMIZATION_PROMPT}
+              onChange={(e) => updateField(SETTING_KEYS.optimization_prompt, e.target.value)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Knowledge URLs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">🔗 URLs de Conhecimento</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            URLs de sites de fornecedores/marcas para pesquisa de informação adicional durante a otimização.
+          </p>
+          {knowledgeUrls.map((url, index) => (
+            <div key={index} className="flex gap-2">
+              <Input
+                placeholder="https://fornecedor.com/catalogo"
+                value={url}
+                className="flex-1"
+                onChange={(e) => {
+                  const updated = [...knowledgeUrls];
+                  updated[index] = e.target.value;
+                  setKnowledgeUrls(updated);
+                }}
+              />
+              <Button variant="ghost" size="icon" onClick={() => removeKnowledgeUrl(index)} disabled={knowledgeUrls.length === 1}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          ))}
+          <Button variant="outline" size="sm" onClick={addKnowledgeUrl}>
+            <Plus className="w-4 h-4 mr-1" /> Adicionar URL
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* AI Models */}
       <Card>

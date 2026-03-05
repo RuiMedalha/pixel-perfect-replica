@@ -59,6 +59,15 @@ serve(async (req) => {
       });
     }
 
+    // Fetch user's optimization prompt from settings
+    const { data: promptSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "optimization_prompt")
+      .maybeSingle();
+
+    const customPrompt = promptSetting?.value || null;
+
     // Mark as processing
     await supabase
       .from("products")
@@ -71,23 +80,35 @@ serve(async (req) => {
     const results = [];
 
     for (const product of products) {
-      const prompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
-
-Produto original:
+      const productInfo = `Produto original:
 - Título: ${product.original_title || "N/A"}
 - Descrição: ${product.original_description || "N/A"}
+- Descrição Curta: ${product.short_description || "N/A"}
+- Características Técnicas: ${product.technical_specs || "N/A"}
 - Categoria: ${product.category || "N/A"}
 - Preço: ${product.original_price || "N/A"}€
 - SKU: ${product.sku || "N/A"}
+- Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
+
+      const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
+
+${productInfo}
 
 Gera:
 1. Um título otimizado (máx 70 chars, com keyword principal)
 2. Uma descrição otimizada (200-400 chars, persuasiva, com benefícios e keywords)
-3. Meta title SEO (máx 60 chars)
-4. Meta description SEO (máx 155 chars, com call-to-action)
-5. SEO slug (url-friendly, lowercase, hífens)
-6. Tags relevantes (3-6 palavras-chave)
-7. Preço sugerido (pode manter o original ou ajustar ligeiramente)`;
+3. Uma descrição curta otimizada (máx 160 chars, resumo conciso)
+4. Meta title SEO (máx 60 chars)
+5. Meta description SEO (máx 155 chars, com call-to-action)
+6. SEO slug (url-friendly, lowercase, hífens)
+7. Tags relevantes (3-6 palavras-chave)
+8. Preço sugerido (pode manter o original ou ajustar ligeiramente)
+
+IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica.`;
+
+      const finalPrompt = customPrompt
+        ? `${customPrompt}\n\n${productInfo}`
+        : defaultPrompt;
 
       const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
@@ -100,9 +121,9 @@ Gera:
           messages: [
             {
               role: "system",
-              content: "És um especialista em e-commerce e SEO. Responde APENAS com a tool call pedida, sem texto adicional.",
+              content: "És um especialista em e-commerce e SEO. Responde APENAS com a tool call pedida, sem texto adicional. Mantém sempre as características técnicas do produto.",
             },
-            { role: "user", content: prompt },
+            { role: "user", content: finalPrompt },
           ],
           tools: [
             {
@@ -115,6 +136,7 @@ Gera:
                   properties: {
                     optimized_title: { type: "string" },
                     optimized_description: { type: "string" },
+                    optimized_short_description: { type: "string" },
                     meta_title: { type: "string" },
                     meta_description: { type: "string" },
                     seo_slug: { type: "string" },
@@ -124,6 +146,7 @@ Gera:
                   required: [
                     "optimized_title",
                     "optimized_description",
+                    "optimized_short_description",
                     "meta_title",
                     "meta_description",
                     "seo_slug",
@@ -141,7 +164,6 @@ Gera:
       if (!aiResponse.ok) {
         const status = aiResponse.status;
         if (status === 429) {
-          // Mark remaining as pending again
           await supabase.from("products").update({ status: "pending" }).in("id", productIds);
           return new Response(JSON.stringify({ error: "Limite de pedidos excedido. Tente novamente mais tarde." }), {
             status: 429,
@@ -177,6 +199,7 @@ Gera:
         .update({
           optimized_title: optimized.optimized_title,
           optimized_description: optimized.optimized_description,
+          optimized_short_description: optimized.optimized_short_description || null,
           meta_title: optimized.meta_title,
           meta_description: optimized.meta_description,
           seo_slug: optimized.seo_slug,
