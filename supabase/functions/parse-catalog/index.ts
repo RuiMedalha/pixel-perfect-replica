@@ -38,7 +38,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { filePath, fileName, columnMapping, sheetName } = await req.json();
+    const { filePath, fileName, columnMapping, sheetName, parseKnowledge } = await req.json();
     if (!filePath || !fileName) {
       return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
         status: 400,
@@ -59,6 +59,24 @@ serve(async (req) => {
     }
 
     const ext = fileName.toLowerCase().split(".").pop();
+
+    // Knowledge file parsing - extract text content for context
+    if (parseKnowledge) {
+      let extractedText = "";
+      
+      if (ext === "pdf") {
+        extractedText = await extractPdfText(fileData, fileName);
+      } else if (ext === "xlsx" || ext === "xls") {
+        extractedText = await extractExcelText(fileData);
+      }
+
+      return new Response(
+        JSON.stringify({ extractedText, count: 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Product parsing
     let products: Array<Record<string, unknown>> = [];
 
     if (ext === "xlsx" || ext === "xls") {
@@ -144,6 +162,67 @@ function parsePrice(value: unknown): number | null {
   return isNaN(num) ? null : num;
 }
 
+async function extractExcelText(fileData: Blob): Promise<string> {
+  const buffer = await fileData.arrayBuffer();
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+  const parts: string[] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const text = XLSX.utils.sheet_to_csv(sheet);
+    parts.push(`--- Folha: ${sheetName} ---\n${text}`);
+  }
+  return parts.join("\n\n").substring(0, 50000);
+}
+
+async function extractPdfText(fileData: Blob, fileName: string): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+  const buffer = await fileData.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+  }
+  const base64 = btoa(binary);
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `És um extrator de conteúdo de documentos. Extrai TODO o texto relevante do PDF, incluindo especificações técnicas, tabelas de preços, características de produtos, descrições, dimensões, pesos, e qualquer informação técnica. Mantém a estrutura organizada. Responde APENAS com o texto extraído, sem comentários.`,
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: `Extrai todo o conteúdo relevante deste documento: "${fileName}".` },
+            { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errText = await aiResponse.text();
+    console.error("AI PDF extract error:", aiResponse.status, errText);
+    throw new Error("Erro ao extrair texto do PDF: " + aiResponse.status);
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content || "";
+  return content.substring(0, 50000);
+}
+
 async function parseExcel(
   fileData: Blob,
   columnMapping?: Record<string, string>,
@@ -159,7 +238,6 @@ async function parseExcel(
   const sheet = workbook.Sheets[sheetName];
   const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-  // If we have a column mapping from the user, use it
   if (columnMapping && Object.keys(columnMapping).length > 0) {
     return rows.map((row) => {
       const mapped: Record<string, unknown> = {};
@@ -172,7 +250,6 @@ async function parseExcel(
     });
   }
 
-  // Fallback: auto-detect by normalizing column names
   const autoMap: Record<string, RegExp> = {
     title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
     description: /^(description|descri[cç][aã]o|desc|detalhe|details)$/i,
@@ -202,7 +279,6 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  // Convert PDF to base64 (chunked to avoid stack overflow)
   const buffer = await fileData.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -231,16 +307,8 @@ Responde APENAS com a tool call, sem texto adicional. Se não encontrares produt
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: `Extrai todos os produtos deste catálogo PDF: "${fileName}". Devolve-os como array estruturado.`,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:application/pdf;base64,${base64}`,
-              },
-            },
+            { type: "text", text: `Extrai todos os produtos deste catálogo PDF: "${fileName}". Devolve-os como array estruturado.` },
+            { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
           ],
         },
       ],

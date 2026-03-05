@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2, Download, Send, Trash2 } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
-import { useOptimizeProducts } from "@/hooks/useOptimizeProducts";
+import { useOptimizeProducts, OPTIMIZATION_FIELDS, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
@@ -34,6 +35,8 @@ const statusColors: Record<Enums<"product_status">, string> = {
 
 type FilterStatus = Enums<"product_status"> | "all";
 
+const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
+
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const updateStatus = useUpdateProductStatus();
@@ -44,6 +47,9 @@ const ProductsPage = () => {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [showFieldSelector, setShowFieldSelector] = useState(false);
+  const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
+  const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
 
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
@@ -81,6 +87,29 @@ const ProductsPage = () => {
     }
   };
 
+  const handleOptimizeClick = (ids: string[]) => {
+    setPendingOptimizeIds(ids);
+    setShowFieldSelector(true);
+  };
+
+  const handleConfirmOptimize = () => {
+    optimizeProducts.mutate({
+      productIds: pendingOptimizeIds,
+      fieldsToOptimize: Array.from(selectedFields),
+    });
+    setShowFieldSelector(false);
+    setPendingOptimizeIds([]);
+    setSelected(new Set());
+  };
+
+  const toggleField = (field: OptimizationField) => {
+    setSelectedFields(prev => {
+      const next = new Set(prev);
+      next.has(field) ? next.delete(field) : next.add(field);
+      return next;
+    });
+  };
+
   const statuses: { value: FilterStatus; label: string }[] = [
     { value: "all", label: "Todos" },
     { value: "pending", label: "Pendente" },
@@ -96,7 +125,7 @@ const ProductsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Painel de Produtos</h1>
           <p className="text-muted-foreground mt-1">{products?.length ?? 0} produtos no total</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button size="sm" variant="outline" onClick={() => {
             const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
             exportProductsToExcel(selectedProducts);
@@ -117,7 +146,7 @@ const ProductsPage = () => {
               <Button size="sm" variant="outline" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
                 <Send className="w-4 h-4 mr-1" /> Publicar WooCommerce ({selected.size})
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => { optimizeProducts.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={optimizeProducts.isPending}>
+              <Button size="sm" variant="secondary" onClick={() => handleOptimizeClick(Array.from(selected))} disabled={optimizeProducts.isPending}>
                 <Sparkles className="w-4 h-4 mr-1" /> Otimizar IA ({selected.size})
               </Button>
               <Button size="sm" variant="outline" onClick={() => {
@@ -212,7 +241,7 @@ const ProductsPage = () => {
                           <Button size="sm" variant="ghost" onClick={() => setDetailProduct(product)}>
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
-                          <Button size="sm" variant="ghost" onClick={() => optimizeProducts.mutate([product.id])} disabled={optimizeProducts.isPending}>
+                          <Button size="sm" variant="ghost" onClick={() => handleOptimizeClick([product.id])} disabled={optimizeProducts.isPending}>
                             <Sparkles className="w-3.5 h-3.5" />
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => updateStatus.mutate({ ids: [product.id], status: "optimized" })}>
@@ -228,6 +257,47 @@ const ProductsPage = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Field Selector Dialog */}
+      <Dialog open={showFieldSelector} onOpenChange={setShowFieldSelector}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="w-5 h-5" />
+              Campos a Otimizar
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Selecione os campos que pretende otimizar com IA para {pendingOptimizeIds.length} produto(s).
+          </p>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            {OPTIMIZATION_FIELDS.map((field) => (
+              <label key={field.key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 cursor-pointer">
+                <Checkbox
+                  checked={selectedFields.has(field.key)}
+                  onCheckedChange={() => toggleField(field.key)}
+                />
+                <span className="text-sm">{field.label}</span>
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set(ALL_FIELDS))}>
+              Selecionar Todos
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set())}>
+              Limpar
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
+            <Button onClick={handleConfirmOptimize} disabled={selectedFields.size === 0 || optimizeProducts.isPending}>
+              <Sparkles className="w-4 h-4 mr-1" />
+              Otimizar {pendingOptimizeIds.length} produto(s)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Detail Modal */}
       <Dialog open={!!detailProduct} onOpenChange={() => setDetailProduct(null)}>
@@ -245,6 +315,7 @@ const ProductsPage = () => {
                   <TabsTrigger value="textos">Textos</TabsTrigger>
                   <TabsTrigger value="imagens">Imagens</TabsTrigger>
                   <TabsTrigger value="seo">SEO</TabsTrigger>
+                  <TabsTrigger value="faq">FAQ</TabsTrigger>
                   <TabsTrigger value="brutos">Dados Brutos</TabsTrigger>
                 </TabsList>
 
@@ -257,6 +328,10 @@ const ProductsPage = () => {
                   <ComparisonField label="Meta Title" original="—" optimized={detailProduct.meta_title ?? "—"} />
                   <ComparisonField label="Meta Description" original="—" optimized={detailProduct.meta_description ?? "—"} multiline />
                   <ComparisonField label="SEO Slug" original="—" optimized={detailProduct.seo_slug ?? "—"} />
+                </TabsContent>
+
+                <TabsContent value="faq" className="mt-4">
+                  <FaqDisplay faq={(detailProduct as any).faq} />
                 </TabsContent>
 
                 <TabsContent value="imagens" className="mt-4">
@@ -295,6 +370,31 @@ const ProductsPage = () => {
     </div>
   );
 };
+
+function FaqDisplay({ faq }: { faq: any }) {
+  if (!faq || !Array.isArray(faq) || faq.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p>Nenhuma FAQ gerada para este produto.</p>
+        <p className="text-xs mt-1">Otimize o produto com o campo "FAQ" selecionado para gerar perguntas frequentes.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">{faq.length} pergunta(s) frequente(s)</p>
+      {faq.map((item: { question: string; answer: string }, idx: number) => (
+        <Card key={idx}>
+          <CardContent className="p-4">
+            <h4 className="font-medium text-sm mb-2">❓ {item.question}</h4>
+            <p className="text-sm text-muted-foreground">{item.answer}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 function ComparisonField({
   label,
