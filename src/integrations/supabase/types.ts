@@ -92,6 +92,7 @@ export type Database = {
           source_name: string | null
           tsv: unknown
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           chunk_index?: number
@@ -102,6 +103,7 @@ export type Database = {
           source_name?: string | null
           tsv?: unknown
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           chunk_index?: number
@@ -112,6 +114,7 @@ export type Database = {
           source_name?: string | null
           tsv?: unknown
           user_id?: string
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -119,6 +122,13 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: false
             referencedRelation: "uploaded_files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "knowledge_chunks_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -276,6 +286,7 @@ export type Database = {
           upsell_skus: Json | null
           user_id: string
           woocommerce_id: number | null
+          workspace_id: string | null
         }
         Insert: {
           category?: string | null
@@ -305,6 +316,7 @@ export type Database = {
           upsell_skus?: Json | null
           user_id: string
           woocommerce_id?: number | null
+          workspace_id?: string | null
         }
         Update: {
           category?: string | null
@@ -334,8 +346,17 @@ export type Database = {
           upsell_skus?: Json | null
           user_id?: string
           woocommerce_id?: number | null
+          workspace_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -405,6 +426,7 @@ export type Database = {
           status: string
           storage_path: string | null
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           created_at?: string
@@ -419,6 +441,7 @@ export type Database = {
           status?: string
           storage_path?: string | null
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           created_at?: string
@@ -433,8 +456,17 @@ export type Database = {
           status?: string
           storage_path?: string | null
           user_id?: string
+          workspace_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "uploaded_files_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -450,6 +482,33 @@ export type Database = {
         Update: {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      workspaces: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
