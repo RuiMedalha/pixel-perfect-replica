@@ -20,6 +20,8 @@ const EXPORT_COLUMNS = [
   { key: "meta_description", header: "Meta Description SEO" },
   { key: "seo_slug", header: "SEO Slug" },
   { key: "faq", header: "FAQ" },
+  { key: "upsell_skus", header: "Upsells (SKU | Título)" },
+  { key: "crosssell_skus", header: "Cross-sells (SKU | Título)" },
   { key: "image_urls", header: "URLs Imagens" },
   { key: "status", header: "Estado" },
 ];
@@ -36,6 +38,8 @@ export function exportProductsToExcel(products: Product[], fileName = "produtos-
       const val = (p as any)[col.key];
       if (col.key === "faq" && Array.isArray(val)) {
         row[col.header] = val.map((f: any) => `Q: ${f.question} A: ${f.answer}`).join(" | ");
+      } else if ((col.key === "upsell_skus" || col.key === "crosssell_skus") && Array.isArray(val)) {
+        row[col.header] = val.map((item: any) => `${item.sku}: ${item.title}`).join(" | ");
       } else if (Array.isArray(val)) {
         row[col.header] = val.join(", ");
       } else {
