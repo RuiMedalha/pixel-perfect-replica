@@ -47,7 +47,8 @@ serve(async (req) => {
 
     const fields = fieldsToOptimize || [
       "title", "description", "short_description",
-      "meta_title", "meta_description", "seo_slug", "tags", "price", "faq"
+      "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
+      "upsells", "crosssells"
     ];
 
     // Fetch products
@@ -99,6 +100,24 @@ serve(async (req) => {
           supplierMappings = parsed.filter((s: any) => s.prefix && s.url);
         }
       } catch { /* ignore parse errors */ }
+    }
+
+    // Fetch ALL user products for upsell/cross-sell suggestions
+    let catalogContext = "";
+    if (fields.includes("upsells") || fields.includes("crosssells")) {
+      const { data: allProducts } = await supabase
+        .from("products")
+        .select("sku, original_title, optimized_title, category, original_price")
+        .order("created_at", { ascending: false })
+        .limit(500);
+
+      if (allProducts && allProducts.length > 1) {
+        const catalogList = allProducts
+          .filter((p: any) => p.sku)
+          .map((p: any) => `SKU: ${p.sku} | ${p.optimized_title || p.original_title || "Sem título"} | Cat: ${p.category || "N/A"} | ${p.original_price || "N/A"}€`)
+          .join("\n");
+        catalogContext = `\n\nCATÁLOGO COMPLETO DE PRODUTOS (usa para sugerir upsells e cross-sells):\n${catalogList.substring(0, 10000)}`;
+      }
     }
 
     const results = [];
@@ -233,10 +252,12 @@ serve(async (req) => {
         if (fields.includes("tags")) fieldInstructions.push("7. Tags relevantes (3-6 palavras-chave)");
         if (fields.includes("price")) fieldInstructions.push("8. Preço sugerido (pode manter o original ou ajustar ligeiramente)");
         if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}). Estas FAQs devem ser DIFERENTES e complementares às que estão na descrição.");
+        if (fields.includes("upsells")) fieldInstructions.push("10. Upsells: Sugere 2-4 produtos SUPERIORES do catálogo (mais caros, melhor qualidade, versão premium) que o cliente pode preferir. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
+        if (fields.includes("crosssells")) fieldInstructions.push("11. Cross-sells: Sugere 2-4 produtos COMPLEMENTARES do catálogo (acessórios, produtos relacionados que combinam) que o cliente também pode querer. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
 
-${productInfo}${knowledgeContext}${supplierContext}
+${productInfo}${knowledgeContext}${supplierContext}${catalogContext}
 
 Gera:
 ${fieldInstructions.join("\n")}
@@ -246,6 +267,7 @@ IMPORTANTE:
 - O texto comercial deve ser persuasivo e focado nos benefícios, sem dados técnicos misturados.
 - As FAQs na descrição devem ser práticas e úteis para o cliente.
 - Se existir informação de referência ou do fornecedor acima, usa-a para enriquecer o produto com dados reais.
+- Para upsells e cross-sells, usa APENAS SKUs que existam no catálogo fornecido. NÃO inventes SKUs.
 - Traduz tudo para português europeu.`;
 
         const finalPrompt = customPrompt
@@ -274,6 +296,30 @@ IMPORTANTE:
             },
           };
           requiredFields.push("faq");
+        }
+        if (fields.includes("upsells")) {
+          toolProperties.upsell_skus = {
+            type: "array",
+            description: "Produtos superiores sugeridos como upsell, com SKU e título reais do catálogo",
+            items: {
+              type: "object",
+              properties: { sku: { type: "string" }, title: { type: "string" } },
+              required: ["sku", "title"],
+            },
+          };
+          requiredFields.push("upsell_skus");
+        }
+        if (fields.includes("crosssells")) {
+          toolProperties.crosssell_skus = {
+            type: "array",
+            description: "Produtos complementares sugeridos como cross-sell, com SKU e título reais do catálogo",
+            items: {
+              type: "object",
+              properties: { sku: { type: "string" }, title: { type: "string" } },
+              required: ["sku", "title"],
+            },
+          };
+          requiredFields.push("crosssell_skus");
         }
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -353,6 +399,8 @@ IMPORTANTE:
         if (optimized.tags) updateData.tags = optimized.tags;
         if (optimized.optimized_price !== undefined) updateData.optimized_price = optimized.optimized_price ?? product.original_price;
         if (optimized.faq) updateData.faq = optimized.faq;
+        if (optimized.upsell_skus) updateData.upsell_skus = optimized.upsell_skus;
+        if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
 
         const { error: updateError } = await supabase
           .from("products")
