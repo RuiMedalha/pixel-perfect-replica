@@ -393,21 +393,25 @@ function SecretField({
   showKeys: Record<string, boolean>;
   toggleShow: (key: string) => void;
 }) {
+  const isMasked = form[settingKey] === "••••••••";
   return (
     <div className="space-y-2">
       <Label>{label}</Label>
       <div className="flex gap-2">
         <Input
           type={showKeys[id] ? "text" : "password"}
-          placeholder="••••••••••••"
+          placeholder={isMasked ? "Credencial guardada — introduza novo valor para alterar" : "••••••••••••"}
           className="flex-1"
-          value={form[settingKey] ?? ""}
+          value={isMasked ? "" : (form[settingKey] ?? "")}
           onChange={(e) => updateField(settingKey, e.target.value)}
         />
         <Button variant="ghost" size="icon" onClick={() => toggleShow(id)}>
           {showKeys[id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </Button>
       </div>
+      {isMasked && (
+        <p className="text-xs text-muted-foreground">Credencial já configurada. Deixe vazio para manter ou introduza novo valor.</p>
+      )}
     </div>
   );
 }
