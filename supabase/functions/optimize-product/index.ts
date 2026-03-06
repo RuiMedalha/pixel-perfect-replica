@@ -147,9 +147,13 @@ serve(async (req) => {
       }
     }
 
-    const results = [];
+    const results: any[] = [];
 
-    for (const product of products) {
+    // Process products in parallel batches of 3 for speed
+    const CONCURRENCY = 3;
+    for (let batchStart = 0; batchStart < products.length; batchStart += CONCURRENCY) {
+      const batch = products.slice(batchStart, batchStart + CONCURRENCY);
+      const batchResults = await Promise.allSettled(batch.map(async (product) => {
       try {
         // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) ===
         if (product.optimized_title || product.optimized_description) {
@@ -187,32 +191,59 @@ serve(async (req) => {
           }
         }
 
-        // 1. Search relevant knowledge chunks
+        // 1. Search relevant knowledge chunks with multiple search strategies
         let knowledgeContext = "";
-        const searchQuery = [product.original_title, product.sku, product.category, product.supplier_ref]
-          .filter(Boolean)
-          .join(" ");
+        const allChunks: any[] = [];
 
-        if (searchQuery) {
-        const searchArgs: any = {
-            _query: searchQuery,
-            _limit: 8,
-          };
+        // Strategy 1: Search by product title (cleaned - remove codes/special chars)
+        const cleanTitle = (product.original_title || "")
+          .replace(/[+\-\/\\()]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        // Extract meaningful words (3+ chars, no codes)
+        const titleWords = cleanTitle.split(" ").filter((w: string) => w.length >= 3 && !/^\d+$/.test(w));
+        const titleQuery = titleWords.slice(0, 5).join(" ");
+
+        // Strategy 2: Search by category keywords
+        const categoryQuery = (product.category || "")
+          .replace(/>/g, " ")
+          .replace(/[+\-\/\\()]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        // Strategy 3: Search by SKU/ref
+        const skuQuery = product.sku || product.supplier_ref || "";
+
+        const searchQueries = [titleQuery, categoryQuery, skuQuery].filter((q) => q.length > 2);
+        
+        for (const query of searchQueries) {
+          const searchArgs: any = { _query: query, _limit: 5 };
           if (workspaceId) searchArgs._workspace_id = workspaceId;
           
-          const { data: chunks, error: searchError } = await supabase.rpc("search_knowledge", searchArgs);
-
-          if (searchError) {
-            console.warn("Knowledge search error:", searchError.message);
+          try {
+            const { data: chunks } = await supabase.rpc("search_knowledge", searchArgs);
+            if (chunks && chunks.length > 0) {
+              for (const c of chunks) {
+                if (!allChunks.find((existing: any) => existing.id === c.id)) {
+                  allChunks.push(c);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`Knowledge search error for "${query.substring(0, 40)}":`, e);
           }
+        }
 
-          if (chunks && chunks.length > 0) {
-            console.log(`✅ Knowledge found: ${chunks.length} chunks from: ${[...new Set(chunks.map((c: any) => c.source_name))].join(", ")}`);
-            const parts = chunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
-            knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado):\n${parts.substring(0, 12000)}`;
-          } else {
-            console.log(`⚠️ No knowledge found for query: "${searchQuery.substring(0, 80)}..." (workspace: ${workspaceId || "all"})`);
-          }
+        // Sort by rank and take top results
+        allChunks.sort((a: any, b: any) => (b.rank || 0) - (a.rank || 0));
+        const topChunks = allChunks.slice(0, 8);
+
+        if (topChunks.length > 0) {
+          console.log(`✅ Knowledge found: ${topChunks.length} chunks from: ${[...new Set(topChunks.map((c: any) => c.source_name))].join(", ")}`);
+          const parts = topChunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
+          knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado nos PDFs e ficheiros):\n${parts.substring(0, 12000)}`;
+        } else {
+          console.log(`⚠️ No knowledge found for queries: ${searchQueries.map(q => `"${q.substring(0, 30)}"`).join(", ")} (workspace: ${workspaceId || "all"})`);
         }
 
         // 2. Auto-scrape supplier page by SKU
@@ -397,31 +428,23 @@ IMPORTANTE:
           const status = aiResponse.status;
           if (status === 429) {
             await supabase.from("products").update({ status: "pending" }).in("id", productIds);
-            return new Response(JSON.stringify({ error: "Limite de pedidos excedido. Tente novamente mais tarde." }), {
-              status: 429,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            throw new Error("Limite de pedidos excedido. Tente novamente mais tarde.");
           }
           if (status === 402) {
             await supabase.from("products").update({ status: "pending" }).in("id", productIds);
-            return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
-              status: 402,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            throw new Error("Créditos insuficientes. Adicione créditos ao workspace.");
           }
           const errText = await aiResponse.text();
           console.error("AI error:", status, errText);
           await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-          results.push({ id: product.id, status: "error", error: errText });
-          continue;
+          return { id: product.id, status: "error" as const, error: errText };
         }
 
         const aiData = await aiResponse.json();
         const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
         if (!toolCall) {
           await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-          results.push({ id: product.id, status: "error", error: "No tool call in response" });
-          continue;
+          return { id: product.id, status: "error" as const, error: "No tool call in response" };
         }
 
         // Capture token usage from AI response
@@ -490,10 +513,10 @@ IMPORTANTE:
 
         if (updateError) {
           console.error("Update error:", updateError);
-          results.push({ id: product.id, status: "error", error: updateError.message });
-        } else {
-          results.push({ id: product.id, status: "optimized" });
+          return { id: product.id, status: "error" as const, error: updateError.message };
         }
+
+        // Will return success after logging below
 
         // Log activity
         const matchedForLog = supplierMappings.find((s) => 
@@ -513,20 +536,15 @@ IMPORTANTE:
         });
 
         // Log optimization details (tokens, sources, etc.)
-        // Build knowledge sources list
+        // Build knowledge sources from already-fetched chunks
         let knowledgeSources: Array<{ source: string; chunks: number }> = [];
-        if (searchQuery) {
-          const logSearchArgs: any = { _query: searchQuery, _limit: 8 };
-          if (workspaceId) logSearchArgs._workspace_id = workspaceId;
-          const { data: logChunks } = await supabase.rpc("search_knowledge", logSearchArgs);
-          if (logChunks && logChunks.length > 0) {
-            const sourceMap = new Map<string, number>();
-            logChunks.forEach((c: any) => {
-              const name = c.source_name || "Desconhecido";
-              sourceMap.set(name, (sourceMap.get(name) || 0) + 1);
-            });
-            knowledgeSources = Array.from(sourceMap.entries()).map(([source, chunks]) => ({ source, chunks }));
-          }
+        if (topChunks.length > 0) {
+          const sourceMap = new Map<string, number>();
+          topChunks.forEach((c: any) => {
+            const name = c.source_name || "Desconhecido";
+            sourceMap.set(name, (sourceMap.get(name) || 0) + 1);
+          });
+          knowledgeSources = Array.from(sourceMap.entries()).map(([source, chunks]) => ({ source, chunks }));
         }
 
         const matchedSupplierForLog = supplierMappings.find((s) => 
@@ -557,10 +575,21 @@ IMPORTANTE:
           fields_optimized: fields,
           prompt_length: finalPrompt.length,
         });
+
+        return { id: product.id, status: "optimized" as const };
       } catch (productError) {
         console.error(`Error optimizing product ${product.id}:`, productError);
         await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-        results.push({ id: product.id, status: "error", error: productError instanceof Error ? productError.message : "Unknown" });
+        return { id: product.id, status: "error" as const, error: productError instanceof Error ? productError.message : "Unknown" };
+      }
+      }));
+
+      for (const result of batchResults) {
+        if (result.status === "fulfilled") {
+          results.push(result.value);
+        } else {
+          results.push({ id: "unknown", status: "error", error: String(result.reason) });
+        }
       }
     }
 

@@ -38,7 +38,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { filePath, fileName, columnMapping, sheetName, parseKnowledge, workspaceId } = await req.json();
+    const { filePath, fileName, columnMapping, sheetName, parseKnowledge, workspaceId, fileId } = await req.json();
     if (!filePath || !fileName) {
       return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
         status: 400,
@@ -72,20 +72,24 @@ serve(async (req) => {
 
       // Chunk the extracted text and store for full-text search
       if (extractedText) {
-        const chunks = chunkText(extractedText, 1500);
-        // First get or create the uploaded_file record to get its ID
-        const { data: fileRecord } = await supabase
-          .from("uploaded_files")
-          .select("id")
-          .eq("file_name", fileName)
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        // Use fileId passed from frontend, or fall back to lookup
+        let resolvedFileId = fileId;
+        if (!resolvedFileId) {
+          const { data: fileRecord } = await supabase
+            .from("uploaded_files")
+            .select("id")
+            .eq("file_name", fileName)
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          resolvedFileId = fileRecord?.id;
+        }
 
-        if (fileRecord) {
+        if (resolvedFileId) {
+          const chunks = chunkText(extractedText, 1500);
           const chunkRows = chunks.map((content, idx) => ({
-            file_id: fileRecord.id,
+            file_id: resolvedFileId,
             user_id: userId,
             workspace_id: workspaceId || null,
             chunk_index: idx,
@@ -97,16 +101,23 @@ serve(async (req) => {
           await supabase
             .from("knowledge_chunks")
             .delete()
-            .eq("file_id", fileRecord.id);
+            .eq("file_id", resolvedFileId);
 
           // Insert in batches of 50
           for (let i = 0; i < chunkRows.length; i += 50) {
-            await supabase
+            const { error: chunkError } = await supabase
               .from("knowledge_chunks")
               .insert(chunkRows.slice(i, i + 50) as any);
+            if (chunkError) {
+              console.error(`Chunk insert error batch ${i}:`, chunkError.message);
+            }
           }
-          console.log(`Stored ${chunkRows.length} knowledge chunks for ${fileName}`);
+          console.log(`✅ Stored ${chunkRows.length} knowledge chunks for "${fileName}" (fileId: ${resolvedFileId})`);
+        } else {
+          console.error(`❌ Could not find uploaded_files record for "${fileName}" - chunks NOT stored`);
         }
+      } else {
+        console.warn(`⚠️ No text extracted from "${fileName}"`);
       }
 
       return new Response(
@@ -202,6 +213,22 @@ function parsePrice(value: unknown): number | null {
   return isNaN(num) ? null : num;
 }
 
+function chunkText(text: string, chunkSize: number): string[] {
+  const chunks: string[] = [];
+  const paragraphs = text.split(/\n{2,}/);
+  let current = "";
+  for (const para of paragraphs) {
+    if ((current + "\n\n" + para).length > chunkSize && current) {
+      chunks.push(current.trim());
+      current = para;
+    } else {
+      current = current ? current + "\n\n" + para : para;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
 async function extractExcelText(fileData: Blob): Promise<string> {
   const buffer = await fileData.arrayBuffer();
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
@@ -228,6 +255,8 @@ async function extractPdfText(fileData: Blob, fileName: string): Promise<string>
   }
   const base64 = btoa(binary);
 
+  console.log(`📄 Extracting PDF text from "${fileName}" (${(bytes.length / 1024).toFixed(0)}KB, base64: ${(base64.length / 1024).toFixed(0)}KB)`);
+
   const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -239,12 +268,19 @@ async function extractPdfText(fileData: Blob, fileName: string): Promise<string>
       messages: [
         {
           role: "system",
-          content: `És um extrator de conteúdo de documentos. Extrai TODO o texto relevante do PDF, incluindo especificações técnicas, tabelas de preços, características de produtos, descrições, dimensões, pesos, e qualquer informação técnica. Mantém a estrutura organizada. Responde APENAS com o texto extraído, sem comentários.`,
+          content: `És um extrator de conteúdo de documentos técnicos e catálogos de produtos. Extrai TODO o texto relevante do PDF, incluindo:
+- Nomes e modelos de produtos
+- Especificações técnicas (dimensões, peso, potência, capacidade, voltagem, materiais)
+- Tabelas de preços e referências
+- Descrições de produtos e características
+- Códigos de referência e SKUs
+Mantém a estrutura organizada com separadores claros entre produtos/secções.
+Responde APENAS com o texto extraído, sem comentários adicionais.`,
         },
         {
           role: "user",
           content: [
-            { type: "text", text: `Extrai todo o conteúdo relevante deste documento: "${fileName}".` },
+            { type: "text", text: `Extrai todo o conteúdo relevante deste documento: "${fileName}". Foca-te em dados de produtos, especificações técnicas, preços e referências.` },
             { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
           ],
         },
@@ -260,6 +296,7 @@ async function extractPdfText(fileData: Blob, fileName: string): Promise<string>
 
   const aiData = await aiResponse.json();
   const content = aiData.choices?.[0]?.message?.content || "";
+  console.log(`✅ Extracted ${content.length} chars from PDF "${fileName}"`);
   return content.substring(0, 50000);
 }
 
@@ -284,23 +321,7 @@ async function parseExcel(
       for (const [productField, excelColumn] of Object.entries(columnMapping)) {
         if (excelColumn && row[excelColumn] !== undefined) {
           mapped[productField] = row[excelColumn];
-}
-
-function chunkText(text: string, chunkSize: number): string[] {
-  const chunks: string[] = [];
-  const paragraphs = text.split(/\n{2,}/);
-  let current = "";
-  for (const para of paragraphs) {
-    if ((current + "\n\n" + para).length > chunkSize && current) {
-      chunks.push(current.trim());
-      current = para;
-    } else {
-      current = current ? current + "\n\n" + para : para;
-    }
-  }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks;
-}
+        }
       }
       return mapped;
     });
