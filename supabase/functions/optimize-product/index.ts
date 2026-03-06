@@ -102,8 +102,8 @@ serve(async (req) => {
       .maybeSingle();
     // Use override if provided, otherwise fall back to settings
     const chosenModel = modelOverride 
-      ? (MODEL_MAP[modelOverride] || MODEL_MAP["gemini-flash"])
-      : (MODEL_MAP[modelSetting?.value || "gemini-flash"] || "google/gemini-3-flash-preview");
+      ? (MODEL_MAP[modelOverride] || MODEL_MAP["gemini-3-flash"])
+      : (MODEL_MAP[modelSetting?.value || "gemini-3-flash"] || "google/gemini-3-flash-preview");
     console.log(`Using AI model: ${chosenModel} (override: ${modelOverride || "none"}, setting: ${modelSetting?.value || "default"})`);
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
