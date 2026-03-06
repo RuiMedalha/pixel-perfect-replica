@@ -322,6 +322,9 @@ serve(async (req) => {
         if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}). Estas FAQs devem ser DIFERENTES e complementares às que estão na descrição.");
         if (fields.includes("upsells")) fieldInstructions.push("10. Upsells: Sugere 2-4 produtos SUPERIORES do catálogo (mais caros, melhor qualidade, versão premium) que o cliente pode preferir. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
         if (fields.includes("crosssells")) fieldInstructions.push("11. Cross-sells: Sugere 2-4 produtos COMPLEMENTARES do catálogo (acessórios, produtos relacionados que combinam) que o cliente também pode querer. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
+        if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
+          fieldInstructions.push(`12. Alt text para ${product.image_urls.length} imagem(ns) do produto. Para cada imagem, gera um alt text descritivo e otimizado para SEO (máx 125 chars), relevante para o produto. Devolve array de objetos {url, alt_text} na mesma ordem das imagens.`);
+        }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
 
