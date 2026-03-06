@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle } from "lucide-react";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
@@ -14,6 +14,7 @@ import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
+import { useProductOptimizationLogs } from "@/hooks/useOptimizationLogs";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -27,6 +28,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
   const updateStatus = useUpdateProductStatus();
   const publishWoo = usePublishWooCommerce();
   const { data: versions } = useProductVersions(product?.id ?? null);
+  const { data: optLogs, isLoading: logsLoading } = useProductOptimizationLogs(product?.id ?? null);
   const restoreVersion = useRestoreVersion();
 
   // Editable fields state
@@ -103,6 +105,9 @@ export function ProductDetailModal({ product, onClose }: Props) {
             </TabsTrigger>
             <TabsTrigger value="historico">
               <History className="w-3.5 h-3.5 mr-1" /> Versões
+            </TabsTrigger>
+            <TabsTrigger value="ai-log">
+              <Brain className="w-3.5 h-3.5 mr-1" /> Log IA
             </TabsTrigger>
             <TabsTrigger value="brutos">Dados Brutos</TabsTrigger>
           </TabsList>
