@@ -213,10 +213,29 @@ export function ProductDetailModal({ product, onClose }: Props) {
           {/* IMAGES TAB */}
           <TabsContent value="imagens" className="mt-4">
             {product.image_urls && product.image_urls.length > 0 ? (
-              <div className="grid grid-cols-3 gap-3">
-                {product.image_urls.map((url, i) => (
-                  <img key={i} src={url} alt={`Produto ${i + 1}`} className="rounded-lg border object-cover aspect-square" />
-                ))}
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">{product.image_urls.length} imagem(ns)</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {product.image_urls.map((url, i) => {
+                    const altTexts = Array.isArray((product as any).image_alt_texts) ? (product as any).image_alt_texts : [];
+                    const altEntry = altTexts.find((a: any) => a.url === url);
+                    const altText = altEntry?.alt_text || "";
+                    return (
+                      <div key={i} className="space-y-2">
+                        <img src={url} alt={altText || `Produto ${i + 1}`} className="rounded-lg border object-cover aspect-square w-full" />
+                        <div>
+                          <label className="text-xs text-muted-foreground">Alt Text (SEO)</label>
+                          <Input
+                            value={editData[`image_alt_${i}`] ?? altText}
+                            onChange={(e) => handleFieldChange(`image_alt_${i}`, e.target.value)}
+                            placeholder="Texto alternativo para SEO..."
+                            className="text-xs h-8 mt-1"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <div className="text-center py-12 text-muted-foreground">
