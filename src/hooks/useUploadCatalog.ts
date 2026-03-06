@@ -270,6 +270,7 @@ export function useUploadCatalog() {
           status: "processed",
           products_count: 0,
           extracted_text: extractedText || null,
+          workspace_id: workspaceId || null,
           metadata: { type: uploadedFile.type },
         } as any);
 
@@ -285,6 +286,7 @@ export function useUploadCatalog() {
           fileName: uploadedFile.name,
           columnMapping: uploadedFile.columnMapping || undefined,
           sheetName: uploadedFile.selectedSheet || undefined,
+          workspaceId: workspaceId || undefined,
         },
       });
 
@@ -292,7 +294,7 @@ export function useUploadCatalog() {
       if (data?.error && data?.count === undefined) throw new Error(data.error);
 
       const count = data?.count || 0;
-      await registerUpload(uploadedFile, user.id, filePath, count);
+      await registerUpload(uploadedFile, user.id, filePath, count, workspaceId);
 
       updateFile(uploadedFile.id, {
         status: "concluido",
