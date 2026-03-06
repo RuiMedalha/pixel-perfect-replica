@@ -4,6 +4,7 @@ import type { Product } from "./useProducts";
 
 const EXPORT_COLUMNS = [
   { key: "sku", header: "SKU" },
+  { key: "product_type", header: "Tipo" },
   { key: "original_title", header: "Título Original" },
   { key: "optimized_title", header: "Título Otimizado" },
   { key: "original_description", header: "Descrição Original" },
@@ -23,6 +24,8 @@ const EXPORT_COLUMNS = [
   { key: "upsell_skus", header: "Upsells (SKU | Título)" },
   { key: "crosssell_skus", header: "Cross-sells (SKU | Título)" },
   { key: "image_urls", header: "URLs Imagens" },
+  { key: "image_alt_texts", header: "Alt Text Imagens" },
+  { key: "attributes", header: "Atributos" },
   { key: "status", header: "Estado" },
 ];
 
@@ -40,6 +43,10 @@ export function exportProductsToExcel(products: Product[], fileName = "produtos-
         row[col.header] = val.map((f: any) => `Q: ${f.question} A: ${f.answer}`).join(" | ");
       } else if ((col.key === "upsell_skus" || col.key === "crosssell_skus") && Array.isArray(val)) {
         row[col.header] = val.map((item: any) => `${item.sku}: ${item.title}`).join(" | ");
+      } else if (col.key === "image_alt_texts" && Array.isArray(val)) {
+        row[col.header] = val.map((a: any) => a.alt_text).join(" | ");
+      } else if (col.key === "attributes" && Array.isArray(val)) {
+        row[col.header] = val.map((a: any) => `${a.name}: ${a.value || (a.values || []).join(", ")}`).join(" | ");
       } else if (Array.isArray(val)) {
         row[col.header] = val.join(", ");
       } else {
