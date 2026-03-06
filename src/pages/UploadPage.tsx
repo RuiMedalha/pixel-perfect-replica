@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useUploadCatalog, type FileUploadType } from "@/hooks/useUploadCatalog";
 import { useUploadedFiles } from "@/hooks/useUploadedFiles";
 import { useDeleteUploadedFile } from "@/hooks/useDeleteUploadedFile";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { ColumnMapper } from "@/components/ColumnMapper";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,6 +28,7 @@ const UploadPage = () => {
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
   const deleteUploadedFile = useDeleteUploadedFile();
+  const { activeWorkspace } = useWorkspaceContext();
   const qc = useQueryClient();
   const [dragOver, setDragOver] = useState(false);
   const [activeTab, setActiveTab] = useState<FileUploadType>("products");
@@ -268,7 +270,7 @@ const UploadPage = () => {
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base">Ficheiros ({files.length})</CardTitle>
             {hasPending && (
-              <Button onClick={processAll} disabled={isProcessing} size="sm">
+              <Button onClick={() => processAll(activeWorkspace?.id)} disabled={isProcessing} size="sm">
                 <Play className="w-4 h-4 mr-1" />
                 Processar Todos
               </Button>
@@ -312,7 +314,7 @@ const UploadPage = () => {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7"
-                          onClick={() => processFile(file)}
+                          onClick={() => processFile(file, activeWorkspace?.id)}
                           disabled={isProcessing}
                         >
                           <Play className="w-3.5 h-3.5" />
