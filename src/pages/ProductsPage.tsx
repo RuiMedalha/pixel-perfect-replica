@@ -45,7 +45,7 @@ const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
 
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
-  const { activeWorkspace } = useWorkspaceContext();
+  const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const publishWoo = usePublishWooCommerce();
