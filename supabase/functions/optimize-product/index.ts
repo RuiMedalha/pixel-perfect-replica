@@ -48,7 +48,7 @@ serve(async (req) => {
     const fields = fieldsToOptimize || [
       "title", "description", "short_description",
       "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
-      "upsells", "crosssells"
+      "upsells", "crosssells", "image_alt"
     ];
 
     // Fetch products
@@ -149,8 +149,8 @@ serve(async (req) => {
 
     const results: any[] = [];
 
-    // Process products in parallel batches of 3 for speed
-    const CONCURRENCY = 3;
+    // Process products in parallel batches of 5 for speed
+    const CONCURRENCY = 5;
     for (let batchStart = 0; batchStart < products.length; batchStart += CONCURRENCY) {
       const batch = products.slice(batchStart, batchStart + CONCURRENCY);
       const batchResults = await Promise.allSettled(batch.map(async (product) => {
@@ -216,21 +216,24 @@ serve(async (req) => {
 
         const searchQueries = [titleQuery, categoryQuery, skuQuery].filter((q) => q.length > 2);
         
-        for (const query of searchQueries) {
+        // Run all knowledge searches in parallel for speed
+        const searchPromises = searchQueries.map(async (query) => {
           const searchArgs: any = { _query: query, _limit: 5 };
           if (workspaceId) searchArgs._workspace_id = workspaceId;
-          
           try {
             const { data: chunks } = await supabase.rpc("search_knowledge", searchArgs);
-            if (chunks && chunks.length > 0) {
-              for (const c of chunks) {
-                if (!allChunks.find((existing: any) => existing.id === c.id)) {
-                  allChunks.push(c);
-                }
-              }
-            }
+            return chunks || [];
           } catch (e) {
             console.warn(`Knowledge search error for "${query.substring(0, 40)}":`, e);
+            return [];
+          }
+        });
+        const searchResults = await Promise.all(searchPromises);
+        for (const chunks of searchResults) {
+          for (const c of chunks) {
+            if (!allChunks.find((existing: any) => existing.id === c.id)) {
+              allChunks.push(c);
+            }
           }
         }
 
@@ -273,7 +276,7 @@ serve(async (req) => {
                   url: supplierUrl,
                   formats: ["markdown"],
                   onlyMainContent: true,
-                  waitFor: 3000,
+                  waitFor: 2000,
                 }),
               });
 

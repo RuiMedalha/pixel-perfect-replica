@@ -9,8 +9,9 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
@@ -552,7 +553,7 @@ const ProductsPage = () => {
 
       {/* Variations Dialog */}
       <Dialog open={showVariations} onOpenChange={setShowVariations}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Layers className="w-5 h-5" />
@@ -560,7 +561,7 @@ const ProductsPage = () => {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            A IA detetou {detectedGroups.length} grupo(s) de produtos variáveis. Selecione quais aplicar.
+            {detectedGroups.length} grupo(s) detetado(s). Pode mover produtos entre grupos, remover ou criar novos.
           </p>
           <div className="space-y-4 mt-2">
             {detectedGroups.map((group, idx) => (
@@ -579,17 +580,96 @@ const ProductsPage = () => {
                       className="mt-1"
                     />
                     <div className="flex-1 space-y-2">
-                      <div>
-                        <h4 className="font-medium text-sm">{group.parent_title}</h4>
-                        <Badge variant="outline" className="text-xs mt-1">
-                          Atributo: {group.attribute_name}
-                        </Badge>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={group.parent_title}
+                          onChange={(e) => {
+                            setDetectedGroups(prev => prev.map((g, i) =>
+                              i === idx ? { ...g, parent_title: e.target.value } : g
+                            ));
+                          }}
+                          className="text-sm font-medium h-8 flex-1"
+                        />
+                        <Input
+                          value={group.attribute_name}
+                          onChange={(e) => {
+                            setDetectedGroups(prev => prev.map((g, i) =>
+                              i === idx ? { ...g, attribute_name: e.target.value } : g
+                            ));
+                          }}
+                          className="text-xs h-8 w-40"
+                          placeholder="Atributo (ex: Tamanho)"
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-destructive"
+                          onClick={() => {
+                            setDetectedGroups(prev => prev.filter((_, i) => i !== idx));
+                            setSelectedGroups(prev => {
+                              const next = new Set<number>();
+                              prev.forEach(v => { if (v < idx) next.add(v); else if (v > idx) next.add(v - 1); });
+                              return next;
+                            });
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="space-y-1.5">
                         {group.variations.map((v, vi) => (
-                          <Badge key={vi} variant="secondary" className="text-xs">
-                            {v.attribute_value}
-                          </Badge>
+                          <div key={vi} className="flex items-center gap-2 p-1.5 rounded bg-muted/30">
+                            <Badge variant="secondary" className="text-xs shrink-0">{v.attribute_value}</Badge>
+                            <span className="text-xs truncate flex-1">
+                              {(products ?? []).find(p => p.id === v.product_id)?.original_title ?? v.product_id.substring(0, 8)}
+                            </span>
+                            {/* Move to another group */}
+                            {detectedGroups.length > 1 && (
+                              <Select
+                                value=""
+                                onValueChange={(targetIdx) => {
+                                  const ti = parseInt(targetIdx);
+                                  setDetectedGroups(prev => {
+                                    const updated = [...prev];
+                                    // Remove from current group
+                                    updated[idx] = { ...updated[idx], variations: updated[idx].variations.filter((_, i) => i !== vi) };
+                                    // Add to target group
+                                    updated[ti] = { ...updated[ti], variations: [...updated[ti].variations, v] };
+                                    // Remove empty groups
+                                    return updated.filter(g => g.variations.length > 0);
+                                  });
+                                }}
+                              >
+                                <SelectTrigger className="h-6 w-24 text-[10px]">
+                                  <span className="text-muted-foreground">Mover →</span>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {detectedGroups.map((g, gi) =>
+                                    gi !== idx ? (
+                                      <SelectItem key={gi} value={String(gi)} className="text-xs">
+                                        {g.parent_title.substring(0, 30)}
+                                      </SelectItem>
+                                    ) : null
+                                  )}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => {
+                                setDetectedGroups(prev => {
+                                  const updated = prev.map((g, i) =>
+                                    i === idx ? { ...g, variations: g.variations.filter((_, j) => j !== vi) } : g
+                                  );
+                                  return updated.filter(g => g.variations.length > 0);
+                                });
+                              }}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground">
@@ -601,11 +681,29 @@ const ProductsPage = () => {
               </Card>
             ))}
           </div>
+          {/* Create new group */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setDetectedGroups(prev => [...prev, {
+                parent_title: "Novo Grupo",
+                attribute_name: "Tamanho",
+                variations: [],
+              }]);
+            }}
+          >
+            <Plus className="w-4 h-4 mr-1" /> Novo Grupo
+          </Button>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowVariations(false)}>Cancelar</Button>
             <Button
               onClick={async () => {
-                const groupsToApply = detectedGroups.filter((_, i) => selectedGroups.has(i));
+                const groupsToApply = detectedGroups.filter((g, i) => selectedGroups.has(i) && g.variations.length >= 2);
+                if (groupsToApply.length === 0) {
+                  toast("Selecione pelo menos 1 grupo com 2+ variações.");
+                  return;
+                }
                 await applyVariations.mutateAsync({ groups: groupsToApply });
                 setShowVariations(false);
                 setDetectedGroups([]);
