@@ -389,6 +389,44 @@ IMPORTANTE:
 
         const optimized = JSON.parse(toolCall.function.arguments);
 
+        // === VALIDATE upsell/crosssell SKUs against real DB ===
+        if (optimized.upsell_skus && Array.isArray(optimized.upsell_skus) && optimized.upsell_skus.length > 0) {
+          const skusToCheck = optimized.upsell_skus.map((u: any) => u.sku).filter(Boolean);
+          if (skusToCheck.length > 0) {
+            const { data: validProducts } = await supabase
+              .from("products")
+              .select("sku, optimized_title, original_title")
+              .in("sku", skusToCheck);
+            const validMap = new Map((validProducts || []).map((p: any) => [p.sku, p]));
+            const before = optimized.upsell_skus.length;
+            optimized.upsell_skus = optimized.upsell_skus
+              .filter((u: any) => validMap.has(u.sku) && u.sku !== product.sku)
+              .map((u: any) => {
+                const real = validMap.get(u.sku);
+                return { sku: u.sku, title: real?.optimized_title || real?.original_title || u.title };
+              });
+            console.log(`Upsells validated: ${optimized.upsell_skus.length}/${before} SKUs are real`);
+          }
+        }
+        if (optimized.crosssell_skus && Array.isArray(optimized.crosssell_skus) && optimized.crosssell_skus.length > 0) {
+          const skusToCheck = optimized.crosssell_skus.map((u: any) => u.sku).filter(Boolean);
+          if (skusToCheck.length > 0) {
+            const { data: validProducts } = await supabase
+              .from("products")
+              .select("sku, optimized_title, original_title")
+              .in("sku", skusToCheck);
+            const validMap = new Map((validProducts || []).map((p: any) => [p.sku, p]));
+            const before = optimized.crosssell_skus.length;
+            optimized.crosssell_skus = optimized.crosssell_skus
+              .filter((u: any) => validMap.has(u.sku) && u.sku !== product.sku)
+              .map((u: any) => {
+                const real = validMap.get(u.sku);
+                return { sku: u.sku, title: real?.optimized_title || real?.original_title || u.title };
+              });
+            console.log(`Cross-sells validated: ${optimized.crosssell_skus.length}/${before} SKUs are real`);
+          }
+        }
+
         const updateData: Record<string, any> = { status: "optimized" };
         if (optimized.optimized_title) updateData.optimized_title = optimized.optimized_title;
         if (optimized.optimized_description) updateData.optimized_description = optimized.optimized_description;
