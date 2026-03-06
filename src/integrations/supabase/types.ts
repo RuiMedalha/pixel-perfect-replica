@@ -123,6 +123,65 @@ export type Database = {
           },
         ]
       }
+      product_versions: {
+        Row: {
+          created_at: string
+          faq: Json | null
+          id: string
+          meta_description: string | null
+          meta_title: string | null
+          optimized_description: string | null
+          optimized_price: number | null
+          optimized_short_description: string | null
+          optimized_title: string | null
+          product_id: string
+          seo_slug: string | null
+          tags: string[] | null
+          user_id: string
+          version_number: number
+        }
+        Insert: {
+          created_at?: string
+          faq?: Json | null
+          id?: string
+          meta_description?: string | null
+          meta_title?: string | null
+          optimized_description?: string | null
+          optimized_price?: number | null
+          optimized_short_description?: string | null
+          optimized_title?: string | null
+          product_id: string
+          seo_slug?: string | null
+          tags?: string[] | null
+          user_id: string
+          version_number?: number
+        }
+        Update: {
+          created_at?: string
+          faq?: Json | null
+          id?: string
+          meta_description?: string | null
+          meta_title?: string | null
+          optimized_description?: string | null
+          optimized_price?: number | null
+          optimized_short_description?: string | null
+          optimized_title?: string | null
+          product_id?: string
+          seo_slug?: string | null
+          tags?: string[] | null
+          user_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_versions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           category: string | null
