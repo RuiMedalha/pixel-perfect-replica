@@ -392,8 +392,19 @@ IMPORTANTE:
           };
           requiredFields.push("crosssell_skus");
         }
+        if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
+          toolProperties.image_alt_texts = {
+            type: "array",
+            description: "Alt text SEO para cada imagem do produto, na mesma ordem",
+            items: {
+              type: "object",
+              properties: { url: { type: "string" }, alt_text: { type: "string" } },
+              required: ["url", "alt_text"],
+            },
+          };
+          requiredFields.push("image_alt_texts");
+        }
 
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
           headers: {
             Authorization: `Bearer ${LOVABLE_API_KEY}`,
