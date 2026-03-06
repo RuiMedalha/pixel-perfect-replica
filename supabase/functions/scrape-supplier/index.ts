@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { url, action } = await req.json();
+    const { url, action, workspaceId } = await req.json();
 
     if (action === "scrape" && url) {
       const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
@@ -91,6 +91,7 @@ Deno.serve(async (req) => {
         status: "processed",
         products_count: 0,
         extracted_text: extractedText,
+        workspace_id: workspaceId || null,
         metadata: { type: "web_scrape", source_url: formattedUrl },
       } as any).select("id").single();
 
@@ -100,6 +101,7 @@ Deno.serve(async (req) => {
         const chunkRows = chunks.map((content: string, idx: number) => ({
           file_id: fileRecord.id,
           user_id: userId,
+          workspace_id: workspaceId || null,
           chunk_index: idx,
           content,
           source_name: `🌐 ${title}`,
