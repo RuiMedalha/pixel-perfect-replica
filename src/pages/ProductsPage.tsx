@@ -1,20 +1,21 @@
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useCallback } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Search, Check, X, ExternalLink, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
+import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
+import { ProductDetailModal } from "@/components/ProductDetailModal";
+import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
@@ -43,6 +44,7 @@ const ProductsPage = () => {
   const optimizeProducts = useOptimizeProducts();
   const publishWoo = usePublishWooCommerce();
   const deleteProducts = useDeleteProducts();
+  const updateProduct = useUpdateProduct();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -50,6 +52,45 @@ const ProductsPage = () => {
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
+
+  // Inline editing state
+  const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  // Batch progress tracking via Realtime
+  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; processing: string[] } | null>(null);
+
+  // Subscribe to realtime product status changes for batch progress
+  useEffect(() => {
+    if (!batchProgress || batchProgress.done >= batchProgress.total) return;
+
+    const channel = supabase
+      .channel("batch-progress")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "products" },
+        (payload) => {
+          const updated = payload.new as any;
+          if (batchProgress.processing.includes(updated.id)) {
+            if (updated.status === "optimized" || updated.status === "error") {
+              setBatchProgress((prev) => {
+                if (!prev) return null;
+                const newDone = prev.done + 1;
+                const newProcessing = prev.processing.filter((id) => id !== updated.id);
+                if (newDone >= prev.total) {
+                  // Auto-clear after 2s
+                  setTimeout(() => setBatchProgress(null), 2000);
+                }
+                return { ...prev, done: newDone, processing: newProcessing };
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [batchProgress]);
 
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
@@ -93,6 +134,8 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
+    // Start batch progress tracking
+    setBatchProgress({ total: pendingOptimizeIds.length, done: 0, processing: [...pendingOptimizeIds] });
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
@@ -110,9 +153,37 @@ const ProductsPage = () => {
     });
   };
 
+  // Inline edit handlers
+  const startInlineEdit = (id: string, field: string, currentValue: string) => {
+    setEditingCell({ id, field });
+    setEditValue(currentValue);
+  };
+
+  const saveInlineEdit = () => {
+    if (!editingCell) return;
+    updateProduct.mutate({
+      id: editingCell.id,
+      updates: { [editingCell.field]: editValue || null },
+    });
+    setEditingCell(null);
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingCell(null);
+  };
+
+  // Update detailProduct when products data changes
+  useEffect(() => {
+    if (detailProduct && products) {
+      const updated = products.find((p) => p.id === detailProduct.id);
+      if (updated) setDetailProduct(updated);
+    }
+  }, [products]);
+
   const statuses: { value: FilterStatus; label: string }[] = [
     { value: "all", label: "Todos" },
     { value: "pending", label: "Pendente" },
+    { value: "processing", label: "A Processar" },
     { value: "optimized", label: "Otimizado" },
     { value: "published", label: "Publicado" },
     { value: "error", label: "Erro" },
@@ -160,6 +231,24 @@ const ProductsPage = () => {
           )}
         </div>
       </div>
+
+      {/* Batch Progress Bar */}
+      {batchProgress && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                <span className="text-sm font-medium">A otimizar produtos com IA...</span>
+              </div>
+              <span className="text-sm text-muted-foreground">
+                {batchProgress.done}/{batchProgress.total}
+              </span>
+            </div>
+            <Progress value={(batchProgress.done / batchProgress.total) * 100} className="h-2" />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -209,6 +298,8 @@ const ProductsPage = () => {
                     <th className="p-3 text-left font-medium text-muted-foreground">SKU</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Original</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Otimizado</th>
+                    <th className="p-3 text-left font-medium text-muted-foreground">Desc. Curta</th>
+                    <th className="p-3 text-left font-medium text-muted-foreground">Slug</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Estado</th>
                     <th className="p-3 text-right font-medium text-muted-foreground">Ações</th>
                   </tr>
@@ -217,7 +308,10 @@ const ProductsPage = () => {
                   {filtered.map((product) => (
                     <tr
                       key={product.id}
-                      className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                      className={cn(
+                        "border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer",
+                        product.status === "processing" && "bg-primary/5"
+                      )}
                       onClick={() => setDetailProduct(product)}
                     >
                       <td className="p-3" onClick={(e) => e.stopPropagation()}>
@@ -227,12 +321,98 @@ const ProductsPage = () => {
                         />
                       </td>
                       <td className="p-3 font-mono text-xs">{product.sku ?? "—"}</td>
-                      <td className="p-3 max-w-[200px] truncate">{product.original_title ?? "—"}</td>
-                      <td className="p-3 max-w-[200px] truncate text-primary font-medium">
-                        {product.optimized_title ?? "—"}
+                      <td className="p-3 max-w-[180px] truncate">{product.original_title ?? "—"}</td>
+
+                      {/* Inline editable: optimized_title */}
+                      <td className="p-3 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
+                        {editingCell?.id === product.id && editingCell.field === "optimized_title" ? (
+                          <div className="flex gap-1">
+                            <Input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="text-xs h-7"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveInlineEdit();
+                                if (e.key === "Escape") cancelInlineEdit();
+                              }}
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+                              <Save className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span
+                            className="truncate block text-primary font-medium cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+                            onDoubleClick={() => startInlineEdit(product.id, "optimized_title", product.optimized_title ?? "")}
+                            title="Duplo-clique para editar"
+                          >
+                            {product.optimized_title ?? "—"}
+                          </span>
+                        )}
                       </td>
+
+                      {/* Inline editable: optimized_short_description */}
+                      <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
+                        {editingCell?.id === product.id && editingCell.field === "optimized_short_description" ? (
+                          <div className="flex gap-1">
+                            <Input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="text-xs h-7"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveInlineEdit();
+                                if (e.key === "Escape") cancelInlineEdit();
+                              }}
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+                              <Save className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span
+                            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+                            onDoubleClick={() => startInlineEdit(product.id, "optimized_short_description", product.optimized_short_description ?? "")}
+                            title="Duplo-clique para editar"
+                          >
+                            {product.optimized_short_description ?? "—"}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Inline editable: seo_slug */}
+                      <td className="p-3 max-w-[120px]" onClick={(e) => e.stopPropagation()}>
+                        {editingCell?.id === product.id && editingCell.field === "seo_slug" ? (
+                          <div className="flex gap-1">
+                            <Input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="text-xs h-7 font-mono"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveInlineEdit();
+                                if (e.key === "Escape") cancelInlineEdit();
+                              }}
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+                              <Save className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span
+                            className="truncate block text-xs font-mono text-muted-foreground cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+                            onDoubleClick={() => startInlineEdit(product.id, "seo_slug", product.seo_slug ?? "")}
+                            title="Duplo-clique para editar"
+                          >
+                            {product.seo_slug ?? "—"}
+                          </span>
+                        )}
+                      </td>
+
                       <td className="p-3">
                         <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
+                          {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
                           {statusLabels[product.status]}
                         </Badge>
                       </td>
@@ -300,132 +480,12 @@ const ProductsPage = () => {
       </Dialog>
 
       {/* Detail Modal */}
-      <Dialog open={!!detailProduct} onOpenChange={() => setDetailProduct(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          {detailProduct && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-3">
-                  <span className="font-mono text-sm bg-muted px-2 py-1 rounded">{detailProduct.sku ?? "—"}</span>
-                  {detailProduct.original_title ?? "Sem título"}
-                </DialogTitle>
-              </DialogHeader>
-              <Tabs defaultValue="textos" className="mt-4">
-                <TabsList className="w-full justify-start">
-                  <TabsTrigger value="textos">Textos</TabsTrigger>
-                  <TabsTrigger value="imagens">Imagens</TabsTrigger>
-                  <TabsTrigger value="seo">SEO</TabsTrigger>
-                  <TabsTrigger value="faq">FAQ</TabsTrigger>
-                  <TabsTrigger value="brutos">Dados Brutos</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="textos" className="space-y-6 mt-4">
-                  <ComparisonField label="Título" original={detailProduct.original_title ?? "—"} optimized={detailProduct.optimized_title ?? "—"} />
-                  <ComparisonField label="Descrição" original={detailProduct.original_description ?? "—"} optimized={detailProduct.optimized_description ?? "—"} multiline />
-                </TabsContent>
-
-                <TabsContent value="seo" className="space-y-6 mt-4">
-                  <ComparisonField label="Meta Title" original="—" optimized={detailProduct.meta_title ?? "—"} />
-                  <ComparisonField label="Meta Description" original="—" optimized={detailProduct.meta_description ?? "—"} multiline />
-                  <ComparisonField label="SEO Slug" original="—" optimized={detailProduct.seo_slug ?? "—"} />
-                </TabsContent>
-
-                <TabsContent value="faq" className="mt-4">
-                  <FaqDisplay faq={(detailProduct as any).faq} />
-                </TabsContent>
-
-                <TabsContent value="imagens" className="mt-4">
-                  <div className="text-center py-12 text-muted-foreground">
-                    <p>Nenhuma imagem carregada para este produto.</p>
-                    <Button variant="outline" className="mt-4">Carregar Imagem</Button>
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="brutos" className="mt-4">
-                  <Card>
-                    <CardContent className="p-4">
-                      <pre className="text-xs font-mono whitespace-pre-wrap text-muted-foreground">
-                        {JSON.stringify(detailProduct, null, 2)}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-
-              <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
-                <Button variant="destructive" size="sm" onClick={() => { updateStatus.mutate({ ids: [detailProduct.id], status: "error" }); setDetailProduct(null); }}>
-                  Rejeitar
-                </Button>
-                <Button size="sm" onClick={() => { updateStatus.mutate({ ids: [detailProduct.id], status: "optimized" }); setDetailProduct(null); }}>
-                  <Check className="w-4 h-4 mr-1" /> Aprovar
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => { updateStatus.mutate({ ids: [detailProduct.id], status: "published" }); setDetailProduct(null); }}>
-                  <ExternalLink className="w-4 h-4 mr-1" /> Publicar
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ProductDetailModal
+        product={detailProduct}
+        onClose={() => setDetailProduct(null)}
+      />
     </div>
   );
 };
-
-function FaqDisplay({ faq }: { faq: any }) {
-  if (!faq || !Array.isArray(faq) || faq.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <p>Nenhuma FAQ gerada para este produto.</p>
-        <p className="text-xs mt-1">Otimize o produto com o campo "FAQ" selecionado para gerar perguntas frequentes.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{faq.length} pergunta(s) frequente(s)</p>
-      {faq.map((item: { question: string; answer: string }, idx: number) => (
-        <Card key={idx}>
-          <CardContent className="p-4">
-            <h4 className="font-medium text-sm mb-2">❓ {item.question}</h4>
-            <p className="text-sm text-muted-foreground">{item.answer}</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-function ComparisonField({
-  label,
-  original,
-  optimized,
-  multiline = false,
-}: {
-  label: string;
-  original: string;
-  optimized: string;
-  multiline?: boolean;
-}) {
-  return (
-    <div>
-      <h4 className="text-sm font-medium mb-2">{label}</h4>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <p className="text-xs text-muted-foreground mb-1">Original</p>
-          <div className="p-3 rounded-lg bg-muted/50 text-sm">{original}</div>
-        </div>
-        <div>
-          <p className="text-xs text-primary mb-1">Otimizado</p>
-          {multiline ? (
-            <Textarea defaultValue={optimized} className="text-sm min-h-[80px]" />
-          ) : (
-            <Input defaultValue={optimized} className="text-sm" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default ProductsPage;

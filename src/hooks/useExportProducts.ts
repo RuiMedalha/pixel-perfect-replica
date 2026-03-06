@@ -19,6 +19,7 @@ const EXPORT_COLUMNS = [
   { key: "meta_title", header: "Meta Title SEO" },
   { key: "meta_description", header: "Meta Description SEO" },
   { key: "seo_slug", header: "SEO Slug" },
+  { key: "faq", header: "FAQ" },
   { key: "image_urls", header: "URLs Imagens" },
   { key: "status", header: "Estado" },
 ];
@@ -33,7 +34,9 @@ export function exportProductsToExcel(products: Product[], fileName = "produtos-
     const row: Record<string, unknown> = {};
     for (const col of EXPORT_COLUMNS) {
       const val = (p as any)[col.key];
-      if (Array.isArray(val)) {
+      if (col.key === "faq" && Array.isArray(val)) {
+        row[col.header] = val.map((f: any) => `Q: ${f.question} A: ${f.answer}`).join(" | ");
+      } else if (Array.isArray(val)) {
         row[col.header] = val.join(", ");
       } else {
         row[col.header] = val ?? "";

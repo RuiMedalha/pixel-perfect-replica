@@ -85,7 +85,7 @@ serve(async (req) => {
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
 
     // Fetch supplier mappings from settings
-    let supplierMappings: Array<{ prefix: string; url: string }> = [];
+    let supplierMappings: Array<{ prefix: string; url: string; name?: string }> = [];
     const { data: suppliersConfig } = await supabase
       .from("settings")
       .select("value")
@@ -105,7 +105,43 @@ serve(async (req) => {
 
     for (const product of products) {
       try {
-        // 1. Search relevant knowledge chunks using full-text search
+        // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) ===
+        if (product.optimized_title || product.optimized_description) {
+          // Get current version count
+          const { data: existingVersions } = await supabase
+            .from("product_versions")
+            .select("id, version_number")
+            .eq("product_id", product.id)
+            .order("version_number", { ascending: false });
+
+          const nextVersion = (existingVersions?.[0]?.version_number ?? 0) + 1;
+
+          // Save current state as version
+          await supabase.from("product_versions").insert({
+            product_id: product.id,
+            user_id: userId,
+            version_number: nextVersion,
+            optimized_title: product.optimized_title,
+            optimized_description: product.optimized_description,
+            optimized_short_description: product.optimized_short_description,
+            meta_title: product.meta_title,
+            meta_description: product.meta_description,
+            seo_slug: product.seo_slug,
+            tags: product.tags,
+            optimized_price: product.optimized_price,
+            faq: product.faq,
+          });
+
+          // Delete oldest versions if more than 3
+          if (existingVersions && existingVersions.length >= 3) {
+            const toDelete = existingVersions.slice(2).map((v: any) => v.id);
+            if (toDelete.length > 0) {
+              await supabase.from("product_versions").delete().in("id", toDelete);
+            }
+          }
+        }
+
+        // 1. Search relevant knowledge chunks
         let knowledgeContext = "";
         const searchQuery = [product.original_title, product.sku, product.category, product.supplier_ref]
           .filter(Boolean)
@@ -123,10 +159,9 @@ serve(async (req) => {
           }
         }
 
-        // 2. Auto-scrape supplier page by SKU using configured supplier mappings
+        // 2. Auto-scrape supplier page by SKU
         let supplierContext = "";
         if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
-          // Find matching supplier by SKU prefix
           const skuUpper = product.sku.toUpperCase();
           const matchedSupplier = supplierMappings.find((s) => 
             skuUpper.startsWith(s.prefix.toUpperCase())
@@ -141,30 +176,30 @@ serve(async (req) => {
                 : `${matchedSupplier.url}/${encodeURIComponent(cleanSku)}`;
               console.log(`Auto-scraping supplier [${matchedSupplier.prefix}] for SKU ${product.sku}: ${supplierUrl}`);
 
-            const scrapeResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                url: supplierUrl,
-                formats: ["markdown"],
-                onlyMainContent: true,
-                waitFor: 3000,
-              }),
-            });
+              const scrapeResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${FIRECRAWL_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  url: supplierUrl,
+                  formats: ["markdown"],
+                  onlyMainContent: true,
+                  waitFor: 3000,
+                }),
+              });
 
-            if (scrapeResponse.ok) {
-              const scrapeData = await scrapeResponse.json();
-              const markdown = scrapeData.data?.markdown || scrapeData.markdown || "";
-              if (markdown.length > 100) {
-                supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR "${matchedSupplier.name || matchedSupplier.prefix}" (página do produto):\n${markdown.substring(0, 8000)}`;
-                console.log(`Got ${markdown.length} chars from supplier page`);
+              if (scrapeResponse.ok) {
+                const scrapeData = await scrapeResponse.json();
+                const markdown = scrapeData.data?.markdown || scrapeData.markdown || "";
+                if (markdown.length > 100) {
+                  supplierContext = `\n\nINFORMAÇÃO DO FORNECEDOR "${matchedSupplier.name || matchedSupplier.prefix}" (página do produto):\n${markdown.substring(0, 8000)}`;
+                  console.log(`Got ${markdown.length} chars from supplier page`);
+                }
+              } else {
+                console.warn(`Supplier scrape failed: ${scrapeResponse.status}`);
               }
-            } else {
-              console.warn(`Supplier scrape failed: ${scrapeResponse.status}`);
-            }
             } catch (scrapeErr) {
               console.warn("Auto-scrape error (non-fatal):", scrapeErr);
             }
@@ -186,14 +221,18 @@ serve(async (req) => {
         // Build field-specific instructions
         const fieldInstructions: string[] = [];
         if (fields.includes("title")) fieldInstructions.push("1. Um título otimizado (máx 70 chars, com keyword principal)");
-        if (fields.includes("description")) fieldInstructions.push("2. Uma descrição otimizada (200-400 chars, persuasiva, com benefícios e keywords)");
-        if (fields.includes("short_description")) fieldInstructions.push("3. Uma descrição curta otimizada (máx 160 chars, resumo conciso)");
+        if (fields.includes("description")) fieldInstructions.push(`2. Uma descrição otimizada com a seguinte ESTRUTURA OBRIGATÓRIA:
+   - PRIMEIRO: Um parágrafo comercial persuasivo (150-250 chars) com benefícios e keywords
+   - SEGUNDO: Uma tabela HTML de características técnicas (<table>) com TODAS as specs do produto (dimensões, peso, material, potência, etc.)
+   - TERCEIRO: Uma secção FAQ com 3-5 perguntas e respostas frequentes em formato HTML (<h3>Perguntas Frequentes</h3> seguido de <details><summary>Pergunta</summary><p>Resposta</p></details>)
+   IMPORTANTE: NÃO mistures dados técnicos no texto comercial. As specs devem estar APENAS na tabela.`);
+        if (fields.includes("short_description")) fieldInstructions.push("3. Uma descrição curta otimizada (máx 160 chars, resumo conciso para listagens)");
         if (fields.includes("meta_title")) fieldInstructions.push("4. Meta title SEO (máx 60 chars)");
         if (fields.includes("meta_description")) fieldInstructions.push("5. Meta description SEO (máx 155 chars, com call-to-action)");
-        if (fields.includes("seo_slug")) fieldInstructions.push("6. SEO slug (url-friendly, lowercase, hífens)");
+        if (fields.includes("seo_slug")) fieldInstructions.push("6. SEO slug (url-friendly, lowercase, hífens, sem acentos)");
         if (fields.includes("tags")) fieldInstructions.push("7. Tags relevantes (3-6 palavras-chave)");
         if (fields.includes("price")) fieldInstructions.push("8. Preço sugerido (pode manter o original ou ajustar ligeiramente)");
-        if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}).");
+        if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}). Estas FAQs devem ser DIFERENTES e complementares às que estão na descrição.");
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
 
@@ -202,7 +241,12 @@ ${productInfo}${knowledgeContext}${supplierContext}
 Gera:
 ${fieldInstructions.join("\n")}
 
-IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica. Se existir informação de referência ou do fornecedor acima, usa-a para enriquecer o produto com dados reais. Traduz para português europeu se necessário.`;
+IMPORTANTE: 
+- Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na TABELA de specs, NÃO no texto comercial.
+- O texto comercial deve ser persuasivo e focado nos benefícios, sem dados técnicos misturados.
+- As FAQs na descrição devem ser práticas e úteis para o cliente.
+- Se existir informação de referência ou do fornecedor acima, usa-a para enriquecer o produto com dados reais.
+- Traduz tudo para português europeu.`;
 
         const finalPrompt = customPrompt
           ? `${customPrompt}\n\n${productInfo}${knowledgeContext}${supplierContext}`
@@ -213,8 +257,8 @@ IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensõ
         const requiredFields: string[] = [];
 
         if (fields.includes("title")) { toolProperties.optimized_title = { type: "string" }; requiredFields.push("optimized_title"); }
-        if (fields.includes("description")) { toolProperties.optimized_description = { type: "string" }; requiredFields.push("optimized_description"); }
-        if (fields.includes("short_description")) { toolProperties.optimized_short_description = { type: "string" }; requiredFields.push("optimized_short_description"); }
+        if (fields.includes("description")) { toolProperties.optimized_description = { type: "string", description: "Descrição completa com: parágrafo comercial + tabela HTML de specs + secção FAQ em HTML" }; requiredFields.push("optimized_description"); }
+        if (fields.includes("short_description")) { toolProperties.optimized_short_description = { type: "string", description: "Descrição curta concisa para listagens, máx 160 chars" }; requiredFields.push("optimized_short_description"); }
         if (fields.includes("meta_title")) { toolProperties.meta_title = { type: "string" }; requiredFields.push("meta_title"); }
         if (fields.includes("meta_description")) { toolProperties.meta_description = { type: "string" }; requiredFields.push("meta_description"); }
         if (fields.includes("seo_slug")) { toolProperties.seo_slug = { type: "string" }; requiredFields.push("seo_slug"); }
@@ -243,7 +287,7 @@ IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensõ
             messages: [
               {
                 role: "system",
-                content: "És um especialista em e-commerce e SEO. Responde APENAS com a tool call pedida, sem texto adicional. Mantém sempre as características técnicas do produto. Traduz tudo para português europeu.",
+                content: "És um especialista em e-commerce e SEO. Responde APENAS com a tool call pedida, sem texto adicional. Mantém sempre as características técnicas do produto NUMA TABELA HTML separada do texto comercial. Traduz tudo para português europeu.",
               },
               { role: "user", content: finalPrompt },
             ],
@@ -322,7 +366,7 @@ IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensõ
           results.push({ id: product.id, status: "optimized" });
         }
 
-        // Log activity - find supplier name for this product
+        // Log activity
         const matchedForLog = supplierMappings.find((s) => 
           product.sku?.toUpperCase().startsWith(s.prefix.toUpperCase())
         );
