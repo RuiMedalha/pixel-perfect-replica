@@ -19,6 +19,7 @@ import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
@@ -42,6 +43,7 @@ const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
 
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
+  const { activeWorkspace } = useWorkspaceContext();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const publishWoo = usePublishWooCommerce();
@@ -143,6 +145,7 @@ const ProductsPage = () => {
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
+      workspaceId: activeWorkspace?.id,
     });
     setShowFieldSelector(false);
     setPendingOptimizeIds([]);

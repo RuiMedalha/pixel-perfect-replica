@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { productIds, fieldsToOptimize, modelOverride } = await req.json();
+    const { productIds, fieldsToOptimize, modelOverride, workspaceId } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "productIds é obrigatório" }), {
         status: 400,
@@ -116,8 +116,17 @@ serve(async (req) => {
         const parsed = JSON.parse(suppliersConfig.value);
         if (Array.isArray(parsed)) {
           supplierMappings = parsed.filter((s: any) => s.prefix && s.url);
+          const allParsed = parsed.length;
+          const withUrl = supplierMappings.length;
+          if (allParsed > 0 && withUrl === 0) {
+            console.warn(`⚠️ ${allParsed} fornecedores configurados mas NENHUM tem URL preenchido! Preencha o URL nas Configurações.`);
+          } else {
+            console.log(`📦 ${withUrl} fornecedores com URL activo: ${supplierMappings.map(s => `${s.prefix}→${s.url.substring(0, 40)}`).join(", ")}`);
+          }
         }
       } catch { /* ignore parse errors */ }
+    } else {
+      console.log("⚠️ Nenhum fornecedor configurado (suppliers_json não encontrado)");
     }
 
     // Fetch ALL user products for upsell/cross-sell suggestions
@@ -185,14 +194,24 @@ serve(async (req) => {
           .join(" ");
 
         if (searchQuery) {
-          const { data: chunks } = await supabase.rpc("search_knowledge", {
+        const searchArgs: any = {
             _query: searchQuery,
             _limit: 8,
-          });
+          };
+          if (workspaceId) searchArgs._workspace_id = workspaceId;
+          
+          const { data: chunks, error: searchError } = await supabase.rpc("search_knowledge", searchArgs);
+
+          if (searchError) {
+            console.warn("Knowledge search error:", searchError.message);
+          }
 
           if (chunks && chunks.length > 0) {
+            console.log(`✅ Knowledge found: ${chunks.length} chunks from: ${[...new Set(chunks.map((c: any) => c.source_name))].join(", ")}`);
             const parts = chunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
             knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado):\n${parts.substring(0, 12000)}`;
+          } else {
+            console.log(`⚠️ No knowledge found for query: "${searchQuery.substring(0, 80)}..." (workspace: ${workspaceId || "all"})`);
           }
         }
 
@@ -497,10 +516,9 @@ IMPORTANTE:
         // Build knowledge sources list
         let knowledgeSources: Array<{ source: string; chunks: number }> = [];
         if (searchQuery) {
-          const { data: logChunks } = await supabase.rpc("search_knowledge", {
-            _query: searchQuery,
-            _limit: 8,
-          });
+          const logSearchArgs: any = { _query: searchQuery, _limit: 8 };
+          if (workspaceId) logSearchArgs._workspace_id = workspaceId;
+          const { data: logChunks } = await supabase.rpc("search_knowledge", logSearchArgs);
           if (logChunks && logChunks.length > 0) {
             const sourceMap = new Map<string, number>();
             logChunks.forEach((c: any) => {
