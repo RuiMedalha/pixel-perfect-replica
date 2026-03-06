@@ -203,7 +203,7 @@ export function useUploadCatalog() {
     }
   };
 
-  const registerUpload = async (uploadedFile: UploadedFile, userId: string, storagePath: string, productsCount: number) => {
+  const registerUpload = async (uploadedFile: UploadedFile, userId: string, storagePath: string, productsCount: number, workspaceId?: string) => {
     const hash = await computeFileHash(uploadedFile.file);
     await supabase.from("uploaded_files").insert({
       user_id: userId,
@@ -214,6 +214,7 @@ export function useUploadCatalog() {
       storage_path: storagePath,
       status: "processed",
       products_count: productsCount,
+      workspace_id: workspaceId || null,
       metadata: {
         type: uploadedFile.type,
         columnMapping: uploadedFile.columnMapping,
@@ -222,7 +223,7 @@ export function useUploadCatalog() {
     } as any);
   };
 
-  const processFile = async (uploadedFile: UploadedFile) => {
+  const processFile = async (uploadedFile: UploadedFile, workspaceId?: string) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
     if (!user) {
