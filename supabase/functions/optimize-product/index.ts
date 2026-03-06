@@ -540,20 +540,15 @@ IMPORTANTE:
         });
 
         // Log optimization details (tokens, sources, etc.)
-        // Build knowledge sources list
+        // Build knowledge sources from already-fetched chunks
         let knowledgeSources: Array<{ source: string; chunks: number }> = [];
-        if (searchQuery) {
-          const logSearchArgs: any = { _query: searchQuery, _limit: 8 };
-          if (workspaceId) logSearchArgs._workspace_id = workspaceId;
-          const { data: logChunks } = await supabase.rpc("search_knowledge", logSearchArgs);
-          if (logChunks && logChunks.length > 0) {
-            const sourceMap = new Map<string, number>();
-            logChunks.forEach((c: any) => {
-              const name = c.source_name || "Desconhecido";
-              sourceMap.set(name, (sourceMap.get(name) || 0) + 1);
-            });
-            knowledgeSources = Array.from(sourceMap.entries()).map(([source, chunks]) => ({ source, chunks }));
-          }
+        if (topChunks.length > 0) {
+          const sourceMap = new Map<string, number>();
+          topChunks.forEach((c: any) => {
+            const name = c.source_name || "Desconhecido";
+            sourceMap.set(name, (sourceMap.get(name) || 0) + 1);
+          });
+          knowledgeSources = Array.from(sourceMap.entries()).map(([source, chunks]) => ({ source, chunks }));
         }
 
         const matchedSupplierForLog = supplierMappings.find((s) => 
