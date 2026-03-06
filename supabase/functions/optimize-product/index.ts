@@ -116,8 +116,17 @@ serve(async (req) => {
         const parsed = JSON.parse(suppliersConfig.value);
         if (Array.isArray(parsed)) {
           supplierMappings = parsed.filter((s: any) => s.prefix && s.url);
+          const allParsed = parsed.length;
+          const withUrl = supplierMappings.length;
+          if (allParsed > 0 && withUrl === 0) {
+            console.warn(`⚠️ ${allParsed} fornecedores configurados mas NENHUM tem URL preenchido! Preencha o URL nas Configurações.`);
+          } else {
+            console.log(`📦 ${withUrl} fornecedores com URL activo: ${supplierMappings.map(s => `${s.prefix}→${s.url.substring(0, 40)}`).join(", ")}`);
+          }
         }
       } catch { /* ignore parse errors */ }
+    } else {
+      console.log("⚠️ Nenhum fornecedor configurado (suppliers_json não encontrado)");
     }
 
     // Fetch ALL user products for upsell/cross-sell suggestions
