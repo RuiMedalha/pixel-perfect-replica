@@ -186,6 +186,7 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          crosssell_skus: Json | null
           faq: Json | null
           id: string
           image_urls: string[] | null
@@ -207,12 +208,14 @@ export type Database = {
           tags: string[] | null
           technical_specs: string | null
           updated_at: string
+          upsell_skus: Json | null
           user_id: string
           woocommerce_id: number | null
         }
         Insert: {
           category?: string | null
           created_at?: string
+          crosssell_skus?: Json | null
           faq?: Json | null
           id?: string
           image_urls?: string[] | null
@@ -234,12 +237,14 @@ export type Database = {
           tags?: string[] | null
           technical_specs?: string | null
           updated_at?: string
+          upsell_skus?: Json | null
           user_id: string
           woocommerce_id?: number | null
         }
         Update: {
           category?: string | null
           created_at?: string
+          crosssell_skus?: Json | null
           faq?: Json | null
           id?: string
           image_urls?: string[] | null
@@ -261,6 +266,7 @@ export type Database = {
           tags?: string[] | null
           technical_specs?: string | null
           updated_at?: string
+          upsell_skus?: Json | null
           user_id?: string
           woocommerce_id?: number | null
         }
