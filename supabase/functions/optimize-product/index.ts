@@ -523,7 +523,7 @@ IMPORTANTE:
         await supabase.from("optimization_logs").insert({
           product_id: product.id,
           user_id: userId,
-          model: "google/gemini-3-flash-preview",
+          model: chosenModel,
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,
           total_tokens: totalTokens,
