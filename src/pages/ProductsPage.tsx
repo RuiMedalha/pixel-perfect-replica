@@ -459,10 +459,17 @@ const ProductsPage = () => {
                       </td>
 
                       <td className="p-3">
-                        <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
-                          {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
-                          {statusLabels[product.status]}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {(product as any).product_type && (product as any).product_type !== "simple" && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {(product as any).product_type === "variable" ? "Variável" : "Variação"}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
+                            {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
+                            {statusLabels[product.status]}
+                          </Badge>
+                        </div>
                       </td>
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
