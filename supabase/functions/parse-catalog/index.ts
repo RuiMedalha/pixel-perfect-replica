@@ -143,6 +143,7 @@ serve(async (req) => {
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize).map((p) => ({
         user_id: userId,
+        workspace_id: workspaceId || null,
         original_title: toStr(p.title, 500),
         original_description: toStr(p.description, 5000),
         short_description: toStr(p.short_description, 1000),
