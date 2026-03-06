@@ -87,6 +87,7 @@ serve(async (req) => {
           const chunkRows = chunks.map((content, idx) => ({
             file_id: fileRecord.id,
             user_id: userId,
+            workspace_id: workspaceId || null,
             chunk_index: idx,
             content,
             source_name: fileName,
