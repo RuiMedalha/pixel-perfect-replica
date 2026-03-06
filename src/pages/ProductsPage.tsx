@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, type OptimizationField } from "@/hooks/useOptimizeProducts";
