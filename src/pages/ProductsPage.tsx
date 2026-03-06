@@ -543,6 +543,76 @@ const ProductsPage = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Variations Dialog */}
+      <Dialog open={showVariations} onOpenChange={setShowVariations}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              Variações Detetadas
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            A IA detetou {detectedGroups.length} grupo(s) de produtos variáveis. Selecione quais aplicar.
+          </p>
+          <div className="space-y-4 mt-2">
+            {detectedGroups.map((group, idx) => (
+              <Card key={idx} className={cn("transition-colors", selectedGroups.has(idx) && "border-primary")}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedGroups.has(idx)}
+                      onCheckedChange={() => {
+                        setSelectedGroups(prev => {
+                          const next = new Set(prev);
+                          next.has(idx) ? next.delete(idx) : next.add(idx);
+                          return next;
+                        });
+                      }}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <h4 className="font-medium text-sm">{group.parent_title}</h4>
+                        <Badge variant="outline" className="text-xs mt-1">
+                          Atributo: {group.attribute_name}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.variations.map((v, vi) => (
+                          <Badge key={vi} variant="secondary" className="text-xs">
+                            {v.attribute_value}
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {group.variations.length} variações → 1 produto pai + {group.variations.length - 1} variação(ões)
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVariations(false)}>Cancelar</Button>
+            <Button
+              onClick={async () => {
+                const groupsToApply = detectedGroups.filter((_, i) => selectedGroups.has(i));
+                await applyVariations.mutateAsync({ groups: groupsToApply });
+                setShowVariations(false);
+                setDetectedGroups([]);
+                setSelectedGroups(new Set());
+              }}
+              disabled={selectedGroups.size === 0 || applyVariations.isPending}
+            >
+              {applyVariations.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <GitBranch className="w-4 h-4 mr-1" />}
+              Aplicar {selectedGroups.size} grupo(s)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Detail Modal */}
       <ProductDetailModal
         product={detailProduct}
