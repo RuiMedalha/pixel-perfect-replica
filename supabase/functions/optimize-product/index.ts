@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { productIds, fieldsToOptimize } = await req.json();
+    const { productIds, fieldsToOptimize, modelOverride } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "productIds é obrigatório" }), {
         status: 400,
