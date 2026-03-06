@@ -314,10 +314,10 @@ export function useUploadCatalog() {
     }
   };
 
-  const processAll = async () => {
+  const processAll = async (workspaceId?: string) => {
     const pending = files.filter((f) => f.status === "aguardando");
     for (const file of pending) {
-      await processFile(file);
+      await processFile(file, workspaceId);
     }
   };
 
