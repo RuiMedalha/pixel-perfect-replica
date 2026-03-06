@@ -521,10 +521,10 @@ IMPORTANTE:
 
         if (updateError) {
           console.error("Update error:", updateError);
-          results.push({ id: product.id, status: "error", error: updateError.message });
-        } else {
-          results.push({ id: product.id, status: "optimized" });
+          return { id: product.id, status: "error" as const, error: updateError.message };
         }
+
+        // Will return success after logging below
 
         // Log activity
         const matchedForLog = supplierMappings.find((s) => 
