@@ -219,6 +219,46 @@ export function ProductDetailModal({ product, onClose }: Props) {
             )}
           </TabsContent>
 
+          {/* UPSELLS / CROSS-SELLS TAB */}
+          <TabsContent value="relacionados" className="mt-4 space-y-6">
+            <div>
+              <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                <ArrowUpRight className="w-4 h-4 text-primary" /> Upsells
+                <span className="text-xs text-muted-foreground font-normal">(produtos superiores sugeridos)</span>
+              </h4>
+              {upsells.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum upsell sugerido. Otimize com o campo "Upsells" selecionado.</p>
+              ) : (
+                <div className="space-y-2">
+                  {upsells.map((item: { sku: string; title: string }, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                      <Badge variant="outline" className="font-mono text-xs shrink-0">{item.sku}</Badge>
+                      <span className="text-sm">{item.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                <Shuffle className="w-4 h-4 text-primary" /> Cross-sells
+                <span className="text-xs text-muted-foreground font-normal">(produtos complementares sugeridos)</span>
+              </h4>
+              {crosssells.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum cross-sell sugerido. Otimize com o campo "Cross-sells" selecionado.</p>
+              ) : (
+                <div className="space-y-2">
+                  {crosssells.map((item: { sku: string; title: string }, idx: number) => (
+                    <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                      <Badge variant="outline" className="font-mono text-xs shrink-0">{item.sku}</Badge>
+                      <span className="text-sm">{item.title}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
           {/* VERSION HISTORY TAB */}
           <TabsContent value="historico" className="mt-4">
             {!versions || versions.length === 0 ? (
