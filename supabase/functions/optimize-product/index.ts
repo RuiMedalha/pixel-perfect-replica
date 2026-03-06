@@ -147,9 +147,13 @@ serve(async (req) => {
       }
     }
 
-    const results = [];
+    const results: any[] = [];
 
-    for (const product of products) {
+    // Process products in parallel batches of 3 for speed
+    const CONCURRENCY = 3;
+    for (let batchStart = 0; batchStart < products.length; batchStart += CONCURRENCY) {
+      const batch = products.slice(batchStart, batchStart + CONCURRENCY);
+      const batchResults = await Promise.allSettled(batch.map(async (product) => {
       try {
         // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) ===
         if (product.optimized_title || product.optimized_description) {
