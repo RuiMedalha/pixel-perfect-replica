@@ -5,7 +5,7 @@ import { toast } from "sonner";
 export type OptimizationField = 
   | "title" | "description" | "short_description"
   | "meta_title" | "meta_description" | "seo_slug"
-  | "tags" | "price" | "faq";
+  | "tags" | "price" | "faq" | "upsells" | "crosssells";
 
 export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string }[] = [
   { key: "title", label: "Título" },
@@ -17,6 +17,8 @@ export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string }[] = 
   { key: "tags", label: "Tags" },
   { key: "price", label: "Preço" },
   { key: "faq", label: "FAQ" },
+  { key: "upsells", label: "Upsells" },
+  { key: "crosssells", label: "Cross-sells" },
 ];
 
 export function useOptimizeProducts() {
