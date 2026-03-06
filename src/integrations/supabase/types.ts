@@ -526,15 +526,25 @@ export type Database = {
         Returns: boolean
       }
       is_approved: { Args: { _user_id: string }; Returns: boolean }
-      search_knowledge: {
-        Args: { _limit?: number; _query: string }
-        Returns: {
-          content: string
-          id: string
-          rank: number
-          source_name: string
-        }[]
-      }
+      search_knowledge:
+        | {
+            Args: { _limit?: number; _query: string }
+            Returns: {
+              content: string
+              id: string
+              rank: number
+              source_name: string
+            }[]
+          }
+        | {
+            Args: { _limit?: number; _query: string; _workspace_id?: string }
+            Returns: {
+              content: string
+              id: string
+              rank: number
+              source_name: string
+            }[]
+          }
     }
     Enums: {
       activity_action:
