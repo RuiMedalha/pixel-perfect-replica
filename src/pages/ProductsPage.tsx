@@ -51,6 +51,8 @@ const ProductsPage = () => {
   const publishWoo = usePublishWooCommerce();
   const deleteProducts = useDeleteProducts();
   const updateProduct = useUpdateProduct();
+  const detectVariations = useDetectVariations();
+  const applyVariations = useApplyVariations();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -59,6 +61,9 @@ const ProductsPage = () => {
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
+  const [showVariations, setShowVariations] = useState(false);
+  const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
