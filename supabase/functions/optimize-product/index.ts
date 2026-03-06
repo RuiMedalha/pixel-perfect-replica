@@ -575,6 +575,8 @@ IMPORTANTE:
           fields_optimized: fields,
           prompt_length: finalPrompt.length,
         });
+
+        return { id: product.id, status: "optimized" as const };
       } catch (productError) {
         console.error(`Error optimizing product ${product.id}:`, productError);
         await supabase.from("products").update({ status: "error" }).eq("id", product.id);
