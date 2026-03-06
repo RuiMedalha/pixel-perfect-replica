@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, ExternalLink, RotateCcw, History, Send } from "lucide-react";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
@@ -78,6 +78,8 @@ export function ProductDetailModal({ product, onClose }: Props) {
   };
 
   const faq = Array.isArray(product.faq) ? product.faq : [];
+  const upsells = Array.isArray((product as any).upsell_skus) ? (product as any).upsell_skus : [];
+  const crosssells = Array.isArray((product as any).crosssell_skus) ? (product as any).crosssell_skus : [];
 
   return (
     <Dialog open={!!product} onOpenChange={() => onClose()}>
@@ -95,6 +97,9 @@ export function ProductDetailModal({ product, onClose }: Props) {
             <TabsTrigger value="imagens">Imagens</TabsTrigger>
             <TabsTrigger value="seo">SEO</TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
+            <TabsTrigger value="relacionados">
+              <Shuffle className="w-3.5 h-3.5 mr-1" /> Upsells / Cross-sells
+            </TabsTrigger>
             <TabsTrigger value="historico">
               <History className="w-3.5 h-3.5 mr-1" /> Versões
             </TabsTrigger>
