@@ -586,7 +586,16 @@ IMPORTANTE:
       } catch (productError) {
         console.error(`Error optimizing product ${product.id}:`, productError);
         await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-        results.push({ id: product.id, status: "error", error: productError instanceof Error ? productError.message : "Unknown" });
+        return { id: product.id, status: "error" as const, error: productError instanceof Error ? productError.message : "Unknown" };
+      }
+      }));
+
+      for (const result of batchResults) {
+        if (result.status === "fulfilled") {
+          results.push(result.value);
+        } else {
+          results.push({ id: "unknown", status: "error", error: String(result.reason) });
+        }
       }
     }
 
