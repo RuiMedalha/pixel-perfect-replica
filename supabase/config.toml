@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.scrape-supplier]
 verify_jwt = false
+
+[functions.detect-variations]
+verify_jwt = false
