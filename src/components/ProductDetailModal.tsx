@@ -69,6 +69,18 @@ export function ProductDetailModal({ product, onClose }: Props) {
       tags: editData.tags ? editData.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : null,
       optimized_price: editData.optimized_price ? Number(editData.optimized_price) : null,
     };
+
+    // Collect image alt texts from edit fields
+    if (product.image_urls && product.image_urls.length > 0) {
+      const altTexts = product.image_urls.map((url, i) => ({
+        url,
+        alt_text: editData[`image_alt_${i}`] ?? "",
+      })).filter((a) => a.alt_text);
+      if (altTexts.length > 0) {
+        updates.image_alt_texts = altTexts;
+      }
+    }
+
     updateProduct.mutate({ id: product.id, updates });
     setHasChanges(false);
   };
