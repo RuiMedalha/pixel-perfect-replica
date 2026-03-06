@@ -187,32 +187,59 @@ serve(async (req) => {
           }
         }
 
-        // 1. Search relevant knowledge chunks
+        // 1. Search relevant knowledge chunks with multiple search strategies
         let knowledgeContext = "";
-        const searchQuery = [product.original_title, product.sku, product.category, product.supplier_ref]
-          .filter(Boolean)
-          .join(" ");
+        const allChunks: any[] = [];
 
-        if (searchQuery) {
-        const searchArgs: any = {
-            _query: searchQuery,
-            _limit: 8,
-          };
+        // Strategy 1: Search by product title (cleaned - remove codes/special chars)
+        const cleanTitle = (product.original_title || "")
+          .replace(/[+\-\/\\()]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        // Extract meaningful words (3+ chars, no codes)
+        const titleWords = cleanTitle.split(" ").filter((w: string) => w.length >= 3 && !/^\d+$/.test(w));
+        const titleQuery = titleWords.slice(0, 5).join(" ");
+
+        // Strategy 2: Search by category keywords
+        const categoryQuery = (product.category || "")
+          .replace(/>/g, " ")
+          .replace(/[+\-\/\\()]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        // Strategy 3: Search by SKU/ref
+        const skuQuery = product.sku || product.supplier_ref || "";
+
+        const searchQueries = [titleQuery, categoryQuery, skuQuery].filter((q) => q.length > 2);
+        
+        for (const query of searchQueries) {
+          const searchArgs: any = { _query: query, _limit: 5 };
           if (workspaceId) searchArgs._workspace_id = workspaceId;
           
-          const { data: chunks, error: searchError } = await supabase.rpc("search_knowledge", searchArgs);
-
-          if (searchError) {
-            console.warn("Knowledge search error:", searchError.message);
+          try {
+            const { data: chunks } = await supabase.rpc("search_knowledge", searchArgs);
+            if (chunks && chunks.length > 0) {
+              for (const c of chunks) {
+                if (!allChunks.find((existing: any) => existing.id === c.id)) {
+                  allChunks.push(c);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn(`Knowledge search error for "${query.substring(0, 40)}":`, e);
           }
+        }
 
-          if (chunks && chunks.length > 0) {
-            console.log(`✅ Knowledge found: ${chunks.length} chunks from: ${[...new Set(chunks.map((c: any) => c.source_name))].join(", ")}`);
-            const parts = chunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
-            knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado):\n${parts.substring(0, 12000)}`;
-          } else {
-            console.log(`⚠️ No knowledge found for query: "${searchQuery.substring(0, 80)}..." (workspace: ${workspaceId || "all"})`);
-          }
+        // Sort by rank and take top results
+        allChunks.sort((a: any, b: any) => (b.rank || 0) - (a.rank || 0));
+        const topChunks = allChunks.slice(0, 8);
+
+        if (topChunks.length > 0) {
+          console.log(`✅ Knowledge found: ${topChunks.length} chunks from: ${[...new Set(topChunks.map((c: any) => c.source_name))].join(", ")}`);
+          const parts = topChunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
+          knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado nos PDFs e ficheiros):\n${parts.substring(0, 12000)}`;
+        } else {
+          console.log(`⚠️ No knowledge found for queries: ${searchQueries.map(q => `"${q.substring(0, 30)}"`).join(", ")} (workspace: ${workspaceId || "all"})`);
         }
 
         // 2. Auto-scrape supplier page by SKU
