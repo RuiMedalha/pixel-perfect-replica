@@ -211,13 +211,46 @@ const ProductsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Painel de Produtos</h1>
           <p className="text-muted-foreground mt-1">{products?.length ?? 0} produtos no total</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          {/* Variable Products Toggle */}
+          {activeWorkspace && (
+            <div className="flex items-center gap-2 mr-2 px-3 py-1.5 rounded-lg border bg-muted/30">
+              <GitBranch className="w-4 h-4 text-muted-foreground" />
+              <Label className="text-xs cursor-pointer" htmlFor="var-toggle">Variáveis</Label>
+              <Switch
+                id="var-toggle"
+                checked={activeWorkspace.has_variable_products}
+                onCheckedChange={(checked) => toggleVariableProducts(activeWorkspace.id, checked)}
+              />
+            </div>
+          )}
           <Button size="sm" variant="outline" onClick={() => {
             const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
             exportProductsToExcel(selectedProducts);
           }}>
             <Download className="w-4 h-4 mr-1" /> Exportar Excel
           </Button>
+          {activeWorkspace?.has_variable_products && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const result = await detectVariations.mutateAsync({
+                  workspaceId: activeWorkspace.id,
+                  productIds: selected.size > 0 ? Array.from(selected) : undefined,
+                });
+                if (result.groups.length > 0) {
+                  setDetectedGroups(result.groups);
+                  setSelectedGroups(new Set(result.groups.map((_, i) => i)));
+                  setShowVariations(true);
+                }
+              }}
+              disabled={detectVariations.isPending}
+            >
+              {detectVariations.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Layers className="w-4 h-4 mr-1" />}
+              Detetar Variações{selected.size > 0 ? ` (${selected.size})` : ""}
+            </Button>
+          )}
           {selected.size > 0 && (
             <>
               <Button size="sm" onClick={() => bulkAction("optimized")}>
