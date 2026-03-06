@@ -428,31 +428,23 @@ IMPORTANTE:
           const status = aiResponse.status;
           if (status === 429) {
             await supabase.from("products").update({ status: "pending" }).in("id", productIds);
-            return new Response(JSON.stringify({ error: "Limite de pedidos excedido. Tente novamente mais tarde." }), {
-              status: 429,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            throw new Error("Limite de pedidos excedido. Tente novamente mais tarde.");
           }
           if (status === 402) {
             await supabase.from("products").update({ status: "pending" }).in("id", productIds);
-            return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
-              status: 402,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
+            throw new Error("Créditos insuficientes. Adicione créditos ao workspace.");
           }
           const errText = await aiResponse.text();
           console.error("AI error:", status, errText);
           await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-          results.push({ id: product.id, status: "error", error: errText });
-          continue;
+          return { id: product.id, status: "error" as const, error: errText };
         }
 
         const aiData = await aiResponse.json();
         const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
         if (!toolCall) {
           await supabase.from("products").update({ status: "error" }).eq("id", product.id);
-          results.push({ id: product.id, status: "error", error: "No tool call in response" });
-          continue;
+          return { id: product.id, status: "error" as const, error: "No tool call in response" };
         }
 
         // Capture token usage from AI response
