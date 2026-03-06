@@ -2,6 +2,17 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+const SECRET_KEYS = [
+  "openai_api_key",
+  "anthropic_api_key",
+  "woocommerce_consumer_key",
+  "woocommerce_consumer_secret",
+  "s3_access_key_id",
+  "s3_secret_access_key",
+];
+
+const MASK = "••••••••";
+
 export function useSettings() {
   return useQuery({
     queryKey: ["settings"],
@@ -9,7 +20,12 @@ export function useSettings() {
       const { data, error } = await supabase.from("settings").select("*");
       if (error) throw error;
       const map: Record<string, string> = {};
-      data.forEach((s) => { if (s.value) map[s.key] = s.value; });
+      data.forEach((s) => {
+        if (s.value) {
+          // Mask secret values — only show that a value exists
+          map[s.key] = SECRET_KEYS.includes(s.key) ? MASK : s.value;
+        }
+      });
       return map;
     },
   });
@@ -22,7 +38,10 @@ export function useSaveSettings() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Utilizador não autenticado");
 
-      const entries = Object.entries(settings).filter(([, v]) => v.trim() !== "");
+      // Only save entries that have actual values and are not the mask placeholder
+      const entries = Object.entries(settings).filter(
+        ([, v]) => v.trim() !== "" && v !== MASK
+      );
       
       for (const [key, value] of entries) {
         const { error } = await supabase

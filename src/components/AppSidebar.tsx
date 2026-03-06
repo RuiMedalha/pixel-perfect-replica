@@ -9,10 +9,10 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/upload", icon: Upload, label: "Upload" },
   { to: "/produtos", icon: Package, label: "Produtos" },
-  { to: "/configuracoes", icon: Settings, label: "Configurações" },
 ];
 
 const adminItems = [
+  { to: "/configuracoes", icon: Settings, label: "Configurações" },
   { to: "/admin/utilizadores", icon: Users, label: "Utilizadores" },
 ];
 
