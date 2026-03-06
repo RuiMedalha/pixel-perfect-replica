@@ -5,6 +5,8 @@ import { toast } from "sonner";
 const SECRET_KEYS = [
   "openai_api_key",
   "anthropic_api_key",
+  "gemini_api_key",
+  "mistral_api_key",
   "woocommerce_consumer_key",
   "woocommerce_consumer_secret",
   "s3_access_key_id",

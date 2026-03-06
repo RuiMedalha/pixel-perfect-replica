@@ -22,6 +22,8 @@ interface Supplier {
 const SETTING_KEYS = {
   openai_key: "openai_api_key",
   anthropic_key: "anthropic_api_key",
+  gemini_key: "gemini_api_key",
+  mistral_key: "mistral_api_key",
   default_model: "default_model",
   woo_url: "woocommerce_url",
   woo_key: "woocommerce_consumer_key",
@@ -201,8 +203,14 @@ const SettingsPage = () => {
           <CardTitle className="text-base">🤖 Modelos de IA</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="text-xs text-muted-foreground">
+            A otimização usa o Lovable AI Gateway por defeito (não requer API keys). Opcionalmente, pode guardar chaves para uso futuro ou integrações externas.
+          </p>
           <SecretField label="API Key OpenAI" id="openai" settingKey={SETTING_KEYS.openai_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
-          <SecretField label="API Key Anthropic" id="anthropic" settingKey={SETTING_KEYS.anthropic_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="API Key Anthropic (Claude)" id="anthropic" settingKey={SETTING_KEYS.anthropic_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="API Key Google Gemini" id="gemini" settingKey={SETTING_KEYS.gemini_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <SecretField label="API Key Mistral AI" id="mistral" settingKey={SETTING_KEYS.mistral_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
+          <Separator />
           <div className="space-y-2">
             <Label>Modelo Padrão</Label>
             <Select value={form[SETTING_KEYS.default_model] ?? "gemini-flash"} onValueChange={(v) => updateField(SETTING_KEYS.default_model, v)}>
@@ -214,6 +222,7 @@ const SettingsPage = () => {
                 <SelectItem value="gpt5-mini">GPT-5 Mini</SelectItem>
               </SelectContent>
             </Select>
+            <p className="text-xs text-muted-foreground">Modelo usado por defeito na otimização (pode ser alterado por otimização).</p>
           </div>
         </CardContent>
       </Card>
