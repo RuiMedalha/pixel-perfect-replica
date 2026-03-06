@@ -203,7 +203,7 @@ export function useUploadCatalog() {
     }
   };
 
-  const registerUpload = async (uploadedFile: UploadedFile, userId: string, storagePath: string, productsCount: number) => {
+  const registerUpload = async (uploadedFile: UploadedFile, userId: string, storagePath: string, productsCount: number, workspaceId?: string) => {
     const hash = await computeFileHash(uploadedFile.file);
     await supabase.from("uploaded_files").insert({
       user_id: userId,
@@ -214,6 +214,7 @@ export function useUploadCatalog() {
       storage_path: storagePath,
       status: "processed",
       products_count: productsCount,
+      workspace_id: workspaceId || null,
       metadata: {
         type: uploadedFile.type,
         columnMapping: uploadedFile.columnMapping,
@@ -222,7 +223,7 @@ export function useUploadCatalog() {
     } as any);
   };
 
-  const processFile = async (uploadedFile: UploadedFile) => {
+  const processFile = async (uploadedFile: UploadedFile, workspaceId?: string) => {
     const { data: sessionData } = await supabase.auth.getSession();
     const user = sessionData?.session?.user;
     if (!user) {
@@ -269,6 +270,7 @@ export function useUploadCatalog() {
           status: "processed",
           products_count: 0,
           extracted_text: extractedText || null,
+          workspace_id: workspaceId || null,
           metadata: { type: uploadedFile.type },
         } as any);
 
@@ -284,6 +286,7 @@ export function useUploadCatalog() {
           fileName: uploadedFile.name,
           columnMapping: uploadedFile.columnMapping || undefined,
           sheetName: uploadedFile.selectedSheet || undefined,
+          workspaceId: workspaceId || undefined,
         },
       });
 
@@ -291,7 +294,7 @@ export function useUploadCatalog() {
       if (data?.error && data?.count === undefined) throw new Error(data.error);
 
       const count = data?.count || 0;
-      await registerUpload(uploadedFile, user.id, filePath, count);
+      await registerUpload(uploadedFile, user.id, filePath, count, workspaceId);
 
       updateFile(uploadedFile.id, {
         status: "concluido",
@@ -311,10 +314,10 @@ export function useUploadCatalog() {
     }
   };
 
-  const processAll = async () => {
+  const processAll = async (workspaceId?: string) => {
     const pending = files.filter((f) => f.status === "aguardando");
     for (const file of pending) {
-      await processFile(file);
+      await processFile(file, workspaceId);
     }
   };
 

@@ -6,10 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
-import { useOptimizeProducts, OPTIMIZATION_FIELDS, type OptimizationField } from "@/hooks/useOptimizeProducts";
+import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
@@ -52,6 +54,7 @@ const ProductsPage = () => {
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("default");
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -139,10 +142,12 @@ const ProductsPage = () => {
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
+      modelOverride: selectedModel !== "default" ? selectedModel : undefined,
     });
     setShowFieldSelector(false);
     setPendingOptimizeIds([]);
     setSelected(new Set());
+    setSelectedModel("default");
   };
 
   const toggleField = (field: OptimizationField) => {
@@ -468,6 +473,22 @@ const ProductsPage = () => {
             <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set())}>
               Limpar
             </Button>
+          </div>
+          {/* Model Override */}
+          <div className="space-y-1.5 mt-3 pt-3 border-t">
+            <Label className="text-xs font-medium">Modelo de IA</Label>
+            <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Usar modelo padrão (Settings)</SelectItem>
+                {AI_MODELS.map((m) => (
+                  <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">Escolha um modelo diferente para esta otimização ou use o configurado nas Settings.</p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>

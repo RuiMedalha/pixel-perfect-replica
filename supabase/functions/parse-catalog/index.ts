@@ -38,7 +38,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { filePath, fileName, columnMapping, sheetName, parseKnowledge } = await req.json();
+    const { filePath, fileName, columnMapping, sheetName, parseKnowledge, workspaceId } = await req.json();
     if (!filePath || !fileName) {
       return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
         status: 400,
@@ -87,6 +87,7 @@ serve(async (req) => {
           const chunkRows = chunks.map((content, idx) => ({
             file_id: fileRecord.id,
             user_id: userId,
+            workspace_id: workspaceId || null,
             chunk_index: idx,
             content,
             source_name: fileName,
@@ -143,6 +144,7 @@ serve(async (req) => {
     for (let i = 0; i < products.length; i += batchSize) {
       const batch = products.slice(i, i + batchSize).map((p) => ({
         user_id: userId,
+        workspace_id: workspaceId || null,
         original_title: toStr(p.title, 500),
         original_description: toStr(p.description, 5000),
         short_description: toStr(p.short_description, 1000),

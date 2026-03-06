@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useCurrentUserProfile } from "@/hooks/useUserManagement";
+import { WorkspaceProvider } from "@/hooks/useWorkspaces";
 import { PendingApproval } from "@/components/PendingApproval";
 import Index from "./pages/Index";
 import UploadPage from "./pages/UploadPage";
@@ -39,20 +40,22 @@ function ProtectedRoutes() {
   }
 
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Index />} />
-        <Route path="/upload" element={<UploadPage />} />
-        <Route path="/produtos" element={<ProductsPage />} />
-        {profile?.isAdmin && (
-          <>
-            <Route path="/configuracoes" element={<SettingsPage />} />
-            <Route path="/admin/utilizadores" element={<AdminUsersPage />} />
-          </>
-        )}
-      </Route>
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <WorkspaceProvider>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Index />} />
+          <Route path="/upload" element={<UploadPage />} />
+          <Route path="/produtos" element={<ProductsPage />} />
+          {profile?.isAdmin && (
+            <>
+              <Route path="/configuracoes" element={<SettingsPage />} />
+              <Route path="/admin/utilizadores" element={<AdminUsersPage />} />
+            </>
+          )}
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </WorkspaceProvider>
   );
 }
 

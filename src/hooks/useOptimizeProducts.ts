@@ -21,13 +21,20 @@ export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string }[] = 
   { key: "crosssells", label: "Cross-sells" },
 ];
 
+export const AI_MODELS = [
+  { key: "gemini-flash", label: "Gemini 3 Flash (Rápido)" },
+  { key: "gemini-pro", label: "Gemini 2.5 Pro (Avançado)" },
+  { key: "gpt5", label: "GPT-5 (Precisão)" },
+  { key: "gpt5-mini", label: "GPT-5 Mini (Equilibrado)" },
+];
+
 export function useOptimizeProducts() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ productIds, fieldsToOptimize }: { productIds: string[]; fieldsToOptimize?: OptimizationField[] }) => {
+    mutationFn: async ({ productIds, fieldsToOptimize, modelOverride }: { productIds: string[]; fieldsToOptimize?: OptimizationField[]; modelOverride?: string }) => {
       const { data, error } = await supabase.functions.invoke("optimize-product", {
-        body: { productIds, fieldsToOptimize },
+        body: { productIds, fieldsToOptimize, modelOverride },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -40,6 +47,7 @@ export function useOptimizeProducts() {
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["product-stats"] });
       qc.invalidateQueries({ queryKey: ["recent-activity"] });
+      qc.invalidateQueries({ queryKey: ["token-usage-summary"] });
       const ok = data.results?.filter((r: any) => r.status === "optimized").length ?? 0;
       const fail = data.results?.filter((r: any) => r.status === "error").length ?? 0;
       if (fail > 0) {
