@@ -85,10 +85,15 @@ serve(async (req) => {
 
     // Fetch user's chosen AI model from settings
     const MODEL_MAP: Record<string, string> = {
-      "gemini-flash": "google/gemini-3-flash-preview",
-      "gemini-pro": "google/gemini-2.5-pro",
-      "gpt5": "openai/gpt-5",
-      "gpt5-mini": "openai/gpt-5-mini",
+      "gemini-3-flash": "google/gemini-3-flash-preview",
+      "gemini-3-pro": "google/gemini-3-pro-preview",
+      "gemini-2.5-pro": "google/gemini-2.5-pro",
+      "gemini-2.5-flash": "google/gemini-2.5-flash",
+      "gemini-2.5-flash-lite": "google/gemini-2.5-flash-lite",
+      "gpt-5.2": "openai/gpt-5.2",
+      "gpt-5": "openai/gpt-5",
+      "gpt-5-mini": "openai/gpt-5-mini",
+      "gpt-5-nano": "openai/gpt-5-nano",
     };
     const { data: modelSetting } = await supabase
       .from("settings")
@@ -97,8 +102,8 @@ serve(async (req) => {
       .maybeSingle();
     // Use override if provided, otherwise fall back to settings
     const chosenModel = modelOverride 
-      ? (MODEL_MAP[modelOverride] || MODEL_MAP["gemini-flash"])
-      : (MODEL_MAP[modelSetting?.value || "gemini-flash"] || "google/gemini-3-flash-preview");
+      ? (MODEL_MAP[modelOverride] || MODEL_MAP["gemini-3-flash"])
+      : (MODEL_MAP[modelSetting?.value || "gemini-3-flash"] || "google/gemini-3-flash-preview");
     console.log(`Using AI model: ${chosenModel} (override: ${modelOverride || "none"}, setting: ${modelSetting?.value || "default"})`);
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
