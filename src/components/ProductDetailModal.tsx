@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle } from "lucide-react";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
@@ -14,6 +14,7 @@ import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
+import { useProductOptimizationLogs } from "@/hooks/useOptimizationLogs";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -27,6 +28,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
   const updateStatus = useUpdateProductStatus();
   const publishWoo = usePublishWooCommerce();
   const { data: versions } = useProductVersions(product?.id ?? null);
+  const { data: optLogs, isLoading: logsLoading } = useProductOptimizationLogs(product?.id ?? null);
   const restoreVersion = useRestoreVersion();
 
   // Editable fields state
@@ -103,6 +105,9 @@ export function ProductDetailModal({ product, onClose }: Props) {
             </TabsTrigger>
             <TabsTrigger value="historico">
               <History className="w-3.5 h-3.5 mr-1" /> Versões
+            </TabsTrigger>
+            <TabsTrigger value="ai-log">
+              <Brain className="w-3.5 h-3.5 mr-1" /> Log IA
             </TabsTrigger>
             <TabsTrigger value="brutos">Dados Brutos</TabsTrigger>
           </TabsList>
@@ -325,6 +330,96 @@ export function ProductDetailModal({ product, onClose }: Props) {
                   </Card>
                 ))}
               </div>
+            )}
+          </TabsContent>
+
+          {/* AI LOG TAB */}
+          <TabsContent value="ai-log" className="mt-4 space-y-4">
+            {logsLoading ? (
+              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+            ) : !optLogs || optLogs.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Brain className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                <p>Nenhum log de otimização disponível.</p>
+                <p className="text-xs mt-1">Os logs são guardados automaticamente a cada otimização.</p>
+              </div>
+            ) : (
+              optLogs.map((log) => (
+                <Card key={log.id}>
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="font-mono text-xs">{log.model}</Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {format(new Date(log.created_at), "dd MMM yyyy HH:mm", { locale: pt })}
+                      </span>
+                    </div>
+
+                    {/* Token usage */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="text-center p-2 rounded-lg bg-muted/50">
+                        <p className="text-lg font-bold text-primary">{log.prompt_tokens.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Prompt tokens</p>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-muted/50">
+                        <p className="text-lg font-bold text-primary">{log.completion_tokens.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Completion tokens</p>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-muted/50">
+                        <p className="text-lg font-bold text-primary">{log.total_tokens.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">Total tokens</p>
+                      </div>
+                    </div>
+
+                    {/* Sources used */}
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Fontes de contexto</h5>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={log.had_knowledge ? "default" : "secondary"} className="text-xs">
+                          <BookOpen className="w-3 h-3 mr-1" /> Conhecimento {log.had_knowledge ? "✓" : "✗"}
+                        </Badge>
+                        <Badge variant={log.had_supplier ? "default" : "secondary"} className="text-xs">
+                          <Globe className="w-3 h-3 mr-1" /> Fornecedor {log.had_supplier ? "✓" : "✗"}
+                        </Badge>
+                        <Badge variant={log.had_catalog ? "default" : "secondary"} className="text-xs">
+                          <Database className="w-3 h-3 mr-1" /> Catálogo {log.had_catalog ? "✓" : "✗"}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Knowledge sources detail */}
+                    {Array.isArray(log.knowledge_sources) && log.knowledge_sources.length > 0 && (
+                      <div>
+                        <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Ficheiros de conhecimento utilizados</h5>
+                        <div className="space-y-1">
+                          {log.knowledge_sources.map((s, i) => (
+                            <div key={i} className="flex items-center justify-between text-xs p-1.5 rounded bg-muted/30">
+                              <span>{s.source}</span>
+                              <Badge variant="outline" className="text-[10px]">{s.chunks} chunks</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Supplier URL */}
+                    {log.supplier_url && (
+                      <div className="text-xs">
+                        <span className="text-muted-foreground">Fornecedor: </span>
+                        <a href={log.supplier_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
+                          {log.supplier_name || "Link"} <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Fields */}
+                    <div className="flex flex-wrap gap-1">
+                      {log.fields_optimized.map((f) => (
+                        <Badge key={f} variant="outline" className="text-[10px]">{f}</Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
             )}
           </TabsContent>
 

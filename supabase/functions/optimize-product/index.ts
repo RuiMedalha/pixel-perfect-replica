@@ -387,6 +387,12 @@ IMPORTANTE:
           continue;
         }
 
+        // Capture token usage from AI response
+        const usage = aiData.usage || {};
+        const promptTokens = usage.prompt_tokens || 0;
+        const completionTokens = usage.completion_tokens || 0;
+        const totalTokens = usage.total_tokens || (promptTokens + completionTokens);
+
         const optimized = JSON.parse(toolCall.function.arguments);
 
         // === VALIDATE upsell/crosssell SKUs against real DB ===
@@ -467,6 +473,53 @@ IMPORTANTE:
             had_supplier_context: !!supplierContext, 
             had_knowledge_context: !!knowledgeContext,
           },
+        });
+
+        // Log optimization details (tokens, sources, etc.)
+        // Build knowledge sources list
+        let knowledgeSources: Array<{ source: string; chunks: number }> = [];
+        if (searchQuery) {
+          const { data: logChunks } = await supabase.rpc("search_knowledge", {
+            _query: searchQuery,
+            _limit: 8,
+          });
+          if (logChunks && logChunks.length > 0) {
+            const sourceMap = new Map<string, number>();
+            logChunks.forEach((c: any) => {
+              const name = c.source_name || "Desconhecido";
+              sourceMap.set(name, (sourceMap.get(name) || 0) + 1);
+            });
+            knowledgeSources = Array.from(sourceMap.entries()).map(([source, chunks]) => ({ source, chunks }));
+          }
+        }
+
+        const matchedSupplierForLog = supplierMappings.find((s) => 
+          product.sku?.toUpperCase().startsWith(s.prefix.toUpperCase())
+        );
+        let logSupplierUrl: string | null = null;
+        if (matchedSupplierForLog && product.sku) {
+          const prefixLen = matchedSupplierForLog.prefix.length;
+          const cleanSku = product.sku.substring(prefixLen);
+          logSupplierUrl = matchedSupplierForLog.url.endsWith("=") || matchedSupplierForLog.url.endsWith("/")
+            ? `${matchedSupplierForLog.url}${encodeURIComponent(cleanSku)}`
+            : `${matchedSupplierForLog.url}/${encodeURIComponent(cleanSku)}`;
+        }
+
+        await supabase.from("optimization_logs").insert({
+          product_id: product.id,
+          user_id: userId,
+          model: "google/gemini-3-flash-preview",
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+          knowledge_sources: knowledgeSources,
+          supplier_name: matchedForLog?.name || matchedForLog?.prefix || null,
+          supplier_url: logSupplierUrl,
+          had_knowledge: !!knowledgeContext,
+          had_supplier: !!supplierContext,
+          had_catalog: !!catalogContext,
+          fields_optimized: fields,
+          prompt_length: finalPrompt.length,
         });
       } catch (productError) {
         console.error(`Error optimizing product ${product.id}:`, productError);

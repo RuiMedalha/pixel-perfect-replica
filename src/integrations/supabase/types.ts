@@ -123,6 +123,71 @@ export type Database = {
           },
         ]
       }
+      optimization_logs: {
+        Row: {
+          completion_tokens: number | null
+          created_at: string
+          fields_optimized: string[] | null
+          had_catalog: boolean | null
+          had_knowledge: boolean | null
+          had_supplier: boolean | null
+          id: string
+          knowledge_sources: Json | null
+          model: string
+          product_id: string
+          prompt_length: number | null
+          prompt_tokens: number | null
+          supplier_name: string | null
+          supplier_url: string | null
+          total_tokens: number | null
+          user_id: string
+        }
+        Insert: {
+          completion_tokens?: number | null
+          created_at?: string
+          fields_optimized?: string[] | null
+          had_catalog?: boolean | null
+          had_knowledge?: boolean | null
+          had_supplier?: boolean | null
+          id?: string
+          knowledge_sources?: Json | null
+          model?: string
+          product_id: string
+          prompt_length?: number | null
+          prompt_tokens?: number | null
+          supplier_name?: string | null
+          supplier_url?: string | null
+          total_tokens?: number | null
+          user_id: string
+        }
+        Update: {
+          completion_tokens?: number | null
+          created_at?: string
+          fields_optimized?: string[] | null
+          had_catalog?: boolean | null
+          had_knowledge?: boolean | null
+          had_supplier?: boolean | null
+          id?: string
+          knowledge_sources?: Json | null
+          model?: string
+          product_id?: string
+          prompt_length?: number | null
+          prompt_tokens?: number | null
+          supplier_name?: string | null
+          supplier_url?: string | null
+          total_tokens?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "optimization_logs_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_versions: {
         Row: {
           created_at: string
