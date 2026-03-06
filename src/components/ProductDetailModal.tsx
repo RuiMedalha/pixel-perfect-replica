@@ -222,13 +222,23 @@ export function ProductDetailModal({ product, onClose }: Props) {
 
           {/* UPSELLS / CROSS-SELLS TAB */}
           <TabsContent value="relacionados" className="mt-4 space-y-6">
+            {upsells.length === 0 && crosssells.length === 0 && (
+              <Alert className="border-yellow-500/50 bg-yellow-500/10">
+                <AlertTriangle className="h-4 w-4 text-yellow-600" />
+                <AlertDescription className="text-sm text-yellow-700 dark:text-yellow-400">
+                  {product.status === "optimized" || product.status === "published"
+                    ? "A otimização não encontrou produtos válidos no catálogo para sugerir como upsell ou cross-sell. Verifique se existem produtos suficientes com SKUs definidos."
+                    : "Nenhuma sugestão disponível. Otimize o produto com os campos \"Upsells\" e \"Cross-sells\" selecionados."}
+                </AlertDescription>
+              </Alert>
+            )}
             <div>
               <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
                 <ArrowUpRight className="w-4 h-4 text-primary" /> Upsells
                 <span className="text-xs text-muted-foreground font-normal">(produtos superiores sugeridos)</span>
               </h4>
               {upsells.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum upsell sugerido. Otimize com o campo "Upsells" selecionado.</p>
+                <p className="text-sm text-muted-foreground">Nenhum upsell sugerido.</p>
               ) : (
                 <div className="space-y-2">
                   {upsells.map((item: { sku: string; title: string }, idx: number) => (
@@ -246,7 +256,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 <span className="text-xs text-muted-foreground font-normal">(produtos complementares sugeridos)</span>
               </h4>
               {crosssells.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum cross-sell sugerido. Otimize com o campo "Cross-sells" selecionado.</p>
+                <p className="text-sm text-muted-foreground">Nenhum cross-sell sugerido.</p>
               ) : (
                 <div className="space-y-2">
                   {crosssells.map((item: { sku: string; title: string }, idx: number) => (
