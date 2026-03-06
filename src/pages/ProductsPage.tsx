@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, type OptimizationField } from "@/hooks/useOptimizeProducts";
@@ -17,6 +18,7 @@ import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
+import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/hooks/useVariableProducts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
