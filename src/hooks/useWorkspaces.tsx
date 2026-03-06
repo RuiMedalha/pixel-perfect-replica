@@ -9,6 +9,7 @@ export interface Workspace {
   user_id: string;
   name: string;
   description: string | null;
+  has_variable_products: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +21,7 @@ interface WorkspaceContextType {
   isLoading: boolean;
   createWorkspace: (name: string, description?: string) => void;
   updateWorkspace: (id: string, name: string, description?: string) => void;
+  toggleVariableProducts: (id: string, value: boolean) => void;
   deleteWorkspace: (id: string) => void;
   isCreating: boolean;
 }
@@ -111,10 +113,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, name, description }: { id: string; name: string; description?: string }) => {
+    mutationFn: async ({ id, name, description, has_variable_products }: { id: string; name: string; description?: string; has_variable_products?: boolean }) => {
+      const updateData: any = { name, description: description || null };
+      if (has_variable_products !== undefined) updateData.has_variable_products = has_variable_products;
       const { error } = await supabase
         .from("workspaces")
-        .update({ name, description: description || null })
+        .update(updateData)
         .eq("id", id);
       if (error) throw error;
     },
@@ -151,6 +155,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         isLoading,
         createWorkspace: (name, description) => createMutation.mutate({ name, description }),
         updateWorkspace: (id, name, description) => updateMutation.mutate({ id, name, description }),
+        toggleVariableProducts: (id: string, value: boolean) => {
+          const ws = workspaces.find((w) => w.id === id);
+          if (ws) updateMutation.mutate({ id, name: ws.name, description: ws.description || undefined, has_variable_products: value });
+        },
         deleteWorkspace: (id) => deleteMutation.mutate(id),
         isCreating: createMutation.isPending,
       }}
