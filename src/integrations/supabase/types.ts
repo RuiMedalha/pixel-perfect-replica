@@ -259,11 +259,13 @@ export type Database = {
       }
       products: {
         Row: {
+          attributes: Json | null
           category: string | null
           created_at: string
           crosssell_skus: Json | null
           faq: Json | null
           id: string
+          image_alt_texts: Json | null
           image_urls: string[] | null
           meta_description: string | null
           meta_title: string | null
@@ -274,6 +276,8 @@ export type Database = {
           original_description: string | null
           original_price: number | null
           original_title: string | null
+          parent_product_id: string | null
+          product_type: string
           seo_slug: string | null
           short_description: string | null
           sku: string | null
@@ -289,11 +293,13 @@ export type Database = {
           workspace_id: string | null
         }
         Insert: {
+          attributes?: Json | null
           category?: string | null
           created_at?: string
           crosssell_skus?: Json | null
           faq?: Json | null
           id?: string
+          image_alt_texts?: Json | null
           image_urls?: string[] | null
           meta_description?: string | null
           meta_title?: string | null
@@ -304,6 +310,8 @@ export type Database = {
           original_description?: string | null
           original_price?: number | null
           original_title?: string | null
+          parent_product_id?: string | null
+          product_type?: string
           seo_slug?: string | null
           short_description?: string | null
           sku?: string | null
@@ -319,11 +327,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Update: {
+          attributes?: Json | null
           category?: string | null
           created_at?: string
           crosssell_skus?: Json | null
           faq?: Json | null
           id?: string
+          image_alt_texts?: Json | null
           image_urls?: string[] | null
           meta_description?: string | null
           meta_title?: string | null
@@ -334,6 +344,8 @@ export type Database = {
           original_description?: string | null
           original_price?: number | null
           original_title?: string | null
+          parent_product_id?: string | null
+          product_type?: string
           seo_slug?: string | null
           short_description?: string | null
           sku?: string | null
@@ -349,6 +361,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "products_parent_product_id_fkey"
+            columns: ["parent_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -490,6 +509,7 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          has_variable_products: boolean
           id: string
           name: string
           updated_at: string
@@ -498,6 +518,7 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          has_variable_products?: boolean
           id?: string
           name: string
           updated_at?: string
@@ -506,6 +527,7 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          has_variable_products?: boolean
           id?: string
           name?: string
           updated_at?: string
