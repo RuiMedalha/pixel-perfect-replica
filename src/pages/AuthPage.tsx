@@ -44,7 +44,8 @@ const AuthPage = () => {
     if (error) {
       toast.error(error.message);
     } else if (view === "register") {
-      toast.success("Conta criada com sucesso!");
+      toast.success("Conta criada! O seu pedido de acesso foi enviado ao administrador.");
+      setView("login");
     }
   };
 

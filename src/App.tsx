@@ -5,10 +5,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppLayout } from "@/components/AppLayout";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { useCurrentUserProfile } from "@/hooks/useUserManagement";
+import { PendingApproval } from "@/components/PendingApproval";
 import Index from "./pages/Index";
 import UploadPage from "./pages/UploadPage";
 import ProductsPage from "./pages/ProductsPage";
 import SettingsPage from "./pages/SettingsPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -18,8 +21,9 @@ const queryClient = new QueryClient();
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
+  const { data: profile, isLoading: profileLoading } = useCurrentUserProfile();
 
-  if (loading) {
+  if (loading || profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -29,6 +33,11 @@ function ProtectedRoutes() {
 
   if (!user) return <Navigate to="/login" replace />;
 
+  // Check if user is approved
+  if (profile && !profile.isApproved) {
+    return <PendingApproval />;
+  }
+
   return (
     <Routes>
       <Route element={<AppLayout />}>
@@ -36,6 +45,9 @@ function ProtectedRoutes() {
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/produtos" element={<ProductsPage />} />
         <Route path="/configuracoes" element={<SettingsPage />} />
+        {profile?.isAdmin && (
+          <Route path="/admin/utilizadores" element={<AdminUsersPage />} />
+        )}
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

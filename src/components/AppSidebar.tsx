@@ -1,8 +1,9 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Upload, Package, Settings, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { LayoutDashboard, Upload, Package, Settings, ChevronLeft, ChevronRight, LogOut, Users } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useCurrentUserProfile } from "@/hooks/useUserManagement";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -11,10 +12,17 @@ const navItems = [
   { to: "/configuracoes", icon: Settings, label: "Configurações" },
 ];
 
+const adminItems = [
+  { to: "/admin/utilizadores", icon: Users, label: "Utilizadores" },
+];
+
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { signOut, user } = useAuth();
+  const { data: profile } = useCurrentUserProfile();
+
+  const allItems = [...navItems, ...(profile?.isAdmin ? adminItems : [])];
 
   return (
     <aside
@@ -43,7 +51,7 @@ export function AppSidebar() {
       </div>
 
       <nav className="flex-1 py-4 px-2 space-y-1">
-        {navItems.map((item) => {
+        {allItems.map((item) => {
           const isActive = location.pathname === item.to;
           return (
             <NavLink
