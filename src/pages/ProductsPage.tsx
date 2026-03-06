@@ -474,6 +474,22 @@ const ProductsPage = () => {
               Limpar
             </Button>
           </div>
+          {/* Model Override */}
+          <div className="space-y-1.5 mt-3 pt-3 border-t">
+            <Label className="text-xs font-medium">Modelo de IA</Label>
+            <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Usar modelo padrão (Settings)</SelectItem>
+                {AI_MODELS.map((m) => (
+                  <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground">Escolha um modelo diferente para esta otimização ou use o configurado nas Settings.</p>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
             <Button onClick={handleConfirmOptimize} disabled={selectedFields.size === 0 || optimizeProducts.isPending}>
