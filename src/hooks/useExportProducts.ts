@@ -19,6 +19,7 @@ const EXPORT_COLUMNS = [
   { key: "meta_title", header: "Meta Title SEO" },
   { key: "meta_description", header: "Meta Description SEO" },
   { key: "seo_slug", header: "SEO Slug" },
+  { key: "faq", header: "FAQ" },
   { key: "image_urls", header: "URLs Imagens" },
   { key: "status", header: "Estado" },
 ];
