@@ -38,7 +38,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub as string;
 
-    const { filePath, fileName, columnMapping, sheetName, parseKnowledge } = await req.json();
+    const { filePath, fileName, columnMapping, sheetName, parseKnowledge, workspaceId } = await req.json();
     if (!filePath || !fileName) {
       return new Response(JSON.stringify({ error: "filePath e fileName são obrigatórios" }), {
         status: 400,
