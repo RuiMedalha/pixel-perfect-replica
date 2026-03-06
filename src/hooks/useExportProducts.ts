@@ -34,7 +34,9 @@ export function exportProductsToExcel(products: Product[], fileName = "produtos-
     const row: Record<string, unknown> = {};
     for (const col of EXPORT_COLUMNS) {
       const val = (p as any)[col.key];
-      if (Array.isArray(val)) {
+      if (col.key === "faq" && Array.isArray(val)) {
+        row[col.header] = val.map((f: any) => `Q: ${f.question} A: ${f.answer}`).join(" | ");
+      } else if (Array.isArray(val)) {
         row[col.header] = val.join(", ");
       } else {
         row[col.header] = val ?? "";
