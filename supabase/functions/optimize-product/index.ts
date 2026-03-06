@@ -522,6 +522,7 @@ IMPORTANTE:
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
         if (optimized.image_alt_texts) updateData.image_alt_texts = optimized.image_alt_texts;
 
+        const { error: updateError } = await supabase
           .from("products")
           .update(updateData)
           .eq("id", product.id);
