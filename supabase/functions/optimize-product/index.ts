@@ -83,6 +83,21 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
+    // Fetch user's chosen AI model from settings
+    const MODEL_MAP: Record<string, string> = {
+      "gemini-flash": "google/gemini-3-flash-preview",
+      "gemini-pro": "google/gemini-2.5-pro",
+      "gpt5": "openai/gpt-5",
+      "gpt5-mini": "openai/gpt-5-mini",
+    };
+    const { data: modelSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "default_model")
+      .maybeSingle();
+    const chosenModel = MODEL_MAP[modelSetting?.value || "gemini-flash"] || "google/gemini-3-flash-preview";
+    console.log(`Using AI model: ${chosenModel} (setting: ${modelSetting?.value || "default"})`);
+
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
 
     // Fetch supplier mappings from settings
@@ -329,7 +344,7 @@ IMPORTANTE:
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-3-flash-preview",
+            model: chosenModel,
             messages: [
               {
                 role: "system",
@@ -508,7 +523,7 @@ IMPORTANTE:
         await supabase.from("optimization_logs").insert({
           product_id: product.id,
           user_id: userId,
-          model: "google/gemini-3-flash-preview",
+          model: chosenModel,
           prompt_tokens: promptTokens,
           completion_tokens: completionTokens,
           total_tokens: totalTokens,
