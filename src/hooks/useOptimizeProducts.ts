@@ -32,9 +32,9 @@ export function useOptimizeProducts() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ productIds, fieldsToOptimize, modelOverride }: { productIds: string[]; fieldsToOptimize?: OptimizationField[]; modelOverride?: string }) => {
+    mutationFn: async ({ productIds, fieldsToOptimize, modelOverride, workspaceId }: { productIds: string[]; fieldsToOptimize?: OptimizationField[]; modelOverride?: string; workspaceId?: string }) => {
       const { data, error } = await supabase.functions.invoke("optimize-product", {
-        body: { productIds, fieldsToOptimize, modelOverride },
+        body: { productIds, fieldsToOptimize, modelOverride, workspaceId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

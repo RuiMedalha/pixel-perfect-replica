@@ -19,6 +19,7 @@ import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
