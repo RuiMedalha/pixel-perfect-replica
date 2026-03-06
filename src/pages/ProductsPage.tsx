@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, type OptimizationField } from "@/hooks/useOptimizeProducts";
@@ -17,6 +18,7 @@ import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
+import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/hooks/useVariableProducts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
@@ -43,12 +45,14 @@ const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
 
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
-  const { activeWorkspace } = useWorkspaceContext();
+  const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const publishWoo = usePublishWooCommerce();
   const deleteProducts = useDeleteProducts();
   const updateProduct = useUpdateProduct();
+  const detectVariations = useDetectVariations();
+  const applyVariations = useApplyVariations();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -57,6 +61,9 @@ const ProductsPage = () => {
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
+  const [showVariations, setShowVariations] = useState(false);
+  const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -204,13 +211,46 @@ const ProductsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Painel de Produtos</h1>
           <p className="text-muted-foreground mt-1">{products?.length ?? 0} produtos no total</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
+          {/* Variable Products Toggle */}
+          {activeWorkspace && (
+            <div className="flex items-center gap-2 mr-2 px-3 py-1.5 rounded-lg border bg-muted/30">
+              <GitBranch className="w-4 h-4 text-muted-foreground" />
+              <Label className="text-xs cursor-pointer" htmlFor="var-toggle">Variáveis</Label>
+              <Switch
+                id="var-toggle"
+                checked={activeWorkspace.has_variable_products}
+                onCheckedChange={(checked) => toggleVariableProducts(activeWorkspace.id, checked)}
+              />
+            </div>
+          )}
           <Button size="sm" variant="outline" onClick={() => {
             const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
             exportProductsToExcel(selectedProducts);
           }}>
             <Download className="w-4 h-4 mr-1" /> Exportar Excel
           </Button>
+          {activeWorkspace?.has_variable_products && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                const result = await detectVariations.mutateAsync({
+                  workspaceId: activeWorkspace.id,
+                  productIds: selected.size > 0 ? Array.from(selected) : undefined,
+                });
+                if (result.groups.length > 0) {
+                  setDetectedGroups(result.groups);
+                  setSelectedGroups(new Set(result.groups.map((_, i) => i)));
+                  setShowVariations(true);
+                }
+              }}
+              disabled={detectVariations.isPending}
+            >
+              {detectVariations.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Layers className="w-4 h-4 mr-1" />}
+              Detetar Variações{selected.size > 0 ? ` (${selected.size})` : ""}
+            </Button>
+          )}
           {selected.size > 0 && (
             <>
               <Button size="sm" onClick={() => bulkAction("optimized")}>
@@ -419,10 +459,17 @@ const ProductsPage = () => {
                       </td>
 
                       <td className="p-3">
-                        <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
-                          {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
-                          {statusLabels[product.status]}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {(product as any).product_type && (product as any).product_type !== "simple" && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {(product as any).product_type === "variable" ? "Variável" : "Variação"}
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
+                            {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
+                            {statusLabels[product.status]}
+                          </Badge>
+                        </div>
                       </td>
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
@@ -498,6 +545,76 @@ const ProductsPage = () => {
             <Button onClick={handleConfirmOptimize} disabled={selectedFields.size === 0 || optimizeProducts.isPending}>
               <Sparkles className="w-4 h-4 mr-1" />
               Otimizar {pendingOptimizeIds.length} produto(s)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Variations Dialog */}
+      <Dialog open={showVariations} onOpenChange={setShowVariations}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Layers className="w-5 h-5" />
+              Variações Detetadas
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            A IA detetou {detectedGroups.length} grupo(s) de produtos variáveis. Selecione quais aplicar.
+          </p>
+          <div className="space-y-4 mt-2">
+            {detectedGroups.map((group, idx) => (
+              <Card key={idx} className={cn("transition-colors", selectedGroups.has(idx) && "border-primary")}>
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedGroups.has(idx)}
+                      onCheckedChange={() => {
+                        setSelectedGroups(prev => {
+                          const next = new Set(prev);
+                          next.has(idx) ? next.delete(idx) : next.add(idx);
+                          return next;
+                        });
+                      }}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 space-y-2">
+                      <div>
+                        <h4 className="font-medium text-sm">{group.parent_title}</h4>
+                        <Badge variant="outline" className="text-xs mt-1">
+                          Atributo: {group.attribute_name}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.variations.map((v, vi) => (
+                          <Badge key={vi} variant="secondary" className="text-xs">
+                            {v.attribute_value}
+                          </Badge>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {group.variations.length} variações → 1 produto pai + {group.variations.length - 1} variação(ões)
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVariations(false)}>Cancelar</Button>
+            <Button
+              onClick={async () => {
+                const groupsToApply = detectedGroups.filter((_, i) => selectedGroups.has(i));
+                await applyVariations.mutateAsync({ groups: groupsToApply });
+                setShowVariations(false);
+                setDetectedGroups([]);
+                setSelectedGroups(new Set());
+              }}
+              disabled={selectedGroups.size === 0 || applyVariations.isPending}
+            >
+              {applyVariations.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <GitBranch className="w-4 h-4 mr-1" />}
+              Aplicar {selectedGroups.size} grupo(s)
             </Button>
           </DialogFooter>
         </DialogContent>

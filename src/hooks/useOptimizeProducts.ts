@@ -5,7 +5,8 @@ import { toast } from "sonner";
 export type OptimizationField = 
   | "title" | "description" | "short_description"
   | "meta_title" | "meta_description" | "seo_slug"
-  | "tags" | "price" | "faq" | "upsells" | "crosssells";
+  | "tags" | "price" | "faq" | "upsells" | "crosssells"
+  | "image_alt";
 
 export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string }[] = [
   { key: "title", label: "Título" },
@@ -19,6 +20,7 @@ export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string }[] = 
   { key: "faq", label: "FAQ" },
   { key: "upsells", label: "Upsells" },
   { key: "crosssells", label: "Cross-sells" },
+  { key: "image_alt", label: "Alt Text Imagens" },
 ];
 
 export const AI_MODELS = [

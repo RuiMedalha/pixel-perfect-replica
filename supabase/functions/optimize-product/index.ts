@@ -322,6 +322,9 @@ serve(async (req) => {
         if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}). Estas FAQs devem ser DIFERENTES e complementares às que estão na descrição.");
         if (fields.includes("upsells")) fieldInstructions.push("10. Upsells: Sugere 2-4 produtos SUPERIORES do catálogo (mais caros, melhor qualidade, versão premium) que o cliente pode preferir. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
         if (fields.includes("crosssells")) fieldInstructions.push("11. Cross-sells: Sugere 2-4 produtos COMPLEMENTARES do catálogo (acessórios, produtos relacionados que combinam) que o cliente também pode querer. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
+        if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
+          fieldInstructions.push(`12. Alt text para ${product.image_urls.length} imagem(ns) do produto. Para cada imagem, gera um alt text descritivo e otimizado para SEO (máx 125 chars), relevante para o produto. Devolve array de objetos {url, alt_text} na mesma ordem das imagens.`);
+        }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
 
@@ -388,6 +391,18 @@ IMPORTANTE:
             },
           };
           requiredFields.push("crosssell_skus");
+        }
+        if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
+          toolProperties.image_alt_texts = {
+            type: "array",
+            description: "Alt text SEO para cada imagem do produto, na mesma ordem",
+            items: {
+              type: "object",
+              properties: { url: { type: "string" }, alt_text: { type: "string" } },
+              required: ["url", "alt_text"],
+            },
+          };
+          requiredFields.push("image_alt_texts");
         }
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -505,6 +520,7 @@ IMPORTANTE:
         if (optimized.faq) updateData.faq = optimized.faq;
         if (optimized.upsell_skus) updateData.upsell_skus = optimized.upsell_skus;
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
+        if (optimized.image_alt_texts) updateData.image_alt_texts = optimized.image_alt_texts;
 
         const { error: updateError } = await supabase
           .from("products")
