@@ -63,7 +63,7 @@ const UploadPage = () => {
     setIsScraping(true);
     try {
       const { data, error } = await supabase.functions.invoke("scrape-supplier", {
-        body: { url: scrapeUrl.trim(), action: "scrape" },
+        body: { url: scrapeUrl.trim(), action: "scrape", workspaceId: activeWorkspace?.id },
       });
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || "Erro ao extrair conteúdo");
