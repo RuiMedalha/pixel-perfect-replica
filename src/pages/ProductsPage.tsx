@@ -297,7 +297,7 @@ const ProductsPage = () => {
                 {batchProgress.done < batchProgress.total ? (
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 ) : (
-                  <Check className="w-4 h-4 text-green-500" />
+                  <Check className="w-4 h-4 text-primary" />
                 )}
                 <span className="text-sm font-medium">
                   {batchProgress.done < batchProgress.total
