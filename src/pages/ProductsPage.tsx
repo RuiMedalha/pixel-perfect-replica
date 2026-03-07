@@ -63,6 +63,7 @@ const ProductsPage = () => {
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
+  const [confirmReoptimize, setConfirmReoptimize] = useState(false);
   const [showVariations, setShowVariations] = useState(false);
   const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -119,6 +120,7 @@ const ProductsPage = () => {
 
   const handleOptimizeClick = (ids: string[]) => {
     setPendingOptimizeIds(ids);
+    setConfirmReoptimize(false);
     setShowFieldSelector(true);
   };
 
@@ -588,9 +590,37 @@ const ProductsPage = () => {
               Campos a Otimizar
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Selecione os campos que pretende otimizar com IA para {pendingOptimizeIds.length} produto(s).
-          </p>
+          {(() => {
+            const alreadyOptimized = (products ?? []).filter(
+              p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+            ).length;
+            const pendingCount = pendingOptimizeIds.length - alreadyOptimized;
+            return (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Selecione os campos que pretende otimizar com IA para {pendingOptimizeIds.length} produto(s).
+                </p>
+                {alreadyOptimized > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-warning/30 bg-warning/5">
+                    <span className="text-warning text-lg">⚠️</span>
+                    <div className="flex-1">
+                      <p className="text-sm text-foreground">
+                        <strong>{alreadyOptimized}</strong> produto(s) já estão otimizados{pendingCount > 0 ? ` e ${pendingCount} pendente(s)` : ""}.
+                        Re-otimizar irá substituir os dados existentes.
+                      </p>
+                      <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                        <Checkbox
+                          checked={confirmReoptimize}
+                          onCheckedChange={(v) => setConfirmReoptimize(!!v)}
+                        />
+                        <span className="text-xs font-medium">Confirmo que pretendo re-otimizar</span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div className="grid grid-cols-2 gap-3 mt-2">
             {OPTIMIZATION_FIELDS.map((field) => (
               <label key={field.key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 cursor-pointer">
@@ -628,10 +658,20 @@ const ProductsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
-            <Button onClick={handleConfirmOptimize} disabled={selectedFields.size === 0 || optimizeProducts.isPending}>
-              <Sparkles className="w-4 h-4 mr-1" />
-              Otimizar {pendingOptimizeIds.length} produto(s)
-            </Button>
+            {(() => {
+              const hasAlreadyOptimized = (products ?? []).some(
+                p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+              );
+              return (
+                <Button
+                  onClick={handleConfirmOptimize}
+                  disabled={selectedFields.size === 0 || optimizeProducts.isPending || (hasAlreadyOptimized && !confirmReoptimize)}
+                >
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  Otimizar {pendingOptimizeIds.length} produto(s)
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
