@@ -63,6 +63,7 @@ const ProductsPage = () => {
   const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all"); // "all", "good", "medium", "weak"
   const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all"); // "all", "yes", "no"
   const [productTypeFilter, setProductTypeFilter] = useState<string>("all"); // "all", "simple", "variable", "variation"
+  const [phaseFilter, setPhaseFilter] = useState<string>("all"); // "all", "missing1", "missing2", "missing3", "complete", "none"
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -94,6 +95,13 @@ const ProductsPage = () => {
     new Set((products ?? []).map((p) => p.source_file).filter(Boolean) as string[])
   ).sort();
 
+  const getProductPhases = useCallback((p: Product) => {
+    const p1 = !!(p.optimized_title || p.optimized_description || p.optimized_short_description);
+    const p2 = !!(p.meta_title || p.meta_description || p.seo_slug || (p.faq && (Array.isArray(p.faq) ? (p.faq as any[]).length > 0 : true)));
+    const p3 = !!(p.optimized_price || p.upsell_skus || p.crosssell_skus);
+    return { p1, p2, p3 };
+  }, []);
+
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
       (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -120,7 +128,18 @@ const ProductsPage = () => {
     let matchesType = true;
     if (productTypeFilter !== "all") matchesType = (p.product_type ?? "simple") === productTypeFilter;
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType;
+    // Phase filter
+    let matchesPhase = true;
+    if (phaseFilter !== "all") {
+      const phases = getProductPhases(p);
+      if (phaseFilter === "missing1") matchesPhase = !phases.p1;
+      else if (phaseFilter === "missing2") matchesPhase = !phases.p2;
+      else if (phaseFilter === "missing3") matchesPhase = !phases.p3;
+      else if (phaseFilter === "complete") matchesPhase = phases.p1 && phases.p2 && phases.p3;
+      else if (phaseFilter === "none") matchesPhase = !phases.p1 && !phases.p2 && !phases.p3;
+    }
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase;
   });
 
   const toggleSelect = (id: string) => {
@@ -452,9 +471,9 @@ const ProductsPage = () => {
           >
             <Filter className="w-4 h-4 mr-1" />
             Filtros
-            {(seoScoreFilter !== "all" || hasKeywordFilter !== "all" || sourceFileFilter !== "all" || productTypeFilter !== "all") && (
+            {(seoScoreFilter !== "all" || hasKeywordFilter !== "all" || sourceFileFilter !== "all" || productTypeFilter !== "all" || phaseFilter !== "all") && (
               <Badge variant="default" className="ml-1.5 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
-                {[seoScoreFilter, hasKeywordFilter, sourceFileFilter, productTypeFilter].filter(f => f !== "all").length}
+                {[seoScoreFilter, hasKeywordFilter, sourceFileFilter, productTypeFilter, phaseFilter].filter(f => f !== "all").length}
               </Badge>
             )}
           </Button>
@@ -464,7 +483,7 @@ const ProductsPage = () => {
         {showAdvancedFilters && (
           <Card>
             <CardContent className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {/* SEO Score */}
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Score SEO</Label>
@@ -524,6 +543,23 @@ const ProductsPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Phase Filter */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Fases</Label>
+                  <Select value={phaseFilter} onValueChange={setPhaseFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="missing1">❌ Falta Fase 1</SelectItem>
+                      <SelectItem value="missing2">❌ Falta Fase 2</SelectItem>
+                      <SelectItem value="missing3">❌ Falta Fase 3</SelectItem>
+                      <SelectItem value="complete">✅ Todas completas</SelectItem>
+                      <SelectItem value="none">⚪ Nenhuma fase</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex justify-end mt-3">
                 <Button
@@ -534,6 +570,7 @@ const ProductsPage = () => {
                     setHasKeywordFilter("all");
                     setSourceFileFilter("all");
                     setProductTypeFilter("all");
+                    setPhaseFilter("all");
                   }}
                 >
                   Limpar filtros
