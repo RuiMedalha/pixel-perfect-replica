@@ -197,7 +197,7 @@ serve(async (req) => {
 
     const allProductIds: string[] = job.product_ids;
     const startTime = Date.now();
-    let currentIndex = startIndex;
+    let currentIndex = Math.max(requestedStartIndex ?? (job.processed_products || 0), 0);
     let totalProcessed = job.processed_products || 0;
     let totalFailed = job.failed_products || 0;
 
