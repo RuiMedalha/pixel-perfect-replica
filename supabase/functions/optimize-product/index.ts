@@ -91,13 +91,13 @@ serve(async (req) => {
 
     const customPrompt = promptSetting?.value || null;
 
-    // Fetch per-field custom prompts
+    // Fetch per-field custom prompts + description template
     const fieldPromptKeys = [
       "prompt_field_title", "prompt_field_description", "prompt_field_short_description",
       "prompt_field_meta_title", "prompt_field_meta_description", "prompt_field_seo_slug",
       "prompt_field_tags", "prompt_field_price", "prompt_field_faq",
       "prompt_field_upsells", "prompt_field_crosssells", "prompt_field_image_alt",
-      "prompt_field_category",
+      "prompt_field_category", "description_template",
     ];
     const { data: fieldPromptSettings } = await supabase
       .from("settings")
@@ -105,8 +105,13 @@ serve(async (req) => {
       .in("key", fieldPromptKeys);
     
     const fieldPrompts: Record<string, string> = {};
+    let descriptionTemplate: string | null = null;
     (fieldPromptSettings || []).forEach((s: any) => {
-      if (s.value) fieldPrompts[s.key] = s.value;
+      if (s.key === "description_template" && s.value) {
+        descriptionTemplate = s.value;
+      } else if (s.value) {
+        fieldPrompts[s.key] = s.value;
+      }
     });
 
     // Fetch existing categories for AI context
