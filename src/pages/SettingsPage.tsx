@@ -38,6 +38,7 @@ const SETTING_KEYS = {
   suppliers: "suppliers_json",
   optimization_prompt: "optimization_prompt",
   knowledge_urls: "knowledge_urls_json",
+  whatsapp_webhook: "whatsapp_webhook_url",
 };
 
 const DEFAULT_OPTIMIZATION_PROMPT = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
