@@ -9,11 +9,12 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, Rocket, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
+import { useOptimizationJob } from "@/hooks/useOptimizationJob";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
@@ -51,6 +52,7 @@ const ProductsPage = () => {
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
+  const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
   const publishWoo = usePublishWooCommerce();
   const deleteProducts = useDeleteProducts();
   const updateProduct = useUpdateProduct();
@@ -60,10 +62,10 @@ const ProductsPage = () => {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sourceFileFilter, setSourceFileFilter] = useState<string>("all");
-  const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all"); // "all", "good", "medium", "weak"
-  const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all"); // "all", "yes", "no"
-  const [productTypeFilter, setProductTypeFilter] = useState<string>("all"); // "all", "simple", "variable", "variation"
-  const [phaseFilter, setPhaseFilter] = useState<string>("all"); // "all", "missing1", "missing2", "missing3", "complete", "none"
+  const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all");
+  const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all");
+  const [productTypeFilter, setProductTypeFilter] = useState<string>("all");
+  const [phaseFilter, setPhaseFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -73,6 +75,7 @@ const ProductsPage = () => {
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
   const [confirmReoptimize, setConfirmReoptimize] = useState(false);
+  const [backgroundMode, setBackgroundMode] = useState(false);
   const [showVariations, setShowVariations] = useState(false);
   const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -84,6 +87,13 @@ const ProductsPage = () => {
   // Batch progress tracking
   const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
   const cancellationTokenRef = useRef<CancellationToken | null>(null);
+
+  // Auto-enable background mode for large selections
+  useEffect(() => {
+    if (pendingOptimizeIds.length >= 50) {
+      setBackgroundMode(true);
+    }
+  }, [pendingOptimizeIds.length]);
 
   // Extract unique categories for filter
   const uniqueCategories = Array.from(
@@ -177,6 +187,29 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
+    const phaseFields = OPTIMIZATION_PHASES
+      .filter(p => selectedPhases.has(p.phase))
+      .flatMap(p => p.fields);
+    const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
+
+    if (backgroundMode) {
+      // Background mode: create a job via the batch edge function
+      createJob({
+        productIds: pendingOptimizeIds,
+        selectedPhases: Array.from(selectedPhases),
+        fieldsToOptimize: fieldsToUse,
+        modelOverride: selectedModel !== "default" ? selectedModel : undefined,
+        workspaceId: activeWorkspace?.id,
+      });
+      setShowFieldSelector(false);
+      setPendingOptimizeIds([]);
+      setSelected(new Set());
+      setSelectedModel("default");
+      setBackgroundMode(false);
+      return;
+    }
+
+    // Foreground mode: existing behavior
     const nameMap: Record<string, string> = {};
     (products ?? []).forEach(p => {
       if (pendingOptimizeIds.includes(p.id)) {
@@ -186,12 +219,6 @@ const ProductsPage = () => {
 
     const token = new CancellationToken();
     cancellationTokenRef.current = token;
-
-    // Get fields from selected phases
-    const phaseFields = OPTIMIZATION_PHASES
-      .filter(p => selectedPhases.has(p.phase))
-      .flatMap(p => p.fields);
-    const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
 
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
@@ -212,6 +239,7 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
+    setBackgroundMode(false);
   };
 
   const togglePhase = (phase: number) => {
@@ -426,7 +454,67 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      {/* Filters */}
+      {/* Background Job Progress Bar */}
+      {activeJob && activeJob.status !== "completed" && activeJob.status !== "cancelled" && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Rocket className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">
+                  Background: {activeJob.current_product_name || "A processar..."}
+                </span>
+                <Badge variant="secondary" className="text-[10px]">5x paralelo</Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-mono text-muted-foreground">
+                  {activeJob.processed_products}/{activeJob.total_products}
+                </span>
+                {activeJob.failed_products > 0 && (
+                  <Badge variant="destructive" className="text-[10px]">
+                    {activeJob.failed_products} erros
+                  </Badge>
+                )}
+                <Button size="sm" variant="destructive" onClick={cancelJob} className="h-7 px-2 text-xs">
+                  <Ban className="w-3 h-3 mr-1" /> Cancelar
+                </Button>
+              </div>
+            </div>
+            <Progress value={activeJob.total_products > 0 ? (activeJob.processed_products / activeJob.total_products) * 100 : 0} className="h-2" />
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              Pode fechar o browser — o processamento continua em segundo plano.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Background Job Completed */}
+      {activeJob && (activeJob.status === "completed" || activeJob.status === "cancelled") && (
+        <Card className={cn(
+          "border-l-4",
+          activeJob.status === "completed" ? "border-l-primary" : "border-l-warning"
+        )}>
+          <CardContent className="p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {activeJob.status === "completed" ? (
+                <Check className="w-4 h-4 text-primary" />
+              ) : (
+                <Ban className="w-4 h-4 text-warning" />
+              )}
+              <span className="text-sm">
+                {activeJob.status === "completed"
+                  ? `Job concluído: ${activeJob.processed_products - activeJob.failed_products} otimizados, ${activeJob.failed_products} erros`
+                  : `Job cancelado: ${activeJob.processed_products} de ${activeJob.total_products} processados`
+                }
+              </span>
+            </div>
+            <Button size="sm" variant="ghost" onClick={dismissJob} className="h-7 px-2 text-xs">
+              <XCircle className="w-3 h-3 mr-1" /> Fechar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="space-y-3">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -914,6 +1002,25 @@ const ProductsPage = () => {
             </Select>
             <p className="text-[10px] text-muted-foreground">Escolha um modelo diferente para esta otimização ou use o configurado nas Settings.</p>
           </div>
+          {/* Background Mode Toggle */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t p-3 rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Rocket className="w-4 h-4 text-primary" />
+              <div>
+                <Label className="text-xs font-medium cursor-pointer" htmlFor="bg-mode">
+                  Modo Background {pendingOptimizeIds.length >= 50 && <Badge variant="secondary" className="text-[10px] ml-1">Recomendado</Badge>}
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Processa em segundo plano com 5x paralelismo. Pode fechar o browser.
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="bg-mode"
+              checked={backgroundMode}
+              onCheckedChange={setBackgroundMode}
+            />
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
             {(() => {
@@ -923,10 +1030,14 @@ const ProductsPage = () => {
               return (
                 <Button
                   onClick={handleConfirmOptimize}
-                  disabled={selectedFields.size === 0 || optimizeProducts.isPending || (hasAlreadyOptimized && !confirmReoptimize)}
+                  disabled={selectedFields.size === 0 || optimizeProducts.isPending || isCreatingJob || (hasAlreadyOptimized && !confirmReoptimize)}
                 >
-                  <Sparkles className="w-4 h-4 mr-1" />
-                  Otimizar {pendingOptimizeIds.length} produto(s)
+                  {backgroundMode ? (
+                    <Rocket className="w-4 h-4 mr-1" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 mr-1" />
+                  )}
+                  {backgroundMode ? "Lançar em Background" : "Otimizar"} {pendingOptimizeIds.length} produto(s)
                 </Button>
               );
             })()}

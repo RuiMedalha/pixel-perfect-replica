@@ -199,6 +199,80 @@ export type Database = {
           },
         ]
       }
+      optimization_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          current_phase: number | null
+          current_product_name: string | null
+          error_message: string | null
+          failed_products: number
+          fields_to_optimize: string[] | null
+          id: string
+          model_override: string | null
+          processed_products: number
+          product_ids: string[]
+          results: Json | null
+          selected_phases: number[] | null
+          started_at: string | null
+          status: string
+          total_products: number
+          updated_at: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          current_phase?: number | null
+          current_product_name?: string | null
+          error_message?: string | null
+          failed_products?: number
+          fields_to_optimize?: string[] | null
+          id?: string
+          model_override?: string | null
+          processed_products?: number
+          product_ids?: string[]
+          results?: Json | null
+          selected_phases?: number[] | null
+          started_at?: string | null
+          status?: string
+          total_products?: number
+          updated_at?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          current_phase?: number | null
+          current_product_name?: string | null
+          error_message?: string | null
+          failed_products?: number
+          fields_to_optimize?: string[] | null
+          id?: string
+          model_override?: string | null
+          processed_products?: number
+          product_ids?: string[]
+          results?: Json | null
+          selected_phases?: number[] | null
+          started_at?: string | null
+          status?: string
+          total_products?: number
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "optimization_jobs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       optimization_logs: {
         Row: {
           chunks_used: number | null
