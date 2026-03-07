@@ -30,7 +30,8 @@ serve(async (req) => {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -64,7 +65,7 @@ serve(async (req) => {
         });
       }
     } else {
-      // Create new job
+      // Create new job and return immediately (background kickoff)
       const {
         productIds,
         selectedPhases,
@@ -97,12 +98,31 @@ serve(async (req) => {
           started_at: new Date().toISOString(),
           results: JSON.parse(JSON.stringify({ skipKnowledge, skipScraping, skipReranking })),
         })
-        .select()
+        .select("id")
         .single();
 
-      if (error) throw error;
-      job = data;
-      console.log(`🚀 Job ${job.id} created: ${productIds.length} products, concurrency ${CONCURRENCY}`);
+      if (error || !data?.id) throw error || new Error("Failed to create job");
+
+      console.log(`🚀 Job ${data.id} created: ${productIds.length} products, concurrency ${CONCURRENCY}`);
+
+      // Fire-and-forget worker invocation (same function in resume mode)
+      fetch(`${SUPABASE_URL}/functions/v1/optimize-batch`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ jobId: data.id, startIndex: 0 }),
+      }).catch((err) => console.error("Initial worker invoke failed:", err));
+
+      return new Response(
+        JSON.stringify({
+          status: "queued",
+          jobId: data.id,
+          totalProducts: productIds.length,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // === STRATEGY B: Pre-cache common data ONCE ===

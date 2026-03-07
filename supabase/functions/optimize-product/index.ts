@@ -27,7 +27,8 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const token = authHeader.replace("Bearer ", "");
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError || !userData?.user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
@@ -453,6 +454,8 @@ serve(async (req) => {
         // 1. HYBRID RAG: keyword + trigram + family search with reranking
         let knowledgeContext = "";
         const allChunks: any[] = [];
+        let topChunks: any[] = [];
+        let ragMatchTypeCounts: Record<string, number> = {};
 
         if (skipKnowledge) {
           console.log("⏭️ Knowledge base skipped (skipKnowledge=true)");
@@ -555,7 +558,7 @@ serve(async (req) => {
         allChunks.sort((a: any, b: any) => (b.rank || 0) - (a.rank || 0));
 
         // AI Reranking: if we have many chunks, use AI to pick the most relevant
-        let topChunks = allChunks.slice(0, 12);
+        topChunks = allChunks.slice(0, 12);
         if (topChunks.length > 5 && !skipReranking) {
           try {
             const rerankPrompt = `Tens ${topChunks.length} excertos de conhecimento e precisas escolher os 6 mais relevantes para otimizar este produto:
@@ -635,7 +638,7 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
         topChunks = topChunks.slice(0, 8);
 
         // Count match types for RAG metrics
-        const ragMatchTypeCounts: Record<string, number> = {};
+        ragMatchTypeCounts = {};
         if (topChunks.length > 0) {
           topChunks.forEach((c: any) => {
             const mt = c.match_type || "unknown";
