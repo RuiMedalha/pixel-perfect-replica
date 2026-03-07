@@ -749,6 +749,7 @@ const ProductsPage = () => {
                             ));
                           })()}
                         </div>
+                      </td>
                       <td className="p-3 text-center">
                         {(() => {
                           const { score } = calculateSeoScore(product);
