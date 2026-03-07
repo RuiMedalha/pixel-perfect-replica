@@ -43,6 +43,14 @@ export interface OptimizationProgress {
   currentProductName: string;
   estimatedSecondsLeft: number | null;
   startedAt: number;
+  cancelled?: boolean;
+}
+
+/** Simple cancellation token shared between caller and mutation loop */
+export class CancellationToken {
+  private _cancelled = false;
+  cancel() { this._cancelled = true; }
+  get isCancelled() { return this._cancelled; }
 }
 
 // Process ONE product at a time to avoid edge function timeouts
@@ -71,6 +79,7 @@ export function useOptimizeProducts() {
       workspaceId,
       onProgress,
       productNames,
+      cancellationToken,
     }: {
       productIds: string[];
       fieldsToOptimize?: OptimizationField[];
@@ -78,6 +87,7 @@ export function useOptimizeProducts() {
       workspaceId?: string;
       onProgress?: (progress: OptimizationProgress) => void;
       productNames?: Record<string, string>;
+      cancellationToken?: CancellationToken;
     }) => {
       const allResults: any[] = [];
       const total = productIds.length;
@@ -85,6 +95,21 @@ export function useOptimizeProducts() {
       const durations: number[] = [];
 
       for (let i = 0; i < total; i++) {
+        // Check cancellation before each product
+        if (cancellationToken?.isCancelled) {
+          onProgress?.({
+            total,
+            done: i,
+            currentIndex: i,
+            currentProductName: "",
+            estimatedSecondsLeft: 0,
+            startedAt,
+            cancelled: true,
+          });
+          toast.info(`Otimização cancelada. ${i} de ${total} produtos processados.`);
+          break;
+        }
+
         const productId = productIds[i];
         const productName = productNames?.[productId] || `Produto ${i + 1}`;
 

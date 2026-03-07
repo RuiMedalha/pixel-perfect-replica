@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,11 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
-import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, type OptimizationField } from "@/hooks/useOptimizeProducts";
+import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
@@ -73,6 +73,7 @@ const ProductsPage = () => {
 
   // Batch progress tracking
   const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
+  const cancellationTokenRef = useRef<CancellationToken | null>(null);
 
   // Extract unique categories for filter
   const uniqueCategories = Array.from(
@@ -130,15 +131,19 @@ const ProductsPage = () => {
       }
     });
 
+    const token = new CancellationToken();
+    cancellationTokenRef.current = token;
+
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
       workspaceId: activeWorkspace?.id,
       productNames: nameMap,
+      cancellationToken: token,
       onProgress: (progress) => {
         setBatchProgress(progress);
-        if (progress.done >= progress.total) {
+        if (progress.done >= progress.total || progress.cancelled) {
           setTimeout(() => setBatchProgress(null), 3000);
         }
       },
@@ -147,6 +152,10 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
+  };
+
+  const handleCancelOptimize = () => {
+    cancellationTokenRef.current?.cancel();
   };
 
   const toggleField = (field: OptimizationField) => {
@@ -294,19 +303,23 @@ const ProductsPage = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {batchProgress.done < batchProgress.total ? (
+                {batchProgress.cancelled ? (
+                  <Ban className="w-4 h-4 text-muted-foreground" />
+                ) : batchProgress.done < batchProgress.total ? (
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 ) : (
                   <Check className="w-4 h-4 text-primary" />
                 )}
                 <span className="text-sm font-medium">
-                  {batchProgress.done < batchProgress.total
-                    ? `A otimizar: ${batchProgress.currentProductName}`
-                    : "Otimização concluída!"}
+                  {batchProgress.cancelled
+                    ? `Cancelado — ${batchProgress.done} de ${batchProgress.total} processados`
+                    : batchProgress.done < batchProgress.total
+                      ? `A otimizar: ${batchProgress.currentProductName}`
+                      : "Otimização concluída!"}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                {batchProgress.estimatedSecondsLeft != null && batchProgress.done < batchProgress.total && (
+                {batchProgress.estimatedSecondsLeft != null && batchProgress.done < batchProgress.total && !batchProgress.cancelled && (
                   <span className="text-xs text-muted-foreground">
                     ~{batchProgress.estimatedSecondsLeft > 60
                       ? `${Math.round(batchProgress.estimatedSecondsLeft / 60)}min`
@@ -316,6 +329,11 @@ const ProductsPage = () => {
                 <span className="text-sm font-mono text-muted-foreground">
                   {batchProgress.done}/{batchProgress.total}
                 </span>
+                {batchProgress.done < batchProgress.total && !batchProgress.cancelled && (
+                  <Button size="sm" variant="destructive" onClick={handleCancelOptimize} className="h-7 px-2 text-xs">
+                    <Ban className="w-3 h-3 mr-1" /> Cancelar
+                  </Button>
+                )}
               </div>
             </div>
             <Progress value={(batchProgress.done / batchProgress.total) * 100} className="h-2" />
