@@ -274,14 +274,16 @@ serve(async (req) => {
       capacity: number | null;   // liters, baskets size, etc.
       dimensions: string | null; // "40x40", "60x40", etc.
       type: string | null;       // "fritadeira", "fogao", etc.
+      models: string[];          // compatible models mentioned: "ht", "lp", "gn 1/1", etc.
       brand: string | null;
       raw: any;
     }
 
     function extractAttrs(p: any): ProductAttrs {
       const title = (p.optimized_title || p.original_title || "").toLowerCase();
+      const desc = (p.original_description || "").toLowerCase();
       const cat = (p.category || "").toLowerCase();
-      const combined = `${title} ${cat}`;
+      const combined = `${title} ${cat} ${desc}`;
 
       // Extract line/series
       const lineMatch = combined.match(/linha\s*(\d+)/i) || combined.match(/line\s*(\d+)/i) || combined.match(/s[eé]rie\s*(\d+)/i);
@@ -306,17 +308,44 @@ serve(async (req) => {
       const dimMatch = combined.match(/(\d+)\s*x\s*(\d+)/i);
       const dimensions = dimMatch ? `${dimMatch[1]}x${dimMatch[2]}` : null;
 
-      // Extract product type (first meaningful word from category or title)
+      // Extract compatible models/series (HT, LP, GN 1/1, etc.)
+      const models: string[] = [];
+      const modelPatterns = [
+        /\b(ht)\b/gi, /\b(lp)\b/gi, /\b(hp)\b/gi, /\b(hr)\b/gi,
+        /\b(gn\s*\d+\/\d+)\b/gi, /\b(gn\d+\/\d+)\b/gi,
+        /\bp\/?\s*mod(?:elo)?s?\s*\.?\s*([a-z0-9\-]+(?:\s*[-\/,]\s*[a-z0-9\-]+)*)/gi,
+        /\bmod(?:elo)?s?\s*\.?\s*([a-z0-9\-]+(?:\s*[-\/,]\s*[a-z0-9\-]+)*)/gi,
+      ];
+      for (const pat of modelPatterns) {
+        let m;
+        while ((m = pat.exec(combined)) !== null) {
+          const vals = (m[1] || m[0]).split(/[\s,\/\-]+/).filter(v => v.length >= 2);
+          for (const v of vals) {
+            const norm = v.trim().toLowerCase().replace(/\s+/g, "");
+            if (norm && !models.includes(norm)) models.push(norm);
+          }
+        }
+      }
+
+      // Extract product type
       const typePatterns = [
+        "depurador", "descalcificador", "amaciador", "abrilhantador", "detergente", "bomba",
         "fritadeira", "fogao", "fogão", "forno", "bancada", "mesa", "armario", "armário",
-        "maquina", "máquina", "lava", "frigorifico", "frigorífico", "vitrine", "exaustor",
+        "maquina de lavar", "máquina de lavar", "lava-louça", "lava louça",
+        "maquina", "máquina", "lava",
+        "frigorifico", "frigorífico", "vitrine", "exaustor",
         "grelhador", "chapa", "basculante", "marmita", "batedeira", "cortador", "ralador",
         "microondas", "tostadeira", "torradeira", "salamandra", "abatedor", "ultracongelador",
         "dispensador", "doseador", "cesto", "tabuleiro", "prateleira", "escorredor",
+        "cuba", "torneira", "pia", "suporte", "carro",
       ];
       let type: string | null = null;
       for (const t of typePatterns) {
         if (combined.includes(t)) { type = t; break; }
+      }
+      // Normalize compound types
+      if (type === "maquina de lavar" || type === "máquina de lavar" || type === "lava-louça" || type === "lava louça") {
+        type = "lava";
       }
 
       return {
@@ -324,7 +353,7 @@ serve(async (req) => {
         title: p.optimized_title || p.original_title || "Sem título",
         category: p.category || "",
         price: parseFloat(p.original_price) || 0,
-        line, energy, capacity, dimensions, type, brand: null, raw: p,
+        line, energy, capacity, dimensions, type, models, brand: null, raw: p,
       };
     }
 
@@ -332,6 +361,24 @@ serve(async (req) => {
       if (candidate.sku === current.sku) return { score: -1, reasons: [] };
       let score = 0;
       const reasons: string[] = [];
+
+      // === MODEL COMPATIBILITY: if product mentions models, boost candidates that ARE those models or mention same models ===
+      const sharedModels = current.models.filter(m => candidate.models.includes(m));
+      if (sharedModels.length > 0) {
+        score += 20; reasons.push(`modelo compatível (${sharedModels.join(", ")})`);
+      }
+      // If current mentions a model and candidate title/type matches that model name
+      for (const model of current.models) {
+        if (candidate.title.toLowerCase().includes(model)) {
+          score += 25; reasons.push(`produto modelo ${model.toUpperCase()}`);
+        }
+      }
+      // If candidate mentions a model and current title matches it
+      for (const model of candidate.models) {
+        if (current.title.toLowerCase().includes(model)) {
+          score += 15; reasons.push(`compatível com ${model.toUpperCase()}`);
+        }
+      }
 
       if (mode === "upsell") {
         // Upsell: same type, same or higher line, bigger/better
@@ -352,6 +399,25 @@ serve(async (req) => {
             candidate.category.split(">")[0]?.trim() === current.category.split(">")[0]?.trim()) {
           score += 10; reasons.push("mesma categoria");
         }
+        // For accessories: upsell the machine they work with
+        const accessoryToMachine: Record<string, string[]> = {
+          "depurador": ["lava", "maquina", "máquina"],
+          "descalcificador": ["lava", "maquina", "máquina"],
+          "abrilhantador": ["lava", "maquina", "máquina"],
+          "detergente": ["lava", "maquina", "máquina"],
+          "bomba": ["lava", "maquina", "máquina"],
+          "cesto": ["lava", "maquina", "máquina", "fritadeira"],
+          "doseador": ["lava", "maquina", "máquina"],
+          "tabuleiro": ["forno"],
+          "prateleira": ["forno", "frigorifico", "frigorífico", "armario", "armário"],
+          "escorredor": ["lava", "fritadeira"],
+        };
+        if (current.type && candidate.type) {
+          const machines = accessoryToMachine[current.type];
+          if (machines && machines.includes(candidate.type)) {
+            score += 35; reasons.push(`máquina compatível (${candidate.type})`);
+          }
+        }
       } else {
         // Cross-sell: complementary products (different type, same line/family)
         if (current.type && candidate.type && candidate.type !== current.type) {
@@ -366,17 +432,28 @@ serve(async (req) => {
         if (current.energy && candidate.energy === current.energy) {
           score += 5; reasons.push("mesma energia");
         }
-        // Accessory patterns
+        // Accessory patterns - expanded with dishwasher ecosystem
         const accessoryPairs: Record<string, string[]> = {
-          "fritadeira": ["cesto", "doseador", "bancada", "escorredor"],
-          "fogao": ["forno", "bancada", "exaustor", "prateleira"],
-          "fogão": ["forno", "bancada", "exaustor", "prateleira"],
-          "forno": ["tabuleiro", "prateleira", "bancada", "exaustor"],
-          "maquina": ["cesto", "doseador", "mesa", "prateleira"],
-          "máquina": ["cesto", "doseador", "mesa", "prateleira"],
-          "lava": ["cesto", "doseador", "mesa", "escorredor"],
+          "fritadeira": ["cesto", "doseador", "bancada", "escorredor", "prateleira"],
+          "fogao": ["forno", "bancada", "exaustor", "prateleira", "salamandra"],
+          "fogão": ["forno", "bancada", "exaustor", "prateleira", "salamandra"],
+          "forno": ["tabuleiro", "prateleira", "bancada", "exaustor", "carro"],
+          "maquina": ["cesto", "doseador", "mesa", "prateleira", "depurador", "descalcificador", "abrilhantador", "detergente", "bomba", "escorredor"],
+          "máquina": ["cesto", "doseador", "mesa", "prateleira", "depurador", "descalcificador", "abrilhantador", "detergente", "bomba", "escorredor"],
+          "lava": ["cesto", "doseador", "mesa", "escorredor", "depurador", "descalcificador", "abrilhantador", "detergente", "bomba", "suporte", "prateleira"],
           "grelhador": ["bancada", "exaustor", "chapa"],
           "chapa": ["bancada", "exaustor", "grelhador"],
+          // Accessories should cross-sell with the machines AND with other accessories
+          "depurador": ["lava", "maquina", "máquina", "cesto", "abrilhantador", "detergente", "bomba", "doseador", "escorredor"],
+          "descalcificador": ["lava", "maquina", "máquina", "cesto", "abrilhantador", "detergente", "bomba"],
+          "abrilhantador": ["lava", "maquina", "máquina", "depurador", "detergente", "bomba", "doseador"],
+          "detergente": ["lava", "maquina", "máquina", "depurador", "abrilhantador", "bomba", "doseador"],
+          "bomba": ["lava", "maquina", "máquina", "depurador", "abrilhantador", "detergente", "doseador"],
+          "cesto": ["lava", "maquina", "máquina", "escorredor", "suporte", "prateleira"],
+          "doseador": ["lava", "maquina", "máquina", "depurador", "abrilhantador", "detergente"],
+          "tabuleiro": ["forno", "carro", "prateleira"],
+          "escorredor": ["lava", "maquina", "máquina", "cesto"],
+          "carro": ["forno", "tabuleiro"],
         };
         if (current.type && candidate.type) {
           const accessories = accessoryPairs[current.type];
@@ -388,6 +465,13 @@ serve(async (req) => {
         if (current.dimensions && candidate.dimensions === current.dimensions) {
           score += 10; reasons.push("mesmas dimensões");
         }
+        // Text-based model match in title: if current says "para modelos HT" and candidate has "HT" in title
+        const titleLower = candidate.title.toLowerCase();
+        for (const model of current.models) {
+          if (titleLower.includes(model) && current.type !== candidate.type) {
+            score += 20; reasons.push(`nome contém modelo ${model.toUpperCase()}`);
+          }
+        }
       }
 
       return { score, reasons };
@@ -398,9 +482,9 @@ serve(async (req) => {
     if (fields.includes("upsells") || fields.includes("crosssells")) {
       const { data: allProducts } = await supabase
         .from("products")
-        .select("sku, original_title, optimized_title, category, original_price")
+        .select("sku, original_title, optimized_title, original_description, category, original_price")
         .order("created_at", { ascending: false })
-        .limit(500);
+        .limit(1000);
 
       if (allProducts && allProducts.length > 1) {
         allProductAttrs = allProducts.filter((p: any) => p.sku).map(extractAttrs);
