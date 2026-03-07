@@ -91,13 +91,13 @@ serve(async (req) => {
 
     const customPrompt = promptSetting?.value || null;
 
-    // Fetch per-field custom prompts
+    // Fetch per-field custom prompts + description template
     const fieldPromptKeys = [
       "prompt_field_title", "prompt_field_description", "prompt_field_short_description",
       "prompt_field_meta_title", "prompt_field_meta_description", "prompt_field_seo_slug",
       "prompt_field_tags", "prompt_field_price", "prompt_field_faq",
       "prompt_field_upsells", "prompt_field_crosssells", "prompt_field_image_alt",
-      "prompt_field_category",
+      "prompt_field_category", "description_template",
     ];
     const { data: fieldPromptSettings } = await supabase
       .from("settings")
@@ -105,8 +105,13 @@ serve(async (req) => {
       .in("key", fieldPromptKeys);
     
     const fieldPrompts: Record<string, string> = {};
+    let descriptionTemplate: string | null = null;
     (fieldPromptSettings || []).forEach((s: any) => {
-      if (s.value) fieldPrompts[s.key] = s.value;
+      if (s.key === "description_template" && s.value) {
+        descriptionTemplate = s.value;
+      } else if (s.value) {
+        fieldPrompts[s.key] = s.value;
+      }
     });
 
     // Fetch existing categories for AI context
@@ -764,7 +769,13 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 
         const fieldInstructions: string[] = [];
         if (fields.includes("title")) fieldInstructions.push(`TÍTULO:\n${getFieldPrompt("title", "Um título otimizado (máx 70 chars, com keyword principal)")}`);
-        if (fields.includes("description")) fieldInstructions.push(`DESCRIÇÃO COMPLETA:\n${getFieldPrompt("description", "Uma descrição otimizada com: parágrafo comercial + tabela HTML de specs + secção FAQ HTML")}`);
+        if (fields.includes("description")) {
+          let descPrompt = getFieldPrompt("description", "Uma descrição otimizada com: parágrafo comercial + tabela HTML de specs + secção FAQ HTML");
+          if (descriptionTemplate) {
+            descPrompt += `\n\nTEMPLATE DE ESTRUTURA OBRIGATÓRIO — segue EXATAMENTE esta estrutura, substituindo as variáveis {{...}} pelo conteúdo gerado:\n${descriptionTemplate}`;
+          }
+          fieldInstructions.push(`DESCRIÇÃO COMPLETA:\n${descPrompt}`);
+        }
         if (fields.includes("short_description")) fieldInstructions.push(`DESCRIÇÃO CURTA:\n${getFieldPrompt("short_description", "Descrição curta concisa para listagens, máx 160 chars")}`);
         if (fields.includes("meta_title")) fieldInstructions.push(`META TITLE:\n${getFieldPrompt("meta_title", "Meta title SEO (máx 60 chars)")}`);
         if (fields.includes("meta_description")) fieldInstructions.push(`META DESCRIPTION:\n${getFieldPrompt("meta_description", "Meta description SEO (máx 155 chars, com call-to-action)")}`);
