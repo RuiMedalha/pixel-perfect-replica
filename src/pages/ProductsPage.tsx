@@ -588,9 +588,28 @@ const ProductsPage = () => {
               Campos a Otimizar
             </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Selecione os campos que pretende otimizar com IA para {pendingOptimizeIds.length} produto(s).
-          </p>
+          {(() => {
+            const alreadyOptimized = (products ?? []).filter(
+              p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+            ).length;
+            const pendingCount = pendingOptimizeIds.length - alreadyOptimized;
+            return (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Selecione os campos que pretende otimizar com IA para {pendingOptimizeIds.length} produto(s).
+                </p>
+                {alreadyOptimized > 0 && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-warning/30 bg-warning/5">
+                    <span className="text-warning text-lg">⚠️</span>
+                    <p className="text-sm text-foreground">
+                      <strong>{alreadyOptimized}</strong> produto(s) já estão otimizados{pendingCount > 0 ? ` e ${pendingCount} pendente(s)` : ""}.
+                      Re-otimizar irá substituir os dados existentes.
+                    </p>
+                  </div>
+                )}
+              </>
+            );
+          })()}
           <div className="grid grid-cols-2 gap-3 mt-2">
             {OPTIMIZATION_FIELDS.map((field) => (
               <label key={field.key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 cursor-pointer">
