@@ -942,6 +942,25 @@ const ProductsPage = () => {
             </Select>
             <p className="text-[10px] text-muted-foreground">Escolha um modelo diferente para esta otimização ou use o configurado nas Settings.</p>
           </div>
+          {/* Background Mode Toggle */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t p-3 rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Rocket className="w-4 h-4 text-primary" />
+              <div>
+                <Label className="text-xs font-medium cursor-pointer" htmlFor="bg-mode">
+                  Modo Background {pendingOptimizeIds.length >= 50 && <Badge variant="secondary" className="text-[10px] ml-1">Recomendado</Badge>}
+                </Label>
+                <p className="text-[10px] text-muted-foreground">
+                  Processa em segundo plano com 5x paralelismo. Pode fechar o browser.
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="bg-mode"
+              checked={backgroundMode}
+              onCheckedChange={setBackgroundMode}
+            />
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
             {(() => {
@@ -951,10 +970,14 @@ const ProductsPage = () => {
               return (
                 <Button
                   onClick={handleConfirmOptimize}
-                  disabled={selectedFields.size === 0 || optimizeProducts.isPending || (hasAlreadyOptimized && !confirmReoptimize)}
+                  disabled={selectedFields.size === 0 || optimizeProducts.isPending || isCreatingJob || (hasAlreadyOptimized && !confirmReoptimize)}
                 >
-                  <Sparkles className="w-4 h-4 mr-1" />
-                  Otimizar {pendingOptimizeIds.length} produto(s)
+                  {backgroundMode ? (
+                    <Rocket className="w-4 h-4 mr-1" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 mr-1" />
+                  )}
+                  {backgroundMode ? "Lançar em Background" : "Otimizar"} {pendingOptimizeIds.length} produto(s)
                 </Button>
               );
             })()}
