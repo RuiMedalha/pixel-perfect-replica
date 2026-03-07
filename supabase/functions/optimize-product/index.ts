@@ -695,7 +695,13 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 - Categoria: ${product.category || "N/A"}
 - Preço: ${product.original_price || "N/A"}€
 - SKU: ${product.sku || "N/A"}
-- Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
+- Ref. Fornecedor: ${product.supplier_ref || "N/A"}${
+  (phase === 2 || phase === 3) ? `\n\nDADOS JÁ OTIMIZADOS (Fase anterior):
+- Título Otimizado: ${product.optimized_title || "N/A"}
+- Descrição Otimizada: ${(product.optimized_description || "").substring(0, 500) || "N/A"}
+- Descrição Curta Otimizada: ${product.optimized_short_description || "N/A"}
+- Tags: ${(product.tags || []).join(", ") || "N/A"}
+- Focus Keywords: ${(product.focus_keyword || []).join(", ") || "N/A"}` : ""}`;
 
         // === COMPATIBILITY ENGINE: score products for upsell/cross-sell ===
         let productCatalogContext = "";
