@@ -38,6 +38,72 @@ export type Database = {
         }
         Relationships: []
       }
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string | null
+          meta_description: string | null
+          meta_title: string | null
+          name: string
+          parent_id: string | null
+          slug: string | null
+          sort_order: number | null
+          updated_at: string
+          user_id: string
+          woocommerce_id: number | null
+          workspace_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          meta_description?: string | null
+          meta_title?: string | null
+          name: string
+          parent_id?: string | null
+          slug?: string | null
+          sort_order?: number | null
+          updated_at?: string
+          user_id: string
+          woocommerce_id?: number | null
+          workspace_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          meta_description?: string | null
+          meta_title?: string | null
+          name?: string
+          parent_id?: string | null
+          slug?: string | null
+          sort_order?: number | null
+          updated_at?: string
+          user_id?: string
+          woocommerce_id?: number | null
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "categories_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       images: {
         Row: {
           alt_text: string | null
@@ -267,9 +333,11 @@ export type Database = {
         Row: {
           attributes: Json | null
           category: string | null
+          category_id: string | null
           created_at: string
           crosssell_skus: Json | null
           faq: Json | null
+          focus_keyword: string | null
           id: string
           image_alt_texts: Json | null
           image_urls: string[] | null
@@ -284,6 +352,7 @@ export type Database = {
           original_title: string | null
           parent_product_id: string | null
           product_type: string
+          seo_score: number | null
           seo_slug: string | null
           short_description: string | null
           sku: string | null
@@ -301,9 +370,11 @@ export type Database = {
         Insert: {
           attributes?: Json | null
           category?: string | null
+          category_id?: string | null
           created_at?: string
           crosssell_skus?: Json | null
           faq?: Json | null
+          focus_keyword?: string | null
           id?: string
           image_alt_texts?: Json | null
           image_urls?: string[] | null
@@ -318,6 +389,7 @@ export type Database = {
           original_title?: string | null
           parent_product_id?: string | null
           product_type?: string
+          seo_score?: number | null
           seo_slug?: string | null
           short_description?: string | null
           sku?: string | null
@@ -335,9 +407,11 @@ export type Database = {
         Update: {
           attributes?: Json | null
           category?: string | null
+          category_id?: string | null
           created_at?: string
           crosssell_skus?: Json | null
           faq?: Json | null
+          focus_keyword?: string | null
           id?: string
           image_alt_texts?: Json | null
           image_urls?: string[] | null
@@ -352,6 +426,7 @@ export type Database = {
           original_title?: string | null
           parent_product_id?: string | null
           product_type?: string
+          seo_score?: number | null
           seo_slug?: string | null
           short_description?: string | null
           sku?: string | null
@@ -367,6 +442,13 @@ export type Database = {
           workspace_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_parent_product_id_fkey"
             columns: ["parent_product_id"]
