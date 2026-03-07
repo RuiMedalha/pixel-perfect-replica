@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { productIds, fieldsToOptimize, modelOverride, workspaceId } = await req.json();
+    const { productIds, fieldsToOptimize, modelOverride, workspaceId, phase } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "productIds é obrigatório" }), {
         status: 400,
@@ -45,11 +45,28 @@ serve(async (req) => {
       });
     }
 
-    const fields = fieldsToOptimize || [
-      "title", "description", "short_description",
-      "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
-      "upsells", "crosssells", "image_alt", "category"
-    ];
+    // Phase-based field mapping
+    const PHASE_FIELDS: Record<number, string[]> = {
+      1: ["title", "description", "short_description", "tags", "category"],
+      2: ["meta_title", "meta_description", "seo_slug", "faq", "image_alt"],
+      3: ["price", "upsells", "crosssells"],
+    };
+
+    let fields: string[];
+    if (phase && PHASE_FIELDS[phase]) {
+      // Phase mode: use phase fields, intersected with fieldsToOptimize if provided
+      const phaseFields = PHASE_FIELDS[phase];
+      fields = fieldsToOptimize
+        ? phaseFields.filter((f: string) => fieldsToOptimize.includes(f))
+        : phaseFields;
+      console.log(`🔄 Phase ${phase}: optimizing fields [${fields.join(", ")}]`);
+    } else {
+      fields = fieldsToOptimize || [
+        "title", "description", "short_description",
+        "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
+        "upsells", "crosssells", "image_alt", "category"
+      ];
+    }
 
     // Fetch products
     const { data: products, error: fetchError } = await supabase
