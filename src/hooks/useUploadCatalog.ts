@@ -176,25 +176,39 @@ export function useUploadCatalog() {
     const newFiles: UploadedFile[] = [];
 
     for (const f of accepted) {
-      // Check for duplicates
-      const hash = await computeFileHash(f);
-      const isDuplicate = await checkDuplicate(f.name, hash);
-      if (isDuplicate) {
-        toast.warning(`"${f.name}" já foi carregado anteriormente. A ignorar.`);
-        continue;
-      }
-
       const isPdf = f.name.endsWith(".pdf");
-      const base: UploadedFile = {
-        id: crypto.randomUUID(),
-        file: f,
-        name: f.name,
-        size: f.size,
-        type: isPdf ? "PDF" : "Excel",
-        uploadType,
-        status: isPdf ? "aguardando" : (uploadType === "knowledge" ? "aguardando" : "a_mapear"),
-        progress: 0,
-      };
+
+      // Split large PDFs into parts
+      const filesToProcess: File[] = isPdf && f.size > MAX_PDF_PART_SIZE
+        ? await (async () => {
+            toast.info(`"${f.name}" tem ${(f.size / 1024 / 1024).toFixed(1)}MB. A dividir em partes...`);
+            const parts = await splitPdfFile(f);
+            if (parts.length > 1) {
+              toast.success(`"${f.name}" dividido em ${parts.length} partes para melhor extração.`);
+            }
+            return parts;
+          })()
+        : [f];
+
+      for (const partFile of filesToProcess) {
+        // Check for duplicates
+        const hash = await computeFileHash(partFile);
+        const isDuplicate = await checkDuplicate(partFile.name, hash);
+        if (isDuplicate) {
+          toast.warning(`"${partFile.name}" já foi carregado anteriormente. A ignorar.`);
+          continue;
+        }
+
+        const base: UploadedFile = {
+          id: crypto.randomUUID(),
+          file: partFile,
+          name: partFile.name,
+          size: partFile.size,
+          type: isPdf ? "PDF" : "Excel",
+          uploadType,
+          status: isPdf ? "aguardando" : (uploadType === "knowledge" ? "aguardando" : "a_mapear"),
+          progress: 0,
+        };
 
       if (!isPdf && uploadType === "products") {
         try {
