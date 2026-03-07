@@ -71,40 +71,8 @@ const ProductsPage = () => {
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  // Batch progress tracking via Realtime
-  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; processing: string[] } | null>(null);
-
-  // Subscribe to realtime product status changes for batch progress
-  useEffect(() => {
-    if (!batchProgress || batchProgress.done >= batchProgress.total) return;
-
-    const channel = supabase
-      .channel("batch-progress")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "products" },
-        (payload) => {
-          const updated = payload.new as any;
-          if (batchProgress.processing.includes(updated.id)) {
-            if (updated.status === "optimized" || updated.status === "error") {
-              setBatchProgress((prev) => {
-                if (!prev) return null;
-                const newDone = prev.done + 1;
-                const newProcessing = prev.processing.filter((id) => id !== updated.id);
-                if (newDone >= prev.total) {
-                  // Auto-clear after 2s
-                  setTimeout(() => setBatchProgress(null), 2000);
-                }
-                return { ...prev, done: newDone, processing: newProcessing };
-              });
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [batchProgress]);
+  // Batch progress tracking
+  const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
 
   // Extract unique categories for filter
   const uniqueCategories = Array.from(
