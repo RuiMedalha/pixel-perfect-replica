@@ -471,9 +471,9 @@ const ProductsPage = () => {
           >
             <Filter className="w-4 h-4 mr-1" />
             Filtros
-            {(seoScoreFilter !== "all" || hasKeywordFilter !== "all" || sourceFileFilter !== "all" || productTypeFilter !== "all") && (
+            {(seoScoreFilter !== "all" || hasKeywordFilter !== "all" || sourceFileFilter !== "all" || productTypeFilter !== "all" || phaseFilter !== "all") && (
               <Badge variant="default" className="ml-1.5 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
-                {[seoScoreFilter, hasKeywordFilter, sourceFileFilter, productTypeFilter].filter(f => f !== "all").length}
+                {[seoScoreFilter, hasKeywordFilter, sourceFileFilter, productTypeFilter, phaseFilter].filter(f => f !== "all").length}
               </Badge>
             )}
           </Button>
