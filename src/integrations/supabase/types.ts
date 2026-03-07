@@ -337,7 +337,7 @@ export type Database = {
           created_at: string
           crosssell_skus: Json | null
           faq: Json | null
-          focus_keyword: string | null
+          focus_keyword: string[] | null
           id: string
           image_alt_texts: Json | null
           image_urls: string[] | null
@@ -374,7 +374,7 @@ export type Database = {
           created_at?: string
           crosssell_skus?: Json | null
           faq?: Json | null
-          focus_keyword?: string | null
+          focus_keyword?: string[] | null
           id?: string
           image_alt_texts?: Json | null
           image_urls?: string[] | null
@@ -411,7 +411,7 @@ export type Database = {
           created_at?: string
           crosssell_skus?: Json | null
           faq?: Json | null
-          focus_keyword?: string | null
+          focus_keyword?: string[] | null
           id?: string
           image_alt_texts?: Json | null
           image_urls?: string[] | null

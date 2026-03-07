@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
@@ -24,7 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
-
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
   processing: "A Processar",
@@ -58,6 +58,11 @@ const ProductsPage = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [sourceFileFilter, setSourceFileFilter] = useState<string>("all");
+  const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all"); // "all", "good", "medium", "weak"
+  const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all"); // "all", "yes", "no"
+  const [productTypeFilter, setProductTypeFilter] = useState<string>("all"); // "all", "simple", "variable", "variation"
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
@@ -82,13 +87,38 @@ const ProductsPage = () => {
     new Set((products ?? []).map((p) => p.category).filter(Boolean) as string[])
   ).sort();
 
+  // Extract unique source files for filter
+  const uniqueSourceFiles = Array.from(
+    new Set((products ?? []).map((p) => p.source_file).filter(Boolean) as string[])
+  ).sort();
+
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
       (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.original_title ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
     const matchesCategory = categoryFilter === "all" || (p.category ?? "") === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
+    const matchesSourceFile = sourceFileFilter === "all" || (p.source_file ?? "") === sourceFileFilter;
+    
+    // SEO score filter
+    let matchesSeoScore = true;
+    if (seoScoreFilter !== "all") {
+      const { score } = calculateSeoScore(p);
+      if (seoScoreFilter === "good") matchesSeoScore = score >= 80;
+      else if (seoScoreFilter === "medium") matchesSeoScore = score >= 50 && score < 80;
+      else if (seoScoreFilter === "weak") matchesSeoScore = score < 50;
+    }
+
+    // Has keyword filter
+    let matchesKeyword = true;
+    if (hasKeywordFilter === "yes") matchesKeyword = Array.isArray(p.focus_keyword) && p.focus_keyword.length > 0;
+    else if (hasKeywordFilter === "no") matchesKeyword = !p.focus_keyword || (Array.isArray(p.focus_keyword) && p.focus_keyword.length === 0);
+
+    // Product type filter
+    let matchesType = true;
+    if (productTypeFilter !== "all") matchesType = (p.product_type ?? "simple") === productTypeFilter;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType;
   });
 
   const toggleSelect = (id: string) => {
@@ -345,42 +375,140 @@ const ProductsPage = () => {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Pesquisar por SKU ou título..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Pesquisar por SKU ou título..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          {/* Category filter */}
+          {uniqueCategories.length > 0 && (
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[200px] h-9">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {uniqueCategories.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <div className="flex gap-1.5 flex-wrap">
+            {statuses.map((s) => (
+              <Button
+                key={s.value}
+                size="sm"
+                variant={statusFilter === s.value ? "default" : "outline"}
+                onClick={() => setStatusFilter(s.value)}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
+          <Button
+            size="sm"
+            variant={showAdvancedFilters ? "secondary" : "outline"}
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+          >
+            <Filter className="w-4 h-4 mr-1" />
+            Filtros
+            {(seoScoreFilter !== "all" || hasKeywordFilter !== "all" || sourceFileFilter !== "all" || productTypeFilter !== "all") && (
+              <Badge variant="default" className="ml-1.5 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
+                {[seoScoreFilter, hasKeywordFilter, sourceFileFilter, productTypeFilter].filter(f => f !== "all").length}
+              </Badge>
+            )}
+          </Button>
         </div>
-        {/* Category filter */}
-        {uniqueCategories.length > 0 && (
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[200px] h-9">
-              <SelectValue placeholder="Categoria" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as categorias</SelectItem>
-              {uniqueCategories.map((cat) => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+
+        {/* Advanced Filters */}
+        {showAdvancedFilters && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* SEO Score */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Score SEO</Label>
+                  <Select value={seoScoreFilter} onValueChange={setSeoScoreFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="good">🟢 Bom (≥80)</SelectItem>
+                      <SelectItem value="medium">🟡 Médio (50-79)</SelectItem>
+                      <SelectItem value="weak">🔴 Fraco (&lt;50)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Focus Keywords */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Focus Keywords</Label>
+                  <Select value={hasKeywordFilter} onValueChange={setHasKeywordFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="yes">Com keywords</SelectItem>
+                      <SelectItem value="no">Sem keywords</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Source File */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Ficheiro Origem</Label>
+                  <Select value={sourceFileFilter} onValueChange={setSourceFileFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      {uniqueSourceFiles.map((sf) => (
+                        <SelectItem key={sf} value={sf}>{sf}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {/* Product Type */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Tipo</Label>
+                  <Select value={productTypeFilter} onValueChange={setProductTypeFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="simple">Simples</SelectItem>
+                      <SelectItem value="variable">Variável</SelectItem>
+                      <SelectItem value="variation">Variação</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex justify-end mt-3">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSeoScoreFilter("all");
+                    setHasKeywordFilter("all");
+                    setSourceFileFilter("all");
+                    setProductTypeFilter("all");
+                  }}
+                >
+                  Limpar filtros
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
-        <div className="flex gap-1.5 flex-wrap">
-          {statuses.map((s) => (
-            <Button
-              key={s.value}
-              size="sm"
-              variant={statusFilter === s.value ? "default" : "outline"}
-              onClick={() => setStatusFilter(s.value)}
-            >
-              {s.label}
-            </Button>
-          ))}
-        </div>
       </div>
 
       {/* Table */}

@@ -39,21 +39,23 @@ export function calculateSeoScore(product: Product): { score: number; checks: Se
     detail: slug.length === 0 ? "Em falta" : `OK (${slug})`,
   });
 
-  // 4. Focus keyword (if exists) present in meta title
-  const focusKw = (product as any).focus_keyword ?? "";
-  if (focusKw) {
+  // 4. Focus keywords (array) - check if at least one exists and is present in meta title
+  const focusKws: string[] = Array.isArray(product.focus_keyword) ? product.focus_keyword : [];
+  if (focusKws.length > 0) {
+    const primaryKw = focusKws[0];
+    const inTitle = focusKws.some(kw => metaTitle.toLowerCase().includes(kw.toLowerCase()));
     checks.push({
       label: "Keyword no Meta Title",
-      passed: metaTitle.toLowerCase().includes(focusKw.toLowerCase()),
+      passed: inTitle,
       weight: 10,
-      detail: metaTitle.toLowerCase().includes(focusKw.toLowerCase()) ? "Presente" : "Ausente",
+      detail: inTitle ? `"${primaryKw}" presente` : `"${primaryKw}" ausente`,
     });
   } else {
     checks.push({
-      label: "Focus Keyword",
+      label: "Focus Keywords",
       passed: false,
       weight: 10,
-      detail: "Não definida",
+      detail: "Nenhuma definida",
     });
   }
 
