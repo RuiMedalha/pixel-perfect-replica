@@ -792,22 +792,44 @@ const ProductsPage = () => {
               </>
             );
           })()}
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            {OPTIMIZATION_FIELDS.map((field) => (
-              <label key={field.key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 cursor-pointer">
-                <Checkbox
-                  checked={selectedFields.has(field.key)}
-                  onCheckedChange={() => toggleField(field.key)}
-                />
-                <span className="text-sm">{field.label}</span>
-              </label>
+          <div className="space-y-3 mt-2">
+            {OPTIMIZATION_PHASES.map((phaseInfo) => (
+              <div key={phaseInfo.phase} className={cn(
+                "rounded-lg border p-3 transition-colors",
+                selectedPhases.has(phaseInfo.phase) ? "border-primary/40 bg-primary/5" : "border-border"
+              )}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <Checkbox
+                    checked={selectedPhases.has(phaseInfo.phase)}
+                    onCheckedChange={() => togglePhase(phaseInfo.phase)}
+                  />
+                  <div>
+                    <span className="text-sm font-medium">Fase {phaseInfo.phase}: {phaseInfo.label}</span>
+                    <p className="text-[10px] text-muted-foreground">{phaseInfo.description}</p>
+                  </div>
+                </label>
+                {selectedPhases.has(phaseInfo.phase) && (
+                  <div className="grid grid-cols-2 gap-1 ml-6">
+                    {OPTIMIZATION_FIELDS.filter(f => f.phase === phaseInfo.phase).map((field) => (
+                      <label key={field.key} className="flex items-center gap-1.5 p-1 rounded hover:bg-muted/50 cursor-pointer">
+                        <Checkbox
+                          checked={selectedFields.has(field.key)}
+                          onCheckedChange={() => toggleField(field.key)}
+                          className="h-3.5 w-3.5"
+                        />
+                        <span className="text-xs">{field.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
           <div className="flex gap-2 mt-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set(ALL_FIELDS))}>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedPhases(new Set(ALL_PHASES)); setSelectedFields(new Set(ALL_FIELDS)); }}>
               Selecionar Todos
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set())}>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedPhases(new Set()); setSelectedFields(new Set()); }}>
               Limpar
             </Button>
           </div>
