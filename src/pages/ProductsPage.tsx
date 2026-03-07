@@ -13,7 +13,7 @@ import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Sett
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
-import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
+import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
@@ -44,6 +44,7 @@ const statusColors: Record<Enums<"product_status">, string> = {
 type FilterStatus = Enums<"product_status"> | "all";
 
 const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
+const ALL_PHASES = OPTIMIZATION_PHASES.map(p => p.phase);
 
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
@@ -67,6 +68,7 @@ const ProductsPage = () => {
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
+  const [selectedPhases, setSelectedPhases] = useState<Set<number>>(new Set(ALL_PHASES));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
   const [confirmReoptimize, setConfirmReoptimize] = useState(false);
@@ -156,7 +158,6 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
-    // Build product name map for progress display
     const nameMap: Record<string, string> = {};
     (products ?? []).forEach(p => {
       if (pendingOptimizeIds.includes(p.id)) {
@@ -167,9 +168,16 @@ const ProductsPage = () => {
     const token = new CancellationToken();
     cancellationTokenRef.current = token;
 
+    // Get fields from selected phases
+    const phaseFields = OPTIMIZATION_PHASES
+      .filter(p => selectedPhases.has(p.phase))
+      .flatMap(p => p.fields);
+    const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
+
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
-      fieldsToOptimize: Array.from(selectedFields),
+      fieldsToOptimize: fieldsToUse,
+      selectedPhases: Array.from(selectedPhases),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
       workspaceId: activeWorkspace?.id,
       productNames: nameMap,
@@ -185,6 +193,31 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
+  };
+
+  const togglePhase = (phase: number) => {
+    setSelectedPhases(prev => {
+      const next = new Set(prev);
+      const phaseFields = OPTIMIZATION_PHASES.find(p => p.phase === phase)?.fields || [];
+      if (next.has(phase)) {
+        next.delete(phase);
+        // Also remove this phase's fields
+        setSelectedFields(prevF => {
+          const nf = new Set(prevF);
+          phaseFields.forEach(f => nf.delete(f));
+          return nf;
+        });
+      } else {
+        next.add(phase);
+        // Also add this phase's fields
+        setSelectedFields(prevF => {
+          const nf = new Set(prevF);
+          phaseFields.forEach(f => nf.add(f));
+          return nf;
+        });
+      }
+      return next;
+    });
   };
 
   const handleCancelOptimize = () => {
