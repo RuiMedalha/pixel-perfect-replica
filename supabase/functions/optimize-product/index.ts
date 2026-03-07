@@ -780,7 +780,8 @@ REGRAS GLOBAIS:
 - Mantém specs técnicas na tabela, texto comercial nos parágrafos
 - Se existir informação de referência ou do fornecedor, usa-a
 - Para upsells/cross-sells, usa APENAS SKUs do catálogo. NÃO inventes.
-- Traduz tudo para português europeu.`;
+- Traduz tudo para português europeu.
+- Gera SEMPRE 1 a 3 focus keywords SEO principais (a primeira é a principal). Devem ser keywords de pesquisa reais que um comprador usaria no Google.`;
 
         const finalPrompt = customPrompt
           ? `${customPrompt}\n\n${productInfo}${knowledgeContext}${supplierContext}${catalogContext}\n\nINSTRUÇÕES POR CAMPO:\n${fieldInstructions.join("\n\n---\n\n")}`
@@ -849,6 +850,13 @@ REGRAS GLOBAIS:
           toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
           requiredFields.push("suggested_category");
         }
+        // Always generate focus keywords
+        toolProperties.focus_keywords = {
+          type: "array",
+          description: "1 a 3 focus keywords SEO principais para este produto, ordenadas por relevância. A primeira é a principal.",
+          items: { type: "string" },
+        };
+        requiredFields.push("focus_keywords");
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -967,6 +975,9 @@ REGRAS GLOBAIS:
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
         if (optimized.image_alt_texts) updateData.image_alt_texts = optimized.image_alt_texts;
         if (optimized.suggested_category) updateData.category = optimized.suggested_category;
+        if (optimized.focus_keywords && Array.isArray(optimized.focus_keywords) && optimized.focus_keywords.length > 0) {
+          updateData.focus_keyword = optimized.focus_keywords.slice(0, 5);
+        }
 
         const { error: updateError } = await supabase
           .from("products")
