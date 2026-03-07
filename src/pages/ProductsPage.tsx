@@ -294,12 +294,29 @@ const ProductsPage = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm font-medium">A otimizar produtos com IA...</span>
+                {batchProgress.done < batchProgress.total ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                  <Check className="w-4 h-4 text-green-500" />
+                )}
+                <span className="text-sm font-medium">
+                  {batchProgress.done < batchProgress.total
+                    ? `A otimizar: ${batchProgress.currentProductName}`
+                    : "Otimização concluída!"}
+                </span>
               </div>
-              <span className="text-sm text-muted-foreground">
-                {batchProgress.done}/{batchProgress.total}
-              </span>
+              <div className="flex items-center gap-3">
+                {batchProgress.estimatedSecondsLeft != null && batchProgress.done < batchProgress.total && (
+                  <span className="text-xs text-muted-foreground">
+                    ~{batchProgress.estimatedSecondsLeft > 60
+                      ? `${Math.round(batchProgress.estimatedSecondsLeft / 60)}min`
+                      : `${batchProgress.estimatedSecondsLeft}s`} restantes
+                  </span>
+                )}
+                <span className="text-sm font-mono text-muted-foreground">
+                  {batchProgress.done}/{batchProgress.total}
+                </span>
+              </div>
             </div>
             <Progress value={(batchProgress.done / batchProgress.total) * 100} className="h-2" />
           </CardContent>
