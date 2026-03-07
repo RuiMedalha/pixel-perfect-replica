@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { PDFDocument } from "pdf-lib";
 
 export type ColumnMapping = Record<string, string>; // productField -> excelColumn
 
