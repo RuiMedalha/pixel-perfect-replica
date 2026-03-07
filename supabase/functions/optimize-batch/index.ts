@@ -9,8 +9,47 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-const MAX_PROCESSING_MS = 110_000; // 110s, leave buffer before edge function timeout
-const CONCURRENCY = 5; // Process 5 products in parallel (strategy D)
+const MAX_PROCESSING_MS = 95_000; // keep safe headroom before timeout
+const CONCURRENCY = 2; // lower concurrency to reduce function rate limiting
+const SELF_INVOKE_RETRIES = 5;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function selfInvokeWithRetry(authHeader: string, jobId: string, startIndex: number) {
+  const payload = JSON.stringify({ jobId, startIndex });
+
+  for (let attempt = 1; attempt <= SELF_INVOKE_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/optimize-batch`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: payload,
+      });
+
+      if (response.ok) return true;
+
+      const isRetryable = response.status === 429 || response.status >= 500;
+      if (!isRetryable) {
+        const body = await response.text();
+        console.error(`Self-invoke non-retryable error: ${response.status} ${body}`);
+        return false;
+      }
+
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`Self-invoke retry ${attempt}/${SELF_INVOKE_RETRIES} in ${delayMs}ms`);
+      await sleep(delayMs);
+    } catch (err) {
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`Self-invoke exception retry ${attempt}/${SELF_INVOKE_RETRIES} in ${delayMs}ms`, err);
+      await sleep(delayMs);
+    }
+  }
+
+  return false;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
