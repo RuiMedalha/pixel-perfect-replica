@@ -164,8 +164,138 @@ serve(async (req) => {
       console.log("⚠️ Nenhum fornecedor configurado (suppliers_json não encontrado)");
     }
 
-    // Fetch ALL user products for upsell/cross-sell suggestions
+    // === COMPATIBILITY ENGINE for upsell/cross-sell ===
+    interface ProductAttrs {
+      sku: string;
+      title: string;
+      category: string;
+      price: number;
+      line: string | null;       // "700", "900", etc.
+      energy: string | null;     // "gas", "eletrico", "misto"
+      capacity: number | null;   // liters, baskets size, etc.
+      dimensions: string | null; // "40x40", "60x40", etc.
+      type: string | null;       // "fritadeira", "fogao", etc.
+      brand: string | null;
+      raw: any;
+    }
+
+    function extractAttrs(p: any): ProductAttrs {
+      const title = (p.optimized_title || p.original_title || "").toLowerCase();
+      const cat = (p.category || "").toLowerCase();
+      const combined = `${title} ${cat}`;
+
+      // Extract line/series
+      const lineMatch = combined.match(/linha\s*(\d+)/i) || combined.match(/line\s*(\d+)/i) || combined.match(/s[eé]rie\s*(\d+)/i);
+      const line = lineMatch ? lineMatch[1] : null;
+
+      // Extract energy type
+      let energy: string | null = null;
+      if (/\bg[aá]s\b/i.test(combined)) energy = "gas";
+      else if (/\bel[eé]tric/i.test(combined)) energy = "eletrico";
+      else if (/\bmist[oa]\b/i.test(combined)) energy = "misto";
+
+      // Extract capacity (liters, baskets, burners)
+      let capacity: number | null = null;
+      const litersMatch = combined.match(/(\d+)\s*(?:litros?|l\b)/i);
+      const cestoMatch = combined.match(/cesto\s*(\d+)/i);
+      const bicosMatch = combined.match(/(\d+)\s*(?:bicos?|queimadores?)/i);
+      if (litersMatch) capacity = parseInt(litersMatch[1]);
+      else if (cestoMatch) capacity = parseInt(cestoMatch[1]);
+      else if (bicosMatch) capacity = parseInt(bicosMatch[1]);
+
+      // Extract dimensions
+      const dimMatch = combined.match(/(\d+)\s*x\s*(\d+)/i);
+      const dimensions = dimMatch ? `${dimMatch[1]}x${dimMatch[2]}` : null;
+
+      // Extract product type (first meaningful word from category or title)
+      const typePatterns = [
+        "fritadeira", "fogao", "fogão", "forno", "bancada", "mesa", "armario", "armário",
+        "maquina", "máquina", "lava", "frigorifico", "frigorífico", "vitrine", "exaustor",
+        "grelhador", "chapa", "basculante", "marmita", "batedeira", "cortador", "ralador",
+        "microondas", "tostadeira", "torradeira", "salamandra", "abatedor", "ultracongelador",
+        "dispensador", "doseador", "cesto", "tabuleiro", "prateleira", "escorredor",
+      ];
+      let type: string | null = null;
+      for (const t of typePatterns) {
+        if (combined.includes(t)) { type = t; break; }
+      }
+
+      return {
+        sku: p.sku || "",
+        title: p.optimized_title || p.original_title || "Sem título",
+        category: p.category || "",
+        price: parseFloat(p.original_price) || 0,
+        line, energy, capacity, dimensions, type, brand: null, raw: p,
+      };
+    }
+
+    function computeCompatibility(current: ProductAttrs, candidate: ProductAttrs, mode: "upsell" | "crosssell"): { score: number; reasons: string[] } {
+      if (candidate.sku === current.sku) return { score: -1, reasons: [] };
+      let score = 0;
+      const reasons: string[] = [];
+
+      if (mode === "upsell") {
+        // Upsell: same type, same or higher line, bigger/better
+        if (current.type && candidate.type === current.type) { score += 30; reasons.push("mesmo tipo"); }
+        if (current.line && candidate.line) {
+          if (candidate.line === current.line) { score += 15; reasons.push("mesma linha"); }
+          else if (parseInt(candidate.line) > parseInt(current.line)) { score += 25; reasons.push(`linha superior (${candidate.line})`); }
+        }
+        if (current.energy && candidate.energy === current.energy) { score += 10; reasons.push("mesma energia"); }
+        if (current.capacity && candidate.capacity && candidate.capacity > current.capacity) {
+          score += 20; reasons.push(`maior capacidade (${candidate.capacity})`);
+        }
+        if (candidate.price > current.price && candidate.price <= current.price * 2.5) {
+          score += 10; reasons.push("preço superior");
+        }
+        // Same category boost
+        if (current.category && candidate.category && 
+            candidate.category.split(">")[0]?.trim() === current.category.split(">")[0]?.trim()) {
+          score += 10; reasons.push("mesma categoria");
+        }
+      } else {
+        // Cross-sell: complementary products (different type, same line/family)
+        if (current.type && candidate.type && candidate.type !== current.type) {
+          score += 20; reasons.push("tipo complementar");
+        }
+        if (current.type && candidate.type === current.type) {
+          score -= 15; // penalize same type for cross-sell
+        }
+        if (current.line && candidate.line === current.line) {
+          score += 25; reasons.push("mesma linha");
+        }
+        if (current.energy && candidate.energy === current.energy) {
+          score += 5; reasons.push("mesma energia");
+        }
+        // Accessory patterns
+        const accessoryPairs: Record<string, string[]> = {
+          "fritadeira": ["cesto", "doseador", "bancada", "escorredor"],
+          "fogao": ["forno", "bancada", "exaustor", "prateleira"],
+          "fogão": ["forno", "bancada", "exaustor", "prateleira"],
+          "forno": ["tabuleiro", "prateleira", "bancada", "exaustor"],
+          "maquina": ["cesto", "doseador", "mesa", "prateleira"],
+          "máquina": ["cesto", "doseador", "mesa", "prateleira"],
+          "lava": ["cesto", "doseador", "mesa", "escorredor"],
+          "grelhador": ["bancada", "exaustor", "chapa"],
+          "chapa": ["bancada", "exaustor", "grelhador"],
+        };
+        if (current.type && candidate.type) {
+          const accessories = accessoryPairs[current.type];
+          if (accessories && accessories.includes(candidate.type)) {
+            score += 30; reasons.push(`acessório compatível (${candidate.type})`);
+          }
+        }
+        // Same dimensions boost (fits same workspace)
+        if (current.dimensions && candidate.dimensions === current.dimensions) {
+          score += 10; reasons.push("mesmas dimensões");
+        }
+      }
+
+      return { score, reasons };
+    }
+
     let catalogContext = "";
+    let allProductAttrs: ProductAttrs[] = [];
     if (fields.includes("upsells") || fields.includes("crosssells")) {
       const { data: allProducts } = await supabase
         .from("products")
@@ -174,11 +304,7 @@ serve(async (req) => {
         .limit(500);
 
       if (allProducts && allProducts.length > 1) {
-        const catalogList = allProducts
-          .filter((p: any) => p.sku)
-          .map((p: any) => `SKU: ${p.sku} | ${p.optimized_title || p.original_title || "Sem título"} | Cat: ${p.category || "N/A"} | ${p.original_price || "N/A"}€`)
-          .join("\n");
-        catalogContext = `\n\nCATÁLOGO COMPLETO DE PRODUTOS (usa para sugerir upsells e cross-sells):\n${catalogList.substring(0, 10000)}`;
+        allProductAttrs = allProducts.filter((p: any) => p.sku).map(extractAttrs);
       }
     }
 
@@ -472,6 +598,60 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 - SKU: ${product.sku || "N/A"}
 - Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
 
+        // === COMPATIBILITY ENGINE: score products for upsell/cross-sell ===
+        let productCatalogContext = "";
+        if (allProductAttrs.length > 0 && (fields.includes("upsells") || fields.includes("crosssells"))) {
+          const currentAttrs = extractAttrs(product);
+          
+          // Score all candidates
+          const upsellCandidates: { attrs: ProductAttrs; score: number; reasons: string[] }[] = [];
+          const crosssellCandidates: { attrs: ProductAttrs; score: number; reasons: string[] }[] = [];
+          
+          for (const candidate of allProductAttrs) {
+            if (candidate.sku === currentAttrs.sku) continue;
+            
+            if (fields.includes("upsells")) {
+              const { score, reasons } = computeCompatibility(currentAttrs, candidate, "upsell");
+              if (score > 10) upsellCandidates.push({ attrs: candidate, score, reasons });
+            }
+            if (fields.includes("crosssells")) {
+              const { score, reasons } = computeCompatibility(currentAttrs, candidate, "crosssell");
+              if (score > 10) crosssellCandidates.push({ attrs: candidate, score, reasons });
+            }
+          }
+          
+          // Sort by score and take top
+          upsellCandidates.sort((a, b) => b.score - a.score);
+          crosssellCandidates.sort((a, b) => b.score - a.score);
+          
+          const topUpsells = upsellCandidates.slice(0, 10);
+          const topCrosssells = crosssellCandidates.slice(0, 10);
+          
+          const parts: string[] = [];
+          if (topUpsells.length > 0) {
+            parts.push(`\nPRODUTOS CANDIDATOS A UPSELL (pré-filtrados por compatibilidade técnica — score de confiança):`);
+            for (const u of topUpsells) {
+              parts.push(`  SKU: ${u.attrs.sku} | ${u.attrs.title} | ${u.attrs.price}€ | Score: ${u.score}/100 | ${u.reasons.join(", ")}`);
+            }
+          }
+          if (topCrosssells.length > 0) {
+            parts.push(`\nPRODUTOS CANDIDATOS A CROSS-SELL (pré-filtrados por compatibilidade técnica — score de confiança):`);
+            for (const c of topCrosssells) {
+              parts.push(`  SKU: ${c.attrs.sku} | ${c.attrs.title} | ${c.attrs.price}€ | Score: ${c.score}/100 | ${c.reasons.join(", ")}`);
+            }
+          }
+          
+          if (parts.length > 0) {
+            productCatalogContext = `\n${parts.join("\n")}`;
+            console.log(`🎯 Compatibility: ${topUpsells.length} upsell candidates (top: ${topUpsells[0]?.score || 0}), ${topCrosssells.length} cross-sell candidates (top: ${topCrosssells[0]?.score || 0})`);
+            // Also keep detected attributes for logging
+            console.log(`📋 Product attrs: type=${currentAttrs.type}, line=${currentAttrs.line}, energy=${currentAttrs.energy}, capacity=${currentAttrs.capacity}, dims=${currentAttrs.dimensions}`);
+          }
+        }
+        
+        // Use compatibility-filtered catalog instead of raw dump
+        catalogContext = productCatalogContext;
+
         // Build field-specific instructions using per-field prompts
         const getFieldPrompt = (key: string, fallback: string) => {
           return fieldPrompts[`prompt_field_${key}`] || fallback;
@@ -487,8 +667,8 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
         if (fields.includes("tags")) fieldInstructions.push(`TAGS:\n${getFieldPrompt("tags", "Tags relevantes (3-6 palavras-chave)")}`);
         if (fields.includes("price")) fieldInstructions.push(`PREÇO:\n${getFieldPrompt("price", "Preço sugerido")}`);
         if (fields.includes("faq")) fieldInstructions.push(`FAQ:\n${getFieldPrompt("faq", "FAQ com 3-5 perguntas e respostas frequentes")}`);
-        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS:\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
-        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS:\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
+        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
+        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
         if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
           fieldInstructions.push(`ALT TEXT IMAGENS (${product.image_urls.length} imagens):\n${getFieldPrompt("image_alt", "Alt text descritivo e SEO para cada imagem (máx 125 chars)")}`);
         }
