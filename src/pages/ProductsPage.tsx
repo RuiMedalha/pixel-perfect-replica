@@ -95,6 +95,13 @@ const ProductsPage = () => {
     new Set((products ?? []).map((p) => p.source_file).filter(Boolean) as string[])
   ).sort();
 
+  const getProductPhases = useCallback((p: Product) => {
+    const p1 = !!(p.optimized_title || p.optimized_description || p.optimized_short_description);
+    const p2 = !!(p.meta_title || p.meta_description || p.seo_slug || (p.faq && (Array.isArray(p.faq) ? (p.faq as any[]).length > 0 : true)));
+    const p3 = !!(p.optimized_price || p.upsell_skus || p.crosssell_skus);
+    return { p1, p2, p3 };
+  }, []);
+
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
       (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
@@ -121,7 +128,18 @@ const ProductsPage = () => {
     let matchesType = true;
     if (productTypeFilter !== "all") matchesType = (p.product_type ?? "simple") === productTypeFilter;
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType;
+    // Phase filter
+    let matchesPhase = true;
+    if (phaseFilter !== "all") {
+      const phases = getProductPhases(p);
+      if (phaseFilter === "missing1") matchesPhase = !phases.p1;
+      else if (phaseFilter === "missing2") matchesPhase = !phases.p2;
+      else if (phaseFilter === "missing3") matchesPhase = !phases.p3;
+      else if (phaseFilter === "complete") matchesPhase = phases.p1 && phases.p2 && phases.p3;
+      else if (phaseFilter === "none") matchesPhase = !phases.p1 && !phases.p2 && !phases.p3;
+    }
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase;
   });
 
   const toggleSelect = (id: string) => {
