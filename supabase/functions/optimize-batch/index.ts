@@ -80,7 +80,8 @@ serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json();
-    const { jobId, startIndex = 0 } = body;
+    const { jobId, startIndex } = body;
+    const requestedStartIndex = Number.isInteger(startIndex) && startIndex >= 0 ? startIndex : undefined;
 
     let job: any;
 
