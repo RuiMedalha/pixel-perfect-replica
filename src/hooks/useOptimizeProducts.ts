@@ -94,6 +94,21 @@ export function useOptimizeProducts() {
       const durations: number[] = [];
 
       for (let i = 0; i < total; i++) {
+        // Check cancellation before each product
+        if (cancellationToken?.isCancelled) {
+          onProgress?.({
+            total,
+            done: i,
+            currentIndex: i,
+            currentProductName: "",
+            estimatedSecondsLeft: 0,
+            startedAt,
+            cancelled: true,
+          });
+          toast.info(`Otimização cancelada. ${i} de ${total} produtos processados.`);
+          break;
+        }
+
         const productId = productIds[i];
         const productName = productNames?.[productId] || `Produto ${i + 1}`;
 
