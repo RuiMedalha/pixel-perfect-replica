@@ -212,7 +212,7 @@ export function useUploadCatalog() {
 
       if (!isPdf && uploadType === "products") {
         try {
-          const workbook = await readExcelFile(f);
+          const workbook = await readExcelFile(partFile);
           base.sheetNames = workbook.SheetNames;
           const firstSheet = workbook.SheetNames[0];
           if (firstSheet) {
@@ -228,7 +228,8 @@ export function useUploadCatalog() {
         }
       }
 
-      newFiles.push(base);
+        newFiles.push(base);
+      }
     }
 
     setFiles((prev) => [...prev, ...newFiles]);
