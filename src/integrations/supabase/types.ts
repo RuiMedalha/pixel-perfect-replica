@@ -567,6 +567,23 @@ export type Database = {
               source_name: string
             }[]
           }
+      search_knowledge_hybrid: {
+        Args: {
+          _family_keywords?: string
+          _limit?: number
+          _query: string
+          _workspace_id?: string
+        }
+        Returns: {
+          content: string
+          id: string
+          match_type: string
+          rank: number
+          source_name: string
+        }[]
+      }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       activity_action:
