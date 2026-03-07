@@ -873,13 +873,15 @@ REGRAS GLOBAIS:
           toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
           requiredFields.push("suggested_category");
         }
-        // Always generate focus keywords
-        toolProperties.focus_keywords = {
-          type: "array",
-          description: "1 a 3 focus keywords SEO principais para este produto, ordenadas por relevância. A primeira é a principal.",
-          items: { type: "string" },
-        };
-        requiredFields.push("focus_keywords");
+        // Only generate focus keywords in phase 1 (or when no phase is set)
+        if (!phase || phase === 1) {
+          toolProperties.focus_keywords = {
+            type: "array",
+            description: "1 a 3 focus keywords SEO principais para este produto, ordenadas por relevância. A primeira é a principal.",
+            items: { type: "string" },
+          };
+          requiredFields.push("focus_keywords");
+        }
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
