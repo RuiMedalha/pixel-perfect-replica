@@ -122,13 +122,26 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
-    // Start batch progress tracking
-    setBatchProgress({ total: pendingOptimizeIds.length, done: 0, processing: [...pendingOptimizeIds] });
+    // Build product name map for progress display
+    const nameMap: Record<string, string> = {};
+    (products ?? []).forEach(p => {
+      if (pendingOptimizeIds.includes(p.id)) {
+        nameMap[p.id] = p.optimized_title || p.original_title || p.sku || p.id.slice(0, 8);
+      }
+    });
+
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
       workspaceId: activeWorkspace?.id,
+      productNames: nameMap,
+      onProgress: (progress) => {
+        setBatchProgress(progress);
+        if (progress.done >= progress.total) {
+          setTimeout(() => setBatchProgress(null), 3000);
+        }
+      },
     });
     setShowFieldSelector(false);
     setPendingOptimizeIds([]);
