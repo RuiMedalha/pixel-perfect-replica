@@ -259,6 +259,12 @@ serve(async (req) => {
       const batchIds = allProductIds.slice(currentIndex, currentIndex + CONCURRENCY);
       const batchName = productNameMap[batchIds[0]] || `Produto ${currentIndex + 1}`;
 
+      // Mark batch as processing in products table (best effort)
+      await supabase
+        .from("products")
+        .update({ status: "processing", updated_at: new Date().toISOString() })
+        .in("id", batchIds);
+
       // Update job progress (realtime will push this to frontend)
       await supabase
         .from("optimization_jobs")
