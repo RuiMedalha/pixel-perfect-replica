@@ -135,6 +135,7 @@ export type Database = {
       }
       optimization_logs: {
         Row: {
+          chunks_used: number | null
           completion_tokens: number | null
           created_at: string
           fields_optimized: string[] | null
@@ -147,12 +148,14 @@ export type Database = {
           product_id: string
           prompt_length: number | null
           prompt_tokens: number | null
+          rag_match_types: Json | null
           supplier_name: string | null
           supplier_url: string | null
           total_tokens: number | null
           user_id: string
         }
         Insert: {
+          chunks_used?: number | null
           completion_tokens?: number | null
           created_at?: string
           fields_optimized?: string[] | null
@@ -165,12 +168,14 @@ export type Database = {
           product_id: string
           prompt_length?: number | null
           prompt_tokens?: number | null
+          rag_match_types?: Json | null
           supplier_name?: string | null
           supplier_url?: string | null
           total_tokens?: number | null
           user_id: string
         }
         Update: {
+          chunks_used?: number | null
           completion_tokens?: number | null
           created_at?: string
           fields_optimized?: string[] | null
@@ -183,6 +188,7 @@ export type Database = {
           product_id?: string
           prompt_length?: number | null
           prompt_tokens?: number | null
+          rag_match_types?: Json | null
           supplier_name?: string | null
           supplier_url?: string | null
           total_tokens?: number | null

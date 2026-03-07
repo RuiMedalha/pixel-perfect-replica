@@ -112,7 +112,16 @@ serve(async (req) => {
               console.error(`Chunk insert error batch ${i}:`, chunkError.message);
             }
           }
-          console.log(`✅ Stored ${chunkRows.length} knowledge chunks for "${fileName}" (fileId: ${resolvedFileId})`);
+          
+          // Also save extracted_text directly on the uploaded_files record
+          // This ensures "Ver Conteúdo" button works even if frontend update fails
+          const previewText = extractedText.substring(0, 50000);
+          await supabase
+            .from("uploaded_files")
+            .update({ extracted_text: previewText, status: "processed" } as any)
+            .eq("id", resolvedFileId);
+          
+          console.log(`✅ Stored ${chunkRows.length} knowledge chunks for "${fileName}" (fileId: ${resolvedFileId}), extracted_text saved (${previewText.length} chars)`);
         } else {
           console.error(`❌ Could not find uploaded_files record for "${fileName}" - chunks NOT stored`);
         }

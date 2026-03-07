@@ -42,10 +42,10 @@ export function useTokenUsageSummary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("optimization_logs")
-        .select("prompt_tokens, completion_tokens, total_tokens, model, knowledge_sources, had_knowledge, had_supplier, had_catalog, created_at");
+        .select("prompt_tokens, completion_tokens, total_tokens, model, knowledge_sources, had_knowledge, had_supplier, had_catalog, created_at, chunks_used, rag_match_types");
       if (error) throw error;
 
-      const logs = data as unknown as OptimizationLog[];
+      const logs = data as unknown as (OptimizationLog & { chunks_used?: number; rag_match_types?: Record<string, number> })[];
       const totalPrompt = logs.reduce((s, l) => s + (l.prompt_tokens || 0), 0);
       const totalCompletion = logs.reduce((s, l) => s + (l.completion_tokens || 0), 0);
       const totalTokens = logs.reduce((s, l) => s + (l.total_tokens || 0), 0);
@@ -53,6 +53,18 @@ export function useTokenUsageSummary() {
       const withKnowledge = logs.filter((l) => l.had_knowledge).length;
       const withSupplier = logs.filter((l) => l.had_supplier).length;
       const withCatalog = logs.filter((l) => l.had_catalog).length;
+
+      // RAG match type aggregation
+      const matchTypeTotals: Record<string, number> = {};
+      let totalChunksUsed = 0;
+      logs.forEach((l: any) => {
+        totalChunksUsed += l.chunks_used || 0;
+        if (l.rag_match_types && typeof l.rag_match_types === "object") {
+          for (const [mt, count] of Object.entries(l.rag_match_types)) {
+            matchTypeTotals[mt] = (matchTypeTotals[mt] || 0) + (count as number);
+          }
+        }
+      });
 
       // Top knowledge sources
       const sourceCount = new Map<string, number>();
@@ -78,6 +90,9 @@ export function useTokenUsageSummary() {
         withSupplier,
         withCatalog,
         topSources,
+        matchTypeTotals,
+        totalChunksUsed,
+        avgChunksPerOptimization: totalOptimizations > 0 ? +(totalChunksUsed / totalOptimizations).toFixed(1) : 0,
       };
     },
   });

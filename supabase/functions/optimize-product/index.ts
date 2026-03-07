@@ -529,9 +529,14 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
         // Cap at 8 after reranking
         topChunks = topChunks.slice(0, 8);
 
+        // Count match types for RAG metrics
+        const ragMatchTypeCounts: Record<string, number> = {};
         if (topChunks.length > 0) {
-          const matchTypes = topChunks.map((c: any) => c.match_type || "unknown");
-          const matchSummary = [...new Set(matchTypes)].join("+");
+          topChunks.forEach((c: any) => {
+            const mt = c.match_type || "unknown";
+            ragMatchTypeCounts[mt] = (ragMatchTypeCounts[mt] || 0) + 1;
+          });
+          const matchSummary = Object.entries(ragMatchTypeCounts).map(([k, v]) => `${k}:${v}`).join("+");
           console.log(`✅ Hybrid RAG: ${topChunks.length} chunks (${matchSummary}) from: ${[...new Set(topChunks.map((c: any) => c.source_name))].join(", ")}${familyKeywords ? ` | Family: ${familyKeywords}` : ""}`);
           const parts = topChunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
           knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante — hybrid RAG: keywords + fuzzy + família técnica):\n${parts.substring(0, 14000)}`;
@@ -946,7 +951,9 @@ REGRAS GLOBAIS:
           had_catalog: !!catalogContext,
           fields_optimized: fields,
           prompt_length: finalPrompt.length,
-        });
+          chunks_used: topChunks.length,
+          rag_match_types: ragMatchTypeCounts,
+        } as any);
 
         return { id: product.id, status: "optimized" as const };
       } catch (productError) {
