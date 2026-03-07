@@ -603,10 +603,19 @@ const ProductsPage = () => {
                 {alreadyOptimized > 0 && (
                   <div className="flex items-center gap-2 p-3 rounded-lg border border-warning/30 bg-warning/5">
                     <span className="text-warning text-lg">⚠️</span>
-                    <p className="text-sm text-foreground">
-                      <strong>{alreadyOptimized}</strong> produto(s) já estão otimizados{pendingCount > 0 ? ` e ${pendingCount} pendente(s)` : ""}.
-                      Re-otimizar irá substituir os dados existentes.
-                    </p>
+                    <div className="flex-1">
+                      <p className="text-sm text-foreground">
+                        <strong>{alreadyOptimized}</strong> produto(s) já estão otimizados{pendingCount > 0 ? ` e ${pendingCount} pendente(s)` : ""}.
+                        Re-otimizar irá substituir os dados existentes.
+                      </p>
+                      <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                        <Checkbox
+                          checked={confirmReoptimize}
+                          onCheckedChange={(v) => setConfirmReoptimize(!!v)}
+                        />
+                        <span className="text-xs font-medium">Confirmo que pretendo re-otimizar</span>
+                      </label>
+                    </div>
                   </div>
                 )}
               </>
