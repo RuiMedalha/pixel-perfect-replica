@@ -658,10 +658,20 @@ const ProductsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
-            <Button onClick={handleConfirmOptimize} disabled={selectedFields.size === 0 || optimizeProducts.isPending}>
-              <Sparkles className="w-4 h-4 mr-1" />
-              Otimizar {pendingOptimizeIds.length} produto(s)
-            </Button>
+            {(() => {
+              const hasAlreadyOptimized = (products ?? []).some(
+                p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+              );
+              return (
+                <Button
+                  onClick={handleConfirmOptimize}
+                  disabled={selectedFields.size === 0 || optimizeProducts.isPending || (hasAlreadyOptimized && !confirmReoptimize)}
+                >
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  Otimizar {pendingOptimizeIds.length} produto(s)
+                </Button>
+              );
+            })()}
           </DialogFooter>
         </DialogContent>
       </Dialog>
