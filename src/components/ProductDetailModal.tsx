@@ -275,6 +275,64 @@ export function ProductDetailModal({ product, onClose }: Props) {
             </div>
           </TabsContent>
 
+          {/* SEO SCORE TAB */}
+          <TabsContent value="seo-score" className="mt-4 space-y-4">
+            {(() => {
+              const { score, checks } = calculateSeoScore(product);
+              return (
+                <>
+                  <div className="flex items-center gap-6">
+                    <div className="relative w-24 h-24">
+                      <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" className={getSeoScoreColor(score).replace("text-", "stroke-")} strokeWidth="3" strokeDasharray={`${score}, 100`} strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className={cn("text-2xl font-bold", getSeoScoreColor(score))}>{score}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className={cn("text-lg font-bold", getSeoScoreColor(score))}>
+                        {score >= 80 ? "Bom" : score >= 50 ? "Médio" : "Fraco"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {checks.filter(c => c.passed).length}/{checks.length} verificações passaram
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {checks.map((check, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+                          check.passed ? "bg-green-500/20 text-green-600" : "bg-red-500/20 text-red-600"
+                        )}>
+                          {check.passed ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">{check.label}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({check.weight}pts)</span>
+                        </div>
+                        <span className={cn("text-xs", check.passed ? "text-green-600" : "text-muted-foreground")}>{check.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Focus keyword input */}
+                  <div className="border border-border/50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold mb-2">Focus Keyword (RankMath)</h4>
+                    <Input
+                      value={editData.focus_keyword ?? (product as any).focus_keyword ?? ""}
+                      onChange={(e) => handleFieldChange("focus_keyword", e.target.value)}
+                      placeholder="Ex: fritadeira industrial"
+                      className="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">A keyword principal para otimização SEO deste produto.</p>
+                  </div>
+                </>
+              );
+            })()}
+          </TabsContent>
+
           {/* FAQ TAB */}
           <TabsContent value="faq" className="mt-4">
             {faq.length === 0 ? (
