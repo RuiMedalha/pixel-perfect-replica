@@ -492,14 +492,14 @@ const ProductsPage = () => {
       {activeJob && (activeJob.status === "completed" || activeJob.status === "cancelled") && (
         <Card className={cn(
           "border-l-4",
-          activeJob.status === "completed" ? "border-l-green-500" : "border-l-yellow-500"
+          activeJob.status === "completed" ? "border-l-primary" : "border-l-warning"
         )}>
           <CardContent className="p-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               {activeJob.status === "completed" ? (
-                <Check className="w-4 h-4 text-green-600" />
+                <Check className="w-4 h-4 text-primary" />
               ) : (
-                <Ban className="w-4 h-4 text-yellow-600" />
+                <Ban className="w-4 h-4 text-warning" />
               )}
               <span className="text-sm">
                 {activeJob.status === "completed"
