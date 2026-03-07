@@ -56,6 +56,7 @@ const ProductsPage = () => {
   const applyVariations = useApplyVariations();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
@@ -105,12 +106,18 @@ const ProductsPage = () => {
     return () => { supabase.removeChannel(channel); };
   }, [batchProgress]);
 
+  // Extract unique categories for filter
+  const uniqueCategories = Array.from(
+    new Set((products ?? []).map((p) => p.category).filter(Boolean) as string[])
+  ).sort();
+
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
       (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.original_title ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesCategory = categoryFilter === "all" || (p.category ?? "") === categoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
   const toggleSelect = (id: string) => {
@@ -300,7 +307,7 @@ const ProductsPage = () => {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -310,6 +317,20 @@ const ProductsPage = () => {
             className="pl-9"
           />
         </div>
+        {/* Category filter */}
+        {uniqueCategories.length > 0 && (
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[200px] h-9">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as categorias</SelectItem>
+              {uniqueCategories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex gap-1.5 flex-wrap">
           {statuses.map((s) => (
             <Button
