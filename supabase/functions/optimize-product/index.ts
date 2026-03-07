@@ -74,6 +74,36 @@ serve(async (req) => {
 
     const customPrompt = promptSetting?.value || null;
 
+    // Fetch per-field custom prompts
+    const fieldPromptKeys = [
+      "prompt_field_title", "prompt_field_description", "prompt_field_short_description",
+      "prompt_field_meta_title", "prompt_field_meta_description", "prompt_field_seo_slug",
+      "prompt_field_tags", "prompt_field_price", "prompt_field_faq",
+      "prompt_field_upsells", "prompt_field_crosssells", "prompt_field_image_alt",
+      "prompt_field_category",
+    ];
+    const { data: fieldPromptSettings } = await supabase
+      .from("settings")
+      .select("key, value")
+      .in("key", fieldPromptKeys);
+    
+    const fieldPrompts: Record<string, string> = {};
+    (fieldPromptSettings || []).forEach((s: any) => {
+      if (s.value) fieldPrompts[s.key] = s.value;
+    });
+
+    // Fetch existing categories for AI context
+    let existingCategories: string[] = [];
+    if (fields.includes("category")) {
+      const { data: catData } = await supabase
+        .from("products")
+        .select("category")
+        .not("category", "is", null);
+      const cats = new Set<string>();
+      (catData || []).forEach((p: any) => { if (p.category) cats.add(p.category); });
+      existingCategories = Array.from(cats).sort();
+    }
+
     // Mark as processing
     await supabase
       .from("products")
