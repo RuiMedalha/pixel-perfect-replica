@@ -446,6 +446,10 @@ REGRAS GLOBAIS:
           };
           requiredFields.push("image_alt_texts");
         }
+        if (fields.includes("category")) {
+          toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
+          requiredFields.push("suggested_category");
+        }
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
