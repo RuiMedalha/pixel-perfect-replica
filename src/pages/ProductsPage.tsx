@@ -71,40 +71,8 @@ const ProductsPage = () => {
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  // Batch progress tracking via Realtime
-  const [batchProgress, setBatchProgress] = useState<{ total: number; done: number; processing: string[] } | null>(null);
-
-  // Subscribe to realtime product status changes for batch progress
-  useEffect(() => {
-    if (!batchProgress || batchProgress.done >= batchProgress.total) return;
-
-    const channel = supabase
-      .channel("batch-progress")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "products" },
-        (payload) => {
-          const updated = payload.new as any;
-          if (batchProgress.processing.includes(updated.id)) {
-            if (updated.status === "optimized" || updated.status === "error") {
-              setBatchProgress((prev) => {
-                if (!prev) return null;
-                const newDone = prev.done + 1;
-                const newProcessing = prev.processing.filter((id) => id !== updated.id);
-                if (newDone >= prev.total) {
-                  // Auto-clear after 2s
-                  setTimeout(() => setBatchProgress(null), 2000);
-                }
-                return { ...prev, done: newDone, processing: newProcessing };
-              });
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [batchProgress]);
+  // Batch progress tracking
+  const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
 
   // Extract unique categories for filter
   const uniqueCategories = Array.from(
@@ -154,13 +122,26 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
-    // Start batch progress tracking
-    setBatchProgress({ total: pendingOptimizeIds.length, done: 0, processing: [...pendingOptimizeIds] });
+    // Build product name map for progress display
+    const nameMap: Record<string, string> = {};
+    (products ?? []).forEach(p => {
+      if (pendingOptimizeIds.includes(p.id)) {
+        nameMap[p.id] = p.optimized_title || p.original_title || p.sku || p.id.slice(0, 8);
+      }
+    });
+
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
       workspaceId: activeWorkspace?.id,
+      productNames: nameMap,
+      onProgress: (progress) => {
+        setBatchProgress(progress);
+        if (progress.done >= progress.total) {
+          setTimeout(() => setBatchProgress(null), 3000);
+        }
+      },
     });
     setShowFieldSelector(false);
     setPendingOptimizeIds([]);
@@ -313,12 +294,29 @@ const ProductsPage = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm font-medium">A otimizar produtos com IA...</span>
+                {batchProgress.done < batchProgress.total ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                  <Check className="w-4 h-4 text-primary" />
+                )}
+                <span className="text-sm font-medium">
+                  {batchProgress.done < batchProgress.total
+                    ? `A otimizar: ${batchProgress.currentProductName}`
+                    : "Otimização concluída!"}
+                </span>
               </div>
-              <span className="text-sm text-muted-foreground">
-                {batchProgress.done}/{batchProgress.total}
-              </span>
+              <div className="flex items-center gap-3">
+                {batchProgress.estimatedSecondsLeft != null && batchProgress.done < batchProgress.total && (
+                  <span className="text-xs text-muted-foreground">
+                    ~{batchProgress.estimatedSecondsLeft > 60
+                      ? `${Math.round(batchProgress.estimatedSecondsLeft / 60)}min`
+                      : `${batchProgress.estimatedSecondsLeft}s`} restantes
+                  </span>
+                )}
+                <span className="text-sm font-mono text-muted-foreground">
+                  {batchProgress.done}/{batchProgress.total}
+                </span>
+              </div>
             </div>
             <Progress value={(batchProgress.done / batchProgress.total) * 100} className="h-2" />
           </CardContent>

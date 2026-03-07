@@ -36,17 +36,24 @@ export const AI_MODELS = [
   { key: "gpt-5-nano", label: "GPT-5 Nano (Ultra rápido)" },
 ];
 
-// Process products in frontend batches to avoid edge function resource limits
-const BATCH_SIZE = 3;
+export interface OptimizationProgress {
+  total: number;
+  done: number;
+  currentIndex: number;
+  currentProductName: string;
+  estimatedSecondsLeft: number | null;
+  startedAt: number;
+}
 
-async function optimizeBatch(
-  productIds: string[],
+// Process ONE product at a time to avoid edge function timeouts
+async function optimizeSingle(
+  productId: string,
   fieldsToOptimize?: OptimizationField[],
   modelOverride?: string,
   workspaceId?: string
 ) {
   const { data, error } = await supabase.functions.invoke("optimize-product", {
-    body: { productIds, fieldsToOptimize, modelOverride, workspaceId },
+    body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
@@ -57,20 +64,70 @@ export function useOptimizeProducts() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ productIds, fieldsToOptimize, modelOverride, workspaceId }: { productIds: string[]; fieldsToOptimize?: OptimizationField[]; modelOverride?: string; workspaceId?: string }) => {
-      // Split into small batches to avoid WORKER_LIMIT errors
+    mutationFn: async ({
+      productIds,
+      fieldsToOptimize,
+      modelOverride,
+      workspaceId,
+      onProgress,
+      productNames,
+    }: {
+      productIds: string[];
+      fieldsToOptimize?: OptimizationField[];
+      modelOverride?: string;
+      workspaceId?: string;
+      onProgress?: (progress: OptimizationProgress) => void;
+      productNames?: Record<string, string>;
+    }) => {
       const allResults: any[] = [];
-      for (let i = 0; i < productIds.length; i += BATCH_SIZE) {
-        const chunk = productIds.slice(i, i + BATCH_SIZE);
-        const data = await optimizeBatch(chunk, fieldsToOptimize, modelOverride, workspaceId);
-        if (data.results) allResults.push(...data.results);
-        // Invalidate between batches so UI updates progressively
+      const total = productIds.length;
+      const startedAt = Date.now();
+      const durations: number[] = [];
+
+      for (let i = 0; i < total; i++) {
+        const productId = productIds[i];
+        const productName = productNames?.[productId] || `Produto ${i + 1}`;
+
+        // Calculate ETA based on average duration of completed items
+        let estimatedSecondsLeft: number | null = null;
+        if (durations.length > 0) {
+          const avgMs = durations.reduce((a, b) => a + b, 0) / durations.length;
+          estimatedSecondsLeft = Math.round((avgMs * (total - i)) / 1000);
+        }
+
+        onProgress?.({
+          total,
+          done: i,
+          currentIndex: i,
+          currentProductName: productName,
+          estimatedSecondsLeft,
+          startedAt,
+        });
+
+        const itemStart = Date.now();
+        try {
+          const data = await optimizeSingle(productId, fieldsToOptimize, modelOverride, workspaceId);
+          if (data.results) allResults.push(...data.results);
+        } catch (err: any) {
+          allResults.push({ productId, status: "error", error: err.message });
+        }
+        durations.push(Date.now() - itemStart);
+
+        // Invalidate between items so UI updates progressively
         qc.invalidateQueries({ queryKey: ["products"] });
       }
+
+      // Final progress
+      onProgress?.({
+        total,
+        done: total,
+        currentIndex: total - 1,
+        currentProductName: "",
+        estimatedSecondsLeft: 0,
+        startedAt,
+      });
+
       return { results: allResults };
-    },
-    onMutate: () => {
-      toast.info("A otimizar produtos com IA...");
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["products"] });
