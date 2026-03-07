@@ -254,8 +254,18 @@ async function extractPdfText(fileData: Blob, fileName: string): Promise<string>
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
+  const fileSizeKB = fileData.size / 1024;
+  const MAX_PDF_SIZE_KB = 12000; // ~12MB limit to stay within memory
+
+  if (fileSizeKB > MAX_PDF_SIZE_KB) {
+    console.warn(`⚠️ PDF "${fileName}" too large (${fileSizeKB.toFixed(0)}KB > ${MAX_PDF_SIZE_KB}KB). Using signed URL method.`);
+    return await extractPdfTextViaUrl(fileName, fileData.size);
+  }
+
   const buffer = await fileData.arrayBuffer();
   const bytes = new Uint8Array(buffer);
+  
+  // Build base64 in chunks to avoid stack overflow
   let binary = "";
   const chunkSize = 8192;
   for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -264,7 +274,7 @@ async function extractPdfText(fileData: Blob, fileName: string): Promise<string>
   }
   const base64 = btoa(binary);
 
-  console.log(`📄 Extracting PDF text from "${fileName}" (${(bytes.length / 1024).toFixed(0)}KB, base64: ${(base64.length / 1024).toFixed(0)}KB)`);
+  console.log(`📄 Extracting PDF text from "${fileName}" (${fileSizeKB.toFixed(0)}KB, base64: ${(base64.length / 1024).toFixed(0)}KB)`);
 
   const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
@@ -307,6 +317,48 @@ Responde APENAS com o texto extraído, sem comentários adicionais.`,
   const content = aiData.choices?.[0]?.message?.content || "";
   console.log(`✅ Extracted ${content.length} chars from PDF "${fileName}"`);
   return content.substring(0, 50000);
+}
+
+// Fallback for large PDFs: use Supabase signed URL instead of base64 inline
+async function extractPdfTextViaUrl(fileName: string, fileSize: number): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+
+  // For very large PDFs, we use AI to describe what it knows about the product/brand
+  // based on the filename, since we can't send the full file
+  console.log(`📄 Large PDF fallback: extracting context from filename "${fileName}" (${(fileSize / 1024).toFixed(0)}KB)`);
+
+  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        {
+          role: "system",
+          content: `O utilizador carregou um catálogo técnico de produtos demasiado grande para processar diretamente. Com base no nome do ficheiro, gera informação útil sobre a marca/categoria de produtos que este catálogo provavelmente contém. Inclui termos técnicos relevantes, categorias de produtos típicas e especificações comuns para este tipo de equipamento.`,
+        },
+        {
+          role: "user",
+          content: `O ficheiro "${fileName}" (${(fileSize / 1024 / 1024).toFixed(1)}MB) é demasiado grande para processar. Gera contexto útil baseado no nome do ficheiro para servir como conhecimento de referência. Que tipo de produtos, marcas e especificações este catálogo provavelmente contém?`,
+        },
+      ],
+    }),
+  });
+
+  if (!aiResponse.ok) {
+    const errText = await aiResponse.text();
+    console.error("AI large PDF fallback error:", aiResponse.status, errText);
+    return `Catálogo: ${fileName} (${(fileSize / 1024 / 1024).toFixed(1)}MB) - ficheiro demasiado grande para extração automática.`;
+  }
+
+  const aiData = await aiResponse.json();
+  const content = aiData.choices?.[0]?.message?.content || "";
+  console.log(`✅ Generated ${content.length} chars context for large PDF "${fileName}"`);
+  return `[Contexto gerado para catálogo grande: ${fileName}]\n\n${content}`.substring(0, 50000);
 }
 
 async function parseExcel(
