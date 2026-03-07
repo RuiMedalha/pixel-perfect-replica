@@ -48,7 +48,7 @@ serve(async (req) => {
     const fields = fieldsToOptimize || [
       "title", "description", "short_description",
       "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
-      "upsells", "crosssells", "image_alt"
+      "upsells", "crosssells", "image_alt", "category"
     ];
 
     // Fetch products
