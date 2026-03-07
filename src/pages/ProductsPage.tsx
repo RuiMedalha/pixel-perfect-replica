@@ -380,7 +380,7 @@ const ProductsPage = () => {
                   {batchProgress.cancelled
                     ? `Cancelado — ${batchProgress.done} de ${batchProgress.total} processados`
                     : batchProgress.done < batchProgress.total
-                      ? `A otimizar: ${batchProgress.currentProductName}`
+                      ? `A otimizar: ${batchProgress.currentProductName}${batchProgress.currentPhaseLabel ? ` — ${batchProgress.currentPhaseLabel}` : ""}`
                       : "Otimização concluída!"}
                 </span>
               </div>
