@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
+import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
