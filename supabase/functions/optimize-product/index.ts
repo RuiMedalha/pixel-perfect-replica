@@ -387,8 +387,8 @@ serve(async (req) => {
 
     const results: any[] = [];
 
-    // Process products in parallel batches of 5 for speed
-    const CONCURRENCY = 5;
+    // Process products in parallel batches of 2 (reduced to avoid WORKER_LIMIT)
+    const CONCURRENCY = 2;
     for (let batchStart = 0; batchStart < products.length; batchStart += CONCURRENCY) {
       const batch = products.slice(batchStart, batchStart + CONCURRENCY);
       const batchResults = await Promise.allSettled(batch.map(async (product) => {
