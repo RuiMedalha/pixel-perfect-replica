@@ -571,6 +571,7 @@ const ProductsPage = () => {
                     <th className="p-3 text-left font-medium text-muted-foreground">Desc. Curta</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Slug</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Estado</th>
+                    <th className="p-3 text-center font-medium text-muted-foreground">Fases</th>
                     <th className="p-3 text-center font-medium text-muted-foreground">SEO</th>
                     <th className="p-3 text-right font-medium text-muted-foreground">Ações</th>
                   </tr>
@@ -722,6 +723,32 @@ const ProductsPage = () => {
                           </Badge>
                         </div>
                       </td>
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-0.5">
+                          {(() => {
+                            const p1 = !!(product.optimized_title || product.optimized_description || product.optimized_short_description);
+                            const p2 = !!(product.meta_title || product.meta_description || product.seo_slug || product.faq);
+                            const p3 = !!(product.optimized_price || (product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
+                            return [
+                              { done: p1, label: "1" },
+                              { done: p2, label: "2" },
+                              { done: p3, label: "3" },
+                            ].map(ph => (
+                              <span
+                                key={ph.label}
+                                className={cn(
+                                  "inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold",
+                                  ph.done
+                                    ? "bg-primary/15 text-primary"
+                                    : "bg-muted text-muted-foreground/50"
+                                )}
+                                title={`Fase ${ph.label}: ${ph.done ? "Concluída" : "Pendente"}`}
+                              >
+                                {ph.label}
+                              </span>
+                            ));
+                          })()}
+                        </div>
                       <td className="p-3 text-center">
                         {(() => {
                           const { score } = calculateSeoScore(product);
