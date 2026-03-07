@@ -9,8 +9,47 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-const MAX_PROCESSING_MS = 110_000; // 110s, leave buffer before edge function timeout
-const CONCURRENCY = 5; // Process 5 products in parallel (strategy D)
+const MAX_PROCESSING_MS = 95_000; // keep safe headroom before timeout
+const CONCURRENCY = 2; // lower concurrency to reduce function rate limiting
+const SELF_INVOKE_RETRIES = 5;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function selfInvokeWithRetry(authHeader: string, jobId: string, startIndex: number) {
+  const payload = JSON.stringify({ jobId, startIndex });
+
+  for (let attempt = 1; attempt <= SELF_INVOKE_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/optimize-batch`, {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: payload,
+      });
+
+      if (response.ok) return true;
+
+      const isRetryable = response.status === 429 || response.status >= 500;
+      if (!isRetryable) {
+        const body = await response.text();
+        console.error(`Self-invoke non-retryable error: ${response.status} ${body}`);
+        return false;
+      }
+
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`Self-invoke retry ${attempt}/${SELF_INVOKE_RETRIES} in ${delayMs}ms`);
+      await sleep(delayMs);
+    } catch (err) {
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`Self-invoke exception retry ${attempt}/${SELF_INVOKE_RETRIES} in ${delayMs}ms`, err);
+      await sleep(delayMs);
+    }
+  }
+
+  return false;
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -41,7 +80,8 @@ serve(async (req) => {
     const userId = userData.user.id;
 
     const body = await req.json();
-    const { jobId, startIndex = 0 } = body;
+    const { jobId, startIndex } = body;
+    const requestedStartIndex = Number.isInteger(startIndex) && startIndex >= 0 ? startIndex : undefined;
 
     let job: any;
 
@@ -63,6 +103,13 @@ serve(async (req) => {
         return new Response(JSON.stringify({ status: "cancelled", jobId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      if (job.status !== "processing") {
+        await supabase
+          .from("optimization_jobs")
+          .update({ status: "processing", updated_at: new Date().toISOString(), error_message: null })
+          .eq("id", job.id);
       }
     } else {
       // Create new job and return immediately (background kickoff)
@@ -150,7 +197,7 @@ serve(async (req) => {
 
     const allProductIds: string[] = job.product_ids;
     const startTime = Date.now();
-    let currentIndex = startIndex;
+    let currentIndex = Math.max(requestedStartIndex ?? (job.processed_products || 0), 0);
     let totalProcessed = job.processed_products || 0;
     let totalFailed = job.failed_products || 0;
 
@@ -162,16 +209,28 @@ serve(async (req) => {
       if (Date.now() - startTime > MAX_PROCESSING_MS) {
         console.log(`⏱️ Timeout approaching at index ${currentIndex}, self-invoking to continue...`);
 
-        // Self-invoke to continue processing
-        const continueBody = JSON.stringify({ jobId: job.id, startIndex: currentIndex });
-        fetch(`${SUPABASE_URL}/functions/v1/optimize-batch`, {
-          method: "POST",
-          headers: {
-            Authorization: authHeader,
-            "Content-Type": "application/json",
-          },
-          body: continueBody,
-        }).catch((err) => console.error("Self-invoke failed:", err));
+        const continued = await selfInvokeWithRetry(authHeader, job.id, currentIndex);
+
+        if (!continued) {
+          await supabase
+            .from("optimization_jobs")
+            .update({
+              status: "queued",
+              error_message: "Job pausado por rate limit temporário; wakeup automático irá retomar.",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+
+          return new Response(
+            JSON.stringify({
+              status: "paused",
+              jobId: job.id,
+              processedSoFar: totalProcessed,
+              nextIndex: currentIndex,
+            }),
+            { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
         return new Response(
           JSON.stringify({
@@ -199,6 +258,12 @@ serve(async (req) => {
       // Get batch of products
       const batchIds = allProductIds.slice(currentIndex, currentIndex + CONCURRENCY);
       const batchName = productNameMap[batchIds[0]] || `Produto ${currentIndex + 1}`;
+
+      // Mark batch as processing in products table (best effort)
+      await supabase
+        .from("products")
+        .update({ status: "processing", updated_at: new Date().toISOString() })
+        .in("id", batchIds);
 
       // Update job progress (realtime will push this to frontend)
       await supabase

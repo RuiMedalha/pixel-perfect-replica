@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { OptimizationField } from "@/hooks/useOptimizeProducts";
@@ -20,6 +20,7 @@ export interface OptimizationJob {
 export function useOptimizationJob() {
   const [activeJob, setActiveJob] = useState<OptimizationJob | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const wakeupInFlightRef = useRef(false);
 
   // Subscribe to realtime updates for the active job
   useEffect(() => {
@@ -79,6 +80,39 @@ export function useOptimizationJob() {
     };
     checkActiveJobs();
   }, []);
+
+  // Wakeup automático para jobs presos sem progresso (ex: self-invoke rate limited)
+  useEffect(() => {
+    if (!activeJob || (activeJob.status !== "processing" && activeJob.status !== "queued")) return;
+    if (activeJob.processed_products >= activeJob.total_products) return;
+
+    const interval = setInterval(async () => {
+      if (!activeJob || wakeupInFlightRef.current) return;
+
+      const ageMs = Date.now() - new Date(activeJob.updated_at).getTime();
+      const isStalled = ageMs > 120_000;
+      if (!isStalled) return;
+
+      wakeupInFlightRef.current = true;
+      try {
+        const { error } = await supabase.functions.invoke("optimize-batch", {
+          body: {
+            jobId: activeJob.id,
+            startIndex: activeJob.processed_products,
+          },
+        });
+
+        if (error) throw error;
+        toast.info("Job retomado automaticamente em background.");
+      } catch (err: any) {
+        console.warn("Wakeup falhou (vai tentar novamente):", err?.message || err);
+      } finally {
+        wakeupInFlightRef.current = false;
+      }
+    }, 30_000);
+
+    return () => clearInterval(interval);
+  }, [activeJob]);
 
   const createJob = useCallback(
     async ({
