@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
@@ -15,6 +16,7 @@ import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useProductOptimizationLogs } from "@/hooks/useOptimizationLogs";
+import { calculateSeoScore, getSeoScoreColor, getSeoScoreBg } from "@/lib/seoScore";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -111,8 +113,14 @@ export function ProductDetailModal({ product, onClose }: Props) {
         <Tabs defaultValue="textos" className="mt-2">
           <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
             <TabsTrigger value="textos">Textos</TabsTrigger>
+            <TabsTrigger value="comparacao">
+              <Columns className="w-3.5 h-3.5 mr-1" /> Comparação
+            </TabsTrigger>
             <TabsTrigger value="imagens">Imagens</TabsTrigger>
             <TabsTrigger value="seo">SEO</TabsTrigger>
+            <TabsTrigger value="seo-score">
+              <BarChart3 className="w-3.5 h-3.5 mr-1" /> Score SEO
+            </TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="relacionados">
               <Shuffle className="w-3.5 h-3.5 mr-1" /> Upsells / Cross-sells
