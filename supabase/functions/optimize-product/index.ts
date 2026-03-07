@@ -755,10 +755,18 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
           fieldInstructions.push(`ALT TEXT IMAGENS (${product.image_urls.length} imagens):\n${getFieldPrompt("image_alt", "Alt text descritivo e SEO para cada imagem (máx 125 chars)")}`);
         }
         if (fields.includes("category")) {
-          const catList = existingCategories.length > 0
-            ? `\nCATEGORIAS EXISTENTES: ${existingCategories.join(", ")}`
-            : "";
-          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Sugere a melhor categoria no formato 'Categoria > Subcategoria'")}${catList}`);
+          // Use semantic matching to find best candidate categories
+          const semanticMatches = findSemanticCategory(
+            product.original_title || "",
+            product.category || "",
+            existingCategories
+          );
+          const catList = semanticMatches.length > 0
+            ? `\nCATEGORIAS MAIS RELEVANTES (por análise semântica): ${semanticMatches.join(", ")}`
+            : existingCategories.length > 0
+              ? `\nTODAS AS CATEGORIAS EXISTENTES: ${existingCategories.join(", ")}`
+              : "";
+          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria no formato 'Categoria > Subcategoria'. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se encontrares uma categoria existente que se aplique, USA-A em vez de criar uma nova. Prioriza as categorias semelhantes listadas abaixo.")}${catList}`);
         }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.

@@ -153,6 +153,17 @@ export function ProductDetailModal({ product, onClose }: Props) {
 
           {/* SEO TAB */}
           <TabsContent value="seo" className="space-y-6 mt-4">
+            {/* Category */}
+            <div className="border border-border/50 rounded-lg p-4">
+              <h4 className="text-sm font-semibold mb-3">Categoria</h4>
+              <Input
+                value={editData.category}
+                onChange={(e) => handleFieldChange("category", e.target.value)}
+                placeholder="Categoria > Subcategoria"
+                className="text-sm"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Formato: Categoria &gt; Subcategoria (ex: Equipamento de Cozinha &gt; Fritadeiras)</p>
+            </div>
             <EditableComparison
               label="Meta Title"
               original="—"
