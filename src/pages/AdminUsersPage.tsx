@@ -13,7 +13,7 @@ const AdminUsersPage = () => {
 
   if (isLoading) {
     return (
-      <div className="p-6 lg:p-8 flex justify-center py-20">
+      <div className="p-3 sm:p-6 lg:p-8 flex justify-center py-20">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -23,7 +23,7 @@ const AdminUsersPage = () => {
   const approved = users?.filter((u) => u.approved) || [];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-4xl">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-6 animate-fade-in max-w-4xl">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Gestão de Utilizadores</h1>
         <p className="text-muted-foreground mt-1">Aprovar pedidos de conta e gerir permissões.</p>

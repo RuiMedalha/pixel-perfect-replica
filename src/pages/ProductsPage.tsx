@@ -325,21 +325,20 @@ const ProductsPage = () => {
   ];
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Painel de Produtos</h1>
-          <p className="text-muted-foreground mt-1">{products?.length ?? 0} produtos no total</p>
-        </div>
-        {/* Quick select dropdown */}
-        <div className="flex items-center gap-2">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-2xl font-bold text-foreground">Painel de Produtos</h1>
+            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">{products?.length ?? 0} produtos no total</p>
+          </div>
           <Select onValueChange={(val) => {
             const count = parseInt(val);
             const ids = filtered.slice(0, count).map(p => p.id);
             setSelected(new Set(ids));
             toast.info(`${ids.length} produtos selecionados`);
           }}>
-            <SelectTrigger className="w-[180px] h-9">
+            <SelectTrigger className="w-[140px] sm:w-[180px] h-8 sm:h-9 text-xs sm:text-sm shrink-0">
               <SelectValue placeholder="Selecionar rápido..." />
             </SelectTrigger>
             <SelectContent>
@@ -350,12 +349,12 @@ const ProductsPage = () => {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex gap-2 flex-wrap items-center">
+        <div className="flex gap-1.5 sm:gap-2 flex-wrap items-center">
           {/* Variable Products Toggle */}
           {activeWorkspace && (
-            <div className="flex items-center gap-2 mr-2 px-3 py-1.5 rounded-lg border bg-muted/30">
-              <GitBranch className="w-4 h-4 text-muted-foreground" />
-              <Label className="text-xs cursor-pointer" htmlFor="var-toggle">Variáveis</Label>
+            <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border bg-muted/30">
+              <GitBranch className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground" />
+              <Label className="text-[10px] sm:text-xs cursor-pointer" htmlFor="var-toggle">Variáveis</Label>
               <Switch
                 id="var-toggle"
                 checked={activeWorkspace.has_variable_products}
@@ -363,16 +362,17 @@ const ProductsPage = () => {
               />
             </div>
           )}
-          <Button size="sm" variant="outline" onClick={() => {
+          <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
             const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
             exportProductsToExcel(selectedProducts);
           }}>
-            <Download className="w-4 h-4 mr-1" /> Exportar Excel
+            <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Exportar </span>Excel
           </Button>
           {activeWorkspace?.has_variable_products && (
             <Button
               size="sm"
               variant="outline"
+              className="text-xs h-8"
               onClick={async () => {
                 const result = await detectVariations.mutateAsync({
                   workspaceId: activeWorkspace.id,
@@ -386,33 +386,33 @@ const ProductsPage = () => {
               }}
               disabled={detectVariations.isPending}
             >
-              {detectVariations.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Layers className="w-4 h-4 mr-1" />}
-              Detetar Variações{selected.size > 0 ? ` (${selected.size})` : ""}
+              {detectVariations.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Layers className="w-3.5 h-3.5 mr-1" />}
+              <span className="hidden sm:inline">Detetar </span>Variações{selected.size > 0 ? ` (${selected.size})` : ""}
             </Button>
           )}
           {selected.size > 0 && (
             <>
-              <Button size="sm" onClick={() => bulkAction("optimized")}>
-                <Check className="w-4 h-4 mr-1" /> Aprovar ({selected.size})
+              <Button size="sm" className="text-xs h-8" onClick={() => bulkAction("optimized")}>
+                <Check className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Aprovar </span>({selected.size})
               </Button>
-              <Button size="sm" variant="destructive" onClick={() => bulkAction("error")}>
-                <X className="w-4 h-4 mr-1" /> Rejeitar ({selected.size})
+              <Button size="sm" variant="destructive" className="text-xs h-8" onClick={() => bulkAction("error")}>
+                <X className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Rejeitar </span>({selected.size})
               </Button>
-              <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={deleteProducts.isPending}>
-                <Trash2 className="w-4 h-4 mr-1" /> Eliminar ({selected.size})
+              <Button size="sm" variant="destructive" className="text-xs h-8" onClick={handleBulkDelete} disabled={deleteProducts.isPending}>
+                <Trash2 className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Eliminar </span>({selected.size})
               </Button>
-              <Button size="sm" variant="outline" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
-                <Send className="w-4 h-4 mr-1" /> Publicar WooCommerce ({selected.size})
+              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
+                <Send className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Publicar </span>WC ({selected.size})
               </Button>
-              <Button size="sm" variant="secondary" onClick={() => handleOptimizeClick(Array.from(selected))} disabled={optimizeProducts.isPending}>
-                <Sparkles className="w-4 h-4 mr-1" /> Otimizar IA ({selected.size})
+              <Button size="sm" variant="secondary" className="text-xs h-8" onClick={() => handleOptimizeClick(Array.from(selected))} disabled={optimizeProducts.isPending}>
+                <Sparkles className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Otimizar </span>IA ({selected.size})
               </Button>
-              <Button size="sm" variant="outline" onClick={() => {
+              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
                 const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
                 exportProductsToExcel(selectedProducts, "produtos-selecionados");
                 setSelected(new Set());
               }}>
-                <Download className="w-4 h-4 mr-1" /> Exportar Seleção ({selected.size})
+                <Download className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Exportar Seleção </span>({selected.size})
               </Button>
             </>
           )}
@@ -525,8 +525,8 @@ const ProductsPage = () => {
       )}
 
       <div className="space-y-3">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
+          <div className="relative flex-1 min-w-[150px] sm:min-w-[200px] max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Pesquisar por SKU ou título..."
@@ -549,11 +549,12 @@ const ProductsPage = () => {
               </SelectContent>
             </Select>
           )}
-          <div className="flex gap-1.5 flex-wrap">
+          <div className="flex gap-1 sm:gap-1.5 flex-wrap">
             {statuses.map((s) => (
               <Button
                 key={s.value}
                 size="sm"
+                className="text-xs h-7 sm:h-8 px-2 sm:px-3"
                 variant={statusFilter === s.value ? "default" : "outline"}
                 onClick={() => setStatusFilter(s.value)}
               >
@@ -916,7 +917,7 @@ const ProductsPage = () => {
 
       {/* Field Selector Dialog */}
       <Dialog open={showFieldSelector} onOpenChange={setShowFieldSelector}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Settings2 className="w-5 h-5" />

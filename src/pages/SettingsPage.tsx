@@ -134,14 +134,14 @@ const SettingsPage = () => {
 
   if (isLoading) {
     return (
-      <div className="p-6 lg:p-8 flex justify-center py-20">
+      <div className="p-3 sm:p-6 lg:p-8 flex justify-center py-20">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-3xl">
+    <div className="p-3 sm:p-6 lg:p-8 space-y-6 animate-fade-in max-w-3xl">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Configurações</h1>
         <p className="text-muted-foreground mt-1">Gerir credenciais e preferências da aplicação.</p>

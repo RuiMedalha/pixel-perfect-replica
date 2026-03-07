@@ -28,7 +28,7 @@ export function AppLayout() {
       </div>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto min-w-0">
+      <main className="flex-1 overflow-auto min-w-0 min-h-screen">
         {/* Mobile header */}
         <div className="sticky top-0 z-30 flex items-center gap-3 px-4 h-14 bg-background/95 backdrop-blur border-b lg:hidden">
           <button
