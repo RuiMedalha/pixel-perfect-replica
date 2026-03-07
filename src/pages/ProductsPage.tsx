@@ -76,6 +76,9 @@ const ProductsPage = () => {
   const [selectedModel, setSelectedModel] = useState<string>("default");
   const [confirmReoptimize, setConfirmReoptimize] = useState(false);
   const [backgroundMode, setBackgroundMode] = useState(false);
+  const [skipKnowledge, setSkipKnowledge] = useState(false);
+  const [skipScraping, setSkipScraping] = useState(false);
+  const [skipReranking, setSkipReranking] = useState(false);
   const [showVariations, setShowVariations] = useState(false);
   const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -192,14 +195,20 @@ const ProductsPage = () => {
       .flatMap(p => p.fields);
     const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
 
+    const speedFlags = {
+      skipKnowledge,
+      skipScraping,
+      skipReranking,
+    };
+
     if (backgroundMode) {
-      // Background mode: create a job via the batch edge function
       createJob({
         productIds: pendingOptimizeIds,
         selectedPhases: Array.from(selectedPhases),
         fieldsToOptimize: fieldsToUse,
         modelOverride: selectedModel !== "default" ? selectedModel : undefined,
         workspaceId: activeWorkspace?.id,
+        ...speedFlags,
       });
       setShowFieldSelector(false);
       setPendingOptimizeIds([]);
@@ -209,7 +218,6 @@ const ProductsPage = () => {
       return;
     }
 
-    // Foreground mode: existing behavior
     const nameMap: Record<string, string> = {};
     (products ?? []).forEach(p => {
       if (pendingOptimizeIds.includes(p.id)) {
@@ -228,6 +236,7 @@ const ProductsPage = () => {
       workspaceId: activeWorkspace?.id,
       productNames: nameMap,
       cancellationToken: token,
+      ...speedFlags,
       onProgress: (progress) => {
         setBatchProgress(progress);
         if (progress.done >= progress.total || progress.cancelled) {
@@ -1001,6 +1010,33 @@ const ProductsPage = () => {
               </SelectContent>
             </Select>
             <p className="text-[10px] text-muted-foreground">Escolha um modelo diferente para esta otimização ou use o configurado nas Settings.</p>
+          </div>
+          {/* Speed Toggles */}
+          <div className="space-y-2 mt-3 pt-3 border-t">
+            <Label className="text-xs font-medium text-muted-foreground">⚡ Controlos de Velocidade</Label>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                <div>
+                  <Label className="text-xs font-medium cursor-pointer" htmlFor="skip-knowledge">Desativar Base de Conhecimento (RAG)</Label>
+                  <p className="text-[10px] text-muted-foreground">Ignora pesquisa em documentos. Mais rápido, menos contexto.</p>
+                </div>
+                <Switch id="skip-knowledge" checked={skipKnowledge} onCheckedChange={setSkipKnowledge} />
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                <div>
+                  <Label className="text-xs font-medium cursor-pointer" htmlFor="skip-scraping">Desativar Scraping do Fornecedor</Label>
+                  <p className="text-[10px] text-muted-foreground">Não consulta páginas do fornecedor. Elimina ~2s por produto.</p>
+                </div>
+                <Switch id="skip-scraping" checked={skipScraping} onCheckedChange={setSkipScraping} />
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
+                <div>
+                  <Label className="text-xs font-medium cursor-pointer" htmlFor="skip-reranking">Desativar AI Reranking</Label>
+                  <p className="text-[10px] text-muted-foreground">Usa ranking simples em vez de IA. Poupa 1 chamada de IA por produto.</p>
+                </div>
+                <Switch id="skip-reranking" checked={skipReranking} onCheckedChange={setSkipReranking} />
+              </div>
+            </div>
           </div>
           {/* Background Mode Toggle */}
           <div className="flex items-center justify-between mt-3 pt-3 border-t p-3 rounded-lg bg-muted/30">
