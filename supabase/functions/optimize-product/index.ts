@@ -567,6 +567,7 @@ REGRAS GLOBAIS:
         if (optimized.upsell_skus) updateData.upsell_skus = optimized.upsell_skus;
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
         if (optimized.image_alt_texts) updateData.image_alt_texts = optimized.image_alt_texts;
+        if (optimized.suggested_category) updateData.category = optimized.suggested_category;
 
         const { error: updateError } = await supabase
           .from("products")
