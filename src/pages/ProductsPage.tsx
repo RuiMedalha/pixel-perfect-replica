@@ -219,6 +219,25 @@ const ProductsPage = () => {
           <h1 className="text-2xl font-bold text-foreground">Painel de Produtos</h1>
           <p className="text-muted-foreground mt-1">{products?.length ?? 0} produtos no total</p>
         </div>
+        {/* Quick select dropdown */}
+        <div className="flex items-center gap-2">
+          <Select onValueChange={(val) => {
+            const count = parseInt(val);
+            const ids = filtered.slice(0, count).map(p => p.id);
+            setSelected(new Set(ids));
+            toast.info(`${ids.length} produtos selecionados`);
+          }}>
+            <SelectTrigger className="w-[180px] h-9">
+              <SelectValue placeholder="Selecionar rápido..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="20">Primeiros 20</SelectItem>
+              <SelectItem value="50">Primeiros 50</SelectItem>
+              <SelectItem value="100">Primeiros 100</SelectItem>
+              <SelectItem value={String(filtered.length)}>Todos ({filtered.length})</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex gap-2 flex-wrap items-center">
           {/* Variable Products Toggle */}
           {activeWorkspace && (

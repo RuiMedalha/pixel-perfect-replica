@@ -36,17 +36,38 @@ export const AI_MODELS = [
   { key: "gpt-5-nano", label: "GPT-5 Nano (Ultra rápido)" },
 ];
 
+// Process products in frontend batches to avoid edge function resource limits
+const BATCH_SIZE = 3;
+
+async function optimizeBatch(
+  productIds: string[],
+  fieldsToOptimize?: OptimizationField[],
+  modelOverride?: string,
+  workspaceId?: string
+) {
+  const { data, error } = await supabase.functions.invoke("optimize-product", {
+    body: { productIds, fieldsToOptimize, modelOverride, workspaceId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
 export function useOptimizeProducts() {
   const qc = useQueryClient();
 
   return useMutation({
     mutationFn: async ({ productIds, fieldsToOptimize, modelOverride, workspaceId }: { productIds: string[]; fieldsToOptimize?: OptimizationField[]; modelOverride?: string; workspaceId?: string }) => {
-      const { data, error } = await supabase.functions.invoke("optimize-product", {
-        body: { productIds, fieldsToOptimize, modelOverride, workspaceId },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
+      // Split into small batches to avoid WORKER_LIMIT errors
+      const allResults: any[] = [];
+      for (let i = 0; i < productIds.length; i += BATCH_SIZE) {
+        const chunk = productIds.slice(i, i + BATCH_SIZE);
+        const data = await optimizeBatch(chunk, fieldsToOptimize, modelOverride, workspaceId);
+        if (data.results) allResults.push(...data.results);
+        // Invalidate between batches so UI updates progressively
+        qc.invalidateQueries({ queryKey: ["products"] });
+      }
+      return { results: allResults };
     },
     onMutate: () => {
       toast.info("A otimizar produtos com IA...");
