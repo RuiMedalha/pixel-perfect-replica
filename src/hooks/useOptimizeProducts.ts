@@ -83,9 +83,10 @@ async function optimizeSingle(
   modelOverride?: string,
   workspaceId?: string,
   phase?: number,
+  speedFlags?: { skipKnowledge?: boolean; skipScraping?: boolean; skipReranking?: boolean },
 ) {
   const { data, error } = await supabase.functions.invoke("optimize-product", {
-    body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId, phase },
+    body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId, phase, ...speedFlags },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
@@ -105,6 +106,9 @@ export function useOptimizeProducts() {
       onProgress,
       productNames,
       cancellationToken,
+      skipKnowledge,
+      skipScraping,
+      skipReranking,
     }: {
       productIds: string[];
       fieldsToOptimize?: OptimizationField[];
@@ -114,6 +118,9 @@ export function useOptimizeProducts() {
       onProgress?: (progress: OptimizationProgress) => void;
       productNames?: Record<string, string>;
       cancellationToken?: CancellationToken;
+      skipKnowledge?: boolean;
+      skipScraping?: boolean;
+      skipReranking?: boolean;
     }) => {
       const allResults: any[] = [];
       const total = productIds.length;
@@ -174,6 +181,7 @@ export function useOptimizeProducts() {
               modelOverride,
               workspaceId,
               phaseInfo.phase === 0 ? undefined : phaseInfo.phase,
+              { skipKnowledge, skipScraping, skipReranking },
             );
             if (data.results) allResults.push(...data.results);
           } catch (err: any) {

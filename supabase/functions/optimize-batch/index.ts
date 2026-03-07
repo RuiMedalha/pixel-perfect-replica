@@ -72,6 +72,9 @@ serve(async (req) => {
         fieldsToOptimize,
         modelOverride,
         workspaceId,
+        skipKnowledge,
+        skipScraping,
+        skipReranking,
       } = body;
 
       if (!Array.isArray(productIds) || productIds.length === 0) {
@@ -93,6 +96,7 @@ serve(async (req) => {
           fields_to_optimize: fieldsToOptimize || [],
           model_override: modelOverride || null,
           started_at: new Date().toISOString(),
+          results: JSON.parse(JSON.stringify({ skipKnowledge, skipScraping, skipReranking })),
         })
         .select()
         .single();
@@ -189,6 +193,14 @@ serve(async (req) => {
 
       // Process batch in parallel — each call to optimize-product handles one product
       // For each product, process all selected phases sequentially
+      // Extract speed flags from job results (stored at creation)
+      const jobFlags = (typeof job.results === 'object' && !Array.isArray(job.results)) ? job.results as any : {};
+      const speedFlags = {
+        skipKnowledge: jobFlags.skipKnowledge || false,
+        skipScraping: jobFlags.skipScraping || false,
+        skipReranking: jobFlags.skipReranking || false,
+      };
+
       const batchResults = await Promise.allSettled(
         batchIds.map(async (productId) => {
           let productOk = false;
@@ -198,15 +210,14 @@ serve(async (req) => {
                 productIds: [productId],
                 workspaceId: job.workspace_id,
                 modelOverride: job.model_override,
+                ...speedFlags,
               };
 
               if (phaseConfig.phase === 0) {
-                // All fields mode
                 if (job.fields_to_optimize?.length > 0) {
                   callBody.fieldsToOptimize = job.fields_to_optimize;
                 }
               } else {
-                // Phase mode
                 callBody.phase = phaseConfig.phase;
                 if (job.fields_to_optimize?.length > 0) {
                   callBody.fieldsToOptimize = phaseConfig.fields.filter(
@@ -294,6 +305,39 @@ serve(async (req) => {
       .eq("id", job.id);
 
     console.log(`🏁 Job ${job.id} ${finalStatus}: ${totalProcessed} processed, ${totalFailed} failed`);
+
+    // === WhatsApp Notification ===
+    try {
+      const { data: whatsappSetting } = await supabase
+        .from("settings")
+        .select("value")
+        .eq("key", "whatsapp_webhook_url")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (whatsappSetting?.value) {
+        const ok = totalProcessed - totalFailed;
+        const message = finalStatus === "completed"
+          ? `✅ *Otimização concluída!*\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${Math.round((Date.now() - startTime) / 1000)}s`
+          : `⚠️ *Job cancelado*\n\n${totalProcessed} de ${job.total_products} processados`;
+
+        await fetch(whatsappSetting.value, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message,
+            jobId: job.id,
+            status: finalStatus,
+            processed: totalProcessed,
+            failed: totalFailed,
+            timestamp: new Date().toISOString(),
+          }),
+        });
+        console.log("📱 WhatsApp notification sent");
+      }
+    } catch (whatsErr) {
+      console.warn("WhatsApp notification failed (non-fatal):", whatsErr);
+    }
 
     return new Response(
       JSON.stringify({

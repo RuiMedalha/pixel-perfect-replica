@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { productIds, fieldsToOptimize, modelOverride, workspaceId, phase } = await req.json();
+    const { productIds, fieldsToOptimize, modelOverride, workspaceId, phase, skipKnowledge, skipScraping, skipReranking } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "productIds é obrigatório" }), {
         status: 400,
@@ -455,6 +455,10 @@ serve(async (req) => {
         let knowledgeContext = "";
         const allChunks: any[] = [];
 
+        if (skipKnowledge) {
+          console.log("⏭️ Knowledge base skipped (skipKnowledge=true)");
+        } else {
+
         // Extract product family/line keywords for targeted search
         const titleRaw = product.original_title || "";
         const cleanTitle = titleRaw
@@ -553,7 +557,7 @@ serve(async (req) => {
 
         // AI Reranking: if we have many chunks, use AI to pick the most relevant
         let topChunks = allChunks.slice(0, 12);
-        if (topChunks.length > 5) {
+        if (topChunks.length > 5 && !skipReranking) {
           try {
             const rerankPrompt = `Tens ${topChunks.length} excertos de conhecimento e precisas escolher os 6 mais relevantes para otimizar este produto:
 Produto: ${product.original_title || "N/A"} | Categoria: ${product.category || "N/A"} | SKU: ${product.sku || "N/A"}
@@ -623,6 +627,9 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
           } catch (rerankErr) {
             console.warn("AI reranking failed (non-fatal), using rank-sorted chunks:", rerankErr);
           }
+        } else if (topChunks.length > 5 && skipReranking) {
+          console.log("⏭️ AI Reranking skipped (skipReranking=true), using top 6 by rank");
+          topChunks = topChunks.slice(0, 6);
         }
 
         // Cap at 8 after reranking
@@ -642,10 +649,13 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
         } else {
           console.log(`⚠️ No knowledge found via hybrid search for: "${titleQuery.substring(0, 30)}" (workspace: ${workspaceId || "all"})${familyKeywords ? ` | Family: ${familyKeywords}` : ""}`);
         }
+        } // end of skipKnowledge else block
 
         // 2. Auto-scrape supplier page by SKU
         let supplierContext = "";
-        if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
+        if (skipScraping) {
+          console.log("⏭️ Supplier scraping skipped (skipScraping=true)");
+        } else if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
           const skuUpper = product.sku.toUpperCase();
           const matchedSupplier = supplierMappings.find((s) => 
             skuUpper.startsWith(s.prefix.toUpperCase())
