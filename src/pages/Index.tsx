@@ -1,4 +1,4 @@
-import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database } from "lucide-react";
+import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,14 +103,79 @@ const Dashboard = () => {
                 </Badge>
               </div>
 
+              {/* RAG Metrics */}
+              {(tokenSummary.totalChunksUsed > 0 || Object.keys(tokenSummary.matchTypeTotals).length > 0) && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <Search className="w-3 h-3" /> Métricas RAG Híbrido
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                    <div className="text-center p-3 rounded-lg bg-muted/50">
+                      <p className="text-xl font-bold text-primary">{tokenSummary.totalChunksUsed}</p>
+                      <p className="text-[10px] text-muted-foreground">Chunks Usados</p>
+                    </div>
+                    <div className="text-center p-3 rounded-lg bg-muted/50">
+                      <p className="text-xl font-bold text-foreground">{tokenSummary.avgChunksPerOptimization}</p>
+                      <p className="text-[10px] text-muted-foreground">Média/Otimização</p>
+                    </div>
+                    {Object.entries(tokenSummary.matchTypeTotals).length > 0 && Object.entries(tokenSummary.matchTypeTotals)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .slice(0, 2)
+                      .map(([type, count]) => {
+                        const labels: Record<string, string> = { fts: "Full-Text", trigram: "Trigram", family: "Família", fts_fallback: "FTS Fallback", unknown: "Outro" };
+                        return (
+                          <div key={type} className="text-center p-3 rounded-lg bg-muted/50">
+                            <p className="text-xl font-bold text-foreground">{count as number}</p>
+                            <p className="text-[10px] text-muted-foreground">{labels[type] || type}</p>
+                          </div>
+                        );
+                      })}
+                  </div>
+                  {/* Match type breakdown bar */}
+                  {Object.keys(tokenSummary.matchTypeTotals).length > 0 && (() => {
+                    const total = Object.values(tokenSummary.matchTypeTotals).reduce((s, v) => s + (v as number), 0);
+                    const colors: Record<string, string> = { fts: "bg-primary", trigram: "bg-chart-2", family: "bg-chart-3", fts_fallback: "bg-chart-4", unknown: "bg-muted-foreground" };
+                    const labels: Record<string, string> = { fts: "FTS", trigram: "Trigram", family: "Família", fts_fallback: "Fallback", unknown: "Outro" };
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex h-3 rounded-full overflow-hidden">
+                          {Object.entries(tokenSummary.matchTypeTotals)
+                            .sort(([, a], [, b]) => (b as number) - (a as number))
+                            .map(([type, count]) => (
+                              <div
+                                key={type}
+                                className={`${colors[type] || "bg-muted-foreground"} transition-all`}
+                                style={{ width: `${((count as number) / total) * 100}%` }}
+                                title={`${labels[type] || type}: ${count} (${(((count as number) / total) * 100).toFixed(0)}%)`}
+                              />
+                            ))}
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                          {Object.entries(tokenSummary.matchTypeTotals)
+                            .sort(([, a], [, b]) => (b as number) - (a as number))
+                            .map(([type, count]) => (
+                              <span key={type} className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                <span className={`w-2 h-2 rounded-full ${colors[type] || "bg-muted-foreground"}`} />
+                                {labels[type] || type}: {count} ({(((count as number) / total) * 100).toFixed(0)}%)
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
               {/* Top sources */}
               {tokenSummary.topSources.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Top fontes de conhecimento</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <Layers className="w-3 h-3" /> Top fontes de conhecimento
+                  </h4>
                   <div className="space-y-1">
                     {tokenSummary.topSources.map((s, i) => (
                       <div key={i} className="flex items-center justify-between text-sm p-2 rounded bg-muted/30">
-                        <span>{s.name}</span>
+                        <span className="truncate">{s.name}</span>
                         <Badge variant="outline" className="text-xs">{s.count} chunks</Badge>
                       </div>
                     ))}
