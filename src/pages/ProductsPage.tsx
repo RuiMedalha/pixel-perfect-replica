@@ -402,7 +402,35 @@ const ProductsPage = () => {
                         )}
                       </td>
 
-                      {/* Inline editable: optimized_short_description */}
+                      {/* Category column */}
+                      <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
+                        {editingCell?.id === product.id && editingCell.field === "category" ? (
+                          <div className="flex gap-1">
+                            <Input
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="text-xs h-7"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") saveInlineEdit();
+                                if (e.key === "Escape") cancelInlineEdit();
+                              }}
+                            />
+                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+                              <Save className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <span
+                            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+                            onDoubleClick={() => startInlineEdit(product.id, "category", product.category ?? "")}
+                            title="Duplo-clique para editar"
+                          >
+                            {product.category ?? "—"}
+                          </span>
+                        )}
+                      </td>
+
                       <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
                         {editingCell?.id === product.id && editingCell.field === "optimized_short_description" ? (
                           <div className="flex gap-1">
