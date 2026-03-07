@@ -417,6 +417,14 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
+  const fileSizeKB = fileData.size / 1024;
+  const MAX_PDF_SIZE_KB = 12000;
+
+  if (fileSizeKB > MAX_PDF_SIZE_KB) {
+    console.warn(`⚠️ PDF "${fileName}" too large for product parsing (${fileSizeKB.toFixed(0)}KB). Skipping.`);
+    return [];
+  }
+
   const buffer = await fileData.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";
