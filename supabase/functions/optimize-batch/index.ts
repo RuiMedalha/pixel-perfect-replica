@@ -274,8 +274,14 @@ serve(async (req) => {
       console.log(`✅ Batch done: ${totalProcessed}/${allProductIds.length} (${totalFailed} failed)`);
     }
 
-    // Job complete
-    const finalStatus = jobCheck?.status === "cancelled" ? "cancelled" : "completed";
+    // Check final status
+    const { data: finalJobCheck } = await supabase
+      .from("optimization_jobs")
+      .select("status")
+      .eq("id", job.id)
+      .single();
+
+    const finalStatus = finalJobCheck?.status === "cancelled" ? "cancelled" : "completed";
     await supabase
       .from("optimization_jobs")
       .update({
