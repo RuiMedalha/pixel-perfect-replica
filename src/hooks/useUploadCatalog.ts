@@ -116,7 +116,7 @@ async function splitPdfFile(file: File): Promise<File[]> {
       const pdfBytes = await newDoc.save();
       const partNum = Math.floor(start / pagesPerPart) + 1;
       const totalParts = Math.ceil(totalPages / pagesPerPart);
-      const blob = new Blob([pdfBytes], { type: "application/pdf" });
+      const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
       const partFile = new File(
         [blob],
         `${baseName}_parte${partNum}de${totalParts}.pdf`,
