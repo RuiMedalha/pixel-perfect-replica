@@ -79,6 +79,7 @@ export function useOptimizeProducts() {
       workspaceId,
       onProgress,
       productNames,
+      cancellationToken,
     }: {
       productIds: string[];
       fieldsToOptimize?: OptimizationField[];
