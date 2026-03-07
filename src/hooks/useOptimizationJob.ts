@@ -20,6 +20,7 @@ export interface OptimizationJob {
 export function useOptimizationJob() {
   const [activeJob, setActiveJob] = useState<OptimizationJob | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const wakeupInFlightRef = useRef(false);
 
   // Subscribe to realtime updates for the active job
   useEffect(() => {
