@@ -131,15 +131,19 @@ const ProductsPage = () => {
       }
     });
 
+    const token = new CancellationToken();
+    cancellationTokenRef.current = token;
+
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
       fieldsToOptimize: Array.from(selectedFields),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
       workspaceId: activeWorkspace?.id,
       productNames: nameMap,
+      cancellationToken: token,
       onProgress: (progress) => {
         setBatchProgress(progress);
-        if (progress.done >= progress.total) {
+        if (progress.done >= progress.total || progress.cancelled) {
           setTimeout(() => setBatchProgress(null), 3000);
         }
       },
@@ -148,6 +152,10 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
+  };
+
+  const handleCancelOptimize = () => {
+    cancellationTokenRef.current?.cancel();
   };
 
   const toggleField = (field: OptimizationField) => {
