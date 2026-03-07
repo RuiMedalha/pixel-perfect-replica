@@ -598,6 +598,60 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 - SKU: ${product.sku || "N/A"}
 - Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
 
+        // === COMPATIBILITY ENGINE: score products for upsell/cross-sell ===
+        let productCatalogContext = "";
+        if (allProductAttrs.length > 0 && (fields.includes("upsells") || fields.includes("crosssells"))) {
+          const currentAttrs = extractAttrs(product);
+          
+          // Score all candidates
+          const upsellCandidates: { attrs: ProductAttrs; score: number; reasons: string[] }[] = [];
+          const crosssellCandidates: { attrs: ProductAttrs; score: number; reasons: string[] }[] = [];
+          
+          for (const candidate of allProductAttrs) {
+            if (candidate.sku === currentAttrs.sku) continue;
+            
+            if (fields.includes("upsells")) {
+              const { score, reasons } = computeCompatibility(currentAttrs, candidate, "upsell");
+              if (score > 10) upsellCandidates.push({ attrs: candidate, score, reasons });
+            }
+            if (fields.includes("crosssells")) {
+              const { score, reasons } = computeCompatibility(currentAttrs, candidate, "crosssell");
+              if (score > 10) crosssellCandidates.push({ attrs: candidate, score, reasons });
+            }
+          }
+          
+          // Sort by score and take top
+          upsellCandidates.sort((a, b) => b.score - a.score);
+          crosssellCandidates.sort((a, b) => b.score - a.score);
+          
+          const topUpsells = upsellCandidates.slice(0, 10);
+          const topCrosssells = crosssellCandidates.slice(0, 10);
+          
+          const parts: string[] = [];
+          if (topUpsells.length > 0) {
+            parts.push(`\nPRODUTOS CANDIDATOS A UPSELL (pré-filtrados por compatibilidade técnica — score de confiança):`);
+            for (const u of topUpsells) {
+              parts.push(`  SKU: ${u.attrs.sku} | ${u.attrs.title} | ${u.attrs.price}€ | Score: ${u.score}/100 | ${u.reasons.join(", ")}`);
+            }
+          }
+          if (topCrosssells.length > 0) {
+            parts.push(`\nPRODUTOS CANDIDATOS A CROSS-SELL (pré-filtrados por compatibilidade técnica — score de confiança):`);
+            for (const c of topCrosssells) {
+              parts.push(`  SKU: ${c.attrs.sku} | ${c.attrs.title} | ${c.attrs.price}€ | Score: ${c.score}/100 | ${c.reasons.join(", ")}`);
+            }
+          }
+          
+          if (parts.length > 0) {
+            productCatalogContext = `\n${parts.join("\n")}`;
+            console.log(`🎯 Compatibility: ${topUpsells.length} upsell candidates (top: ${topUpsells[0]?.score || 0}), ${topCrosssells.length} cross-sell candidates (top: ${topCrosssells[0]?.score || 0})`);
+            // Also keep detected attributes for logging
+            console.log(`📋 Product attrs: type=${currentAttrs.type}, line=${currentAttrs.line}, energy=${currentAttrs.energy}, capacity=${currentAttrs.capacity}, dims=${currentAttrs.dimensions}`);
+          }
+        }
+        
+        // Use compatibility-filtered catalog instead of raw dump
+        catalogContext = productCatalogContext;
+
         // Build field-specific instructions using per-field prompts
         const getFieldPrompt = (key: string, fallback: string) => {
           return fieldPrompts[`prompt_field_${key}`] || fallback;
@@ -613,8 +667,8 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
         if (fields.includes("tags")) fieldInstructions.push(`TAGS:\n${getFieldPrompt("tags", "Tags relevantes (3-6 palavras-chave)")}`);
         if (fields.includes("price")) fieldInstructions.push(`PREÇO:\n${getFieldPrompt("price", "Preço sugerido")}`);
         if (fields.includes("faq")) fieldInstructions.push(`FAQ:\n${getFieldPrompt("faq", "FAQ com 3-5 perguntas e respostas frequentes")}`);
-        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS:\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
-        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS:\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
+        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
+        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
         if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
           fieldInstructions.push(`ALT TEXT IMAGENS (${product.image_urls.length} imagens):\n${getFieldPrompt("image_alt", "Alt text descritivo e SEO para cada imagem (máx 125 chars)")}`);
         }
