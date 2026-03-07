@@ -106,12 +106,18 @@ const ProductsPage = () => {
     return () => { supabase.removeChannel(channel); };
   }, [batchProgress]);
 
+  // Extract unique categories for filter
+  const uniqueCategories = Array.from(
+    new Set((products ?? []).map((p) => p.category).filter(Boolean) as string[])
+  ).sort();
+
   const filtered = (products ?? []).filter((p) => {
     const matchesSearch =
       (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.original_title ?? "").toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesCategory = categoryFilter === "all" || (p.category ?? "") === categoryFilter;
+    return matchesSearch && matchesStatus && matchesCategory;
   });
 
   const toggleSelect = (id: string) => {
