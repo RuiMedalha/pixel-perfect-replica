@@ -52,6 +52,7 @@ const ProductsPage = () => {
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
+  const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
   const publishWoo = usePublishWooCommerce();
   const deleteProducts = useDeleteProducts();
   const updateProduct = useUpdateProduct();
@@ -61,10 +62,10 @@ const ProductsPage = () => {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sourceFileFilter, setSourceFileFilter] = useState<string>("all");
-  const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all"); // "all", "good", "medium", "weak"
-  const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all"); // "all", "yes", "no"
-  const [productTypeFilter, setProductTypeFilter] = useState<string>("all"); // "all", "simple", "variable", "variation"
-  const [phaseFilter, setPhaseFilter] = useState<string>("all"); // "all", "missing1", "missing2", "missing3", "complete", "none"
+  const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all");
+  const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all");
+  const [productTypeFilter, setProductTypeFilter] = useState<string>("all");
+  const [phaseFilter, setPhaseFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -74,6 +75,7 @@ const ProductsPage = () => {
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
   const [confirmReoptimize, setConfirmReoptimize] = useState(false);
+  const [backgroundMode, setBackgroundMode] = useState(false);
   const [showVariations, setShowVariations] = useState(false);
   const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
@@ -85,6 +87,13 @@ const ProductsPage = () => {
   // Batch progress tracking
   const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
   const cancellationTokenRef = useRef<CancellationToken | null>(null);
+
+  // Auto-enable background mode for large selections
+  useEffect(() => {
+    if (pendingOptimizeIds.length >= 50) {
+      setBackgroundMode(true);
+    }
+  }, [pendingOptimizeIds.length]);
 
   // Extract unique categories for filter
   const uniqueCategories = Array.from(
