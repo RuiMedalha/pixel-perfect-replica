@@ -87,12 +87,18 @@ export function useOptimizationJob() {
       fieldsToOptimize,
       modelOverride,
       workspaceId,
+      skipKnowledge,
+      skipScraping,
+      skipReranking,
     }: {
       productIds: string[];
       selectedPhases?: number[];
       fieldsToOptimize?: OptimizationField[];
       modelOverride?: string;
       workspaceId?: string;
+      skipKnowledge?: boolean;
+      skipScraping?: boolean;
+      skipReranking?: boolean;
     }) => {
       setIsCreating(true);
       try {
@@ -103,6 +109,9 @@ export function useOptimizationJob() {
             fieldsToOptimize: fieldsToOptimize || [],
             modelOverride,
             workspaceId,
+            skipKnowledge,
+            skipScraping,
+            skipReranking,
           },
         });
 
