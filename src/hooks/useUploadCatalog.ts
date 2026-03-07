@@ -91,6 +91,46 @@ async function computeFileHash(file: File): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const MAX_PDF_PART_SIZE = 10 * 1024 * 1024; // 10MB
+
+async function splitPdfFile(file: File): Promise<File[]> {
+  const buffer = await file.arrayBuffer();
+  if (file.size <= MAX_PDF_PART_SIZE) return [file];
+
+  try {
+    const srcDoc = await PDFDocument.load(buffer);
+    const totalPages = srcDoc.getPageCount();
+    if (totalPages <= 1) return [file];
+
+    // Estimate pages per part based on average page size
+    const avgPageSize = file.size / totalPages;
+    const pagesPerPart = Math.max(1, Math.floor(MAX_PDF_PART_SIZE / avgPageSize));
+    const parts: File[] = [];
+    const baseName = file.name.replace(/\.pdf$/i, "");
+
+    for (let start = 0; start < totalPages; start += pagesPerPart) {
+      const end = Math.min(start + pagesPerPart, totalPages);
+      const newDoc = await PDFDocument.create();
+      const copiedPages = await newDoc.copyPages(srcDoc, Array.from({ length: end - start }, (_, i) => start + i));
+      copiedPages.forEach((p) => newDoc.addPage(p));
+      const pdfBytes = await newDoc.save();
+      const partNum = Math.floor(start / pagesPerPart) + 1;
+      const totalParts = Math.ceil(totalPages / pagesPerPart);
+      const partFile = new File(
+        [pdfBytes],
+        `${baseName}_parte${partNum}de${totalParts}.pdf`,
+        { type: "application/pdf" }
+      );
+      parts.push(partFile);
+    }
+
+    return parts;
+  } catch (e) {
+    console.warn("PDF split failed, uploading as single file:", e);
+    return [file];
+  }
+}
+
 export function useUploadCatalog() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [customFields, setCustomFields] = useState<ProductField[]>([]);
