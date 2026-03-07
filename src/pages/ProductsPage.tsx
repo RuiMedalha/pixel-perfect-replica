@@ -120,6 +120,7 @@ const ProductsPage = () => {
 
   const handleOptimizeClick = (ids: string[]) => {
     setPendingOptimizeIds(ids);
+    setConfirmReoptimize(false);
     setShowFieldSelector(true);
   };
 
