@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { productIds, fieldsToOptimize, modelOverride, workspaceId, phase } = await req.json();
+    const { productIds, fieldsToOptimize, modelOverride, workspaceId, phase, skipKnowledge, skipScraping, skipReranking } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "productIds é obrigatório" }), {
         status: 400,
@@ -454,6 +454,10 @@ serve(async (req) => {
         // 1. HYBRID RAG: keyword + trigram + family search with reranking
         let knowledgeContext = "";
         const allChunks: any[] = [];
+
+        if (skipKnowledge) {
+          console.log("⏭️ Knowledge base skipped (skipKnowledge=true)");
+        } else {
 
         // Extract product family/line keywords for targeted search
         const titleRaw = product.original_title || "";
