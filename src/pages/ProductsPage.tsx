@@ -347,6 +347,7 @@ const ProductsPage = () => {
                     <th className="p-3 text-left font-medium text-muted-foreground">SKU</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Original</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Otimizado</th>
+                    <th className="p-3 text-left font-medium text-muted-foreground">Categoria</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Desc. Curta</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Slug</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Estado</th>
