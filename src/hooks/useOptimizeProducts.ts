@@ -86,6 +86,7 @@ export function useOptimizeProducts() {
       workspaceId?: string;
       onProgress?: (progress: OptimizationProgress) => void;
       productNames?: Record<string, string>;
+      cancellationToken?: CancellationToken;
     }) => {
       const allResults: any[] = [];
       const total = productIds.length;
