@@ -543,6 +543,23 @@ const ProductsPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* Phase Filter */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Fases</Label>
+                  <Select value={phaseFilter} onValueChange={setPhaseFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="missing1">❌ Falta Fase 1</SelectItem>
+                      <SelectItem value="missing2">❌ Falta Fase 2</SelectItem>
+                      <SelectItem value="missing3">❌ Falta Fase 3</SelectItem>
+                      <SelectItem value="complete">✅ Todas completas</SelectItem>
+                      <SelectItem value="none">⚪ Nenhuma fase</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex justify-end mt-3">
                 <Button
@@ -553,6 +570,7 @@ const ProductsPage = () => {
                     setHasKeywordFilter("all");
                     setSourceFileFilter("all");
                     setProductTypeFilter("all");
+                    setPhaseFilter("all");
                   }}
                 >
                   Limpar filtros
