@@ -159,6 +159,60 @@ export function ProductDetailModal({ product, onClose }: Props) {
             />
           </TabsContent>
 
+          {/* COMPARISON TAB - Side by Side */}
+          <TabsContent value="comparacao" className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">Comparação lado a lado: original vs otimizado (somente leitura)</p>
+            {[
+              { label: "Título", original: product.original_title, optimized: product.optimized_title },
+              { label: "Descrição Curta", original: product.short_description, optimized: product.optimized_short_description },
+              { label: "Descrição", original: product.original_description, optimized: product.optimized_description },
+              { label: "Preço", original: product.original_price != null ? `${product.original_price}€` : null, optimized: product.optimized_price != null ? `${product.optimized_price}€` : null },
+            ].map(({ label, original, optimized }) => (
+              <div key={label} className="border border-border/50 rounded-lg p-4">
+                <h4 className="text-sm font-semibold mb-3">{label}</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Original</p>
+                    <div className="p-3 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                      {original ?? "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-primary mb-1">Otimizado</p>
+                    <div className={cn(
+                      "p-3 rounded-lg text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto",
+                      optimized ? "bg-primary/5 border border-primary/20" : "bg-muted/50"
+                    )}>
+                      {optimized ?? "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* SEO fields comparison */}
+            <div className="border border-border/50 rounded-lg p-4">
+              <h4 className="text-sm font-semibold mb-3">Campos SEO</h4>
+              <div className="space-y-3">
+                {[
+                  { label: "Meta Title", value: product.meta_title },
+                  { label: "Meta Description", value: product.meta_description },
+                  { label: "Slug", value: product.seo_slug },
+                  { label: "Categoria", value: product.category },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex items-start gap-3">
+                    <span className="text-xs text-muted-foreground w-28 shrink-0 pt-1">{label}</span>
+                    <div className={cn(
+                      "flex-1 p-2 rounded text-sm",
+                      value ? "bg-primary/5" : "bg-muted/50 text-muted-foreground"
+                    )}>
+                      {value ?? "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
           {/* SEO TAB */}
           <TabsContent value="seo" className="space-y-6 mt-4">
             {/* Category */}
