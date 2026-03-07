@@ -187,6 +187,29 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
+    const phaseFields = OPTIMIZATION_PHASES
+      .filter(p => selectedPhases.has(p.phase))
+      .flatMap(p => p.fields);
+    const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
+
+    if (backgroundMode) {
+      // Background mode: create a job via the batch edge function
+      createJob({
+        productIds: pendingOptimizeIds,
+        selectedPhases: Array.from(selectedPhases),
+        fieldsToOptimize: fieldsToUse,
+        modelOverride: selectedModel !== "default" ? selectedModel : undefined,
+        workspaceId: activeWorkspace?.id,
+      });
+      setShowFieldSelector(false);
+      setPendingOptimizeIds([]);
+      setSelected(new Set());
+      setSelectedModel("default");
+      setBackgroundMode(false);
+      return;
+    }
+
+    // Foreground mode: existing behavior
     const nameMap: Record<string, string> = {};
     (products ?? []).forEach(p => {
       if (pendingOptimizeIds.includes(p.id)) {
@@ -196,12 +219,6 @@ const ProductsPage = () => {
 
     const token = new CancellationToken();
     cancellationTokenRef.current = token;
-
-    // Get fields from selected phases
-    const phaseFields = OPTIMIZATION_PHASES
-      .filter(p => selectedPhases.has(p.phase))
-      .flatMap(p => p.fields);
-    const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
 
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
@@ -222,6 +239,7 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
+    setBackgroundMode(false);
   };
 
   const togglePhase = (phase: number) => {
