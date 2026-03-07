@@ -175,6 +175,26 @@ const SettingsPage = () => {
       {/* Per-field prompts */}
       <FieldPromptsSettings />
 
+      {/* WhatsApp Notification */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">📱 Notificações WhatsApp</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <Label>Webhook URL (Zapier, Make, n8n, etc.)</Label>
+            <p className="text-xs text-muted-foreground">
+              Cole o URL do webhook que recebe os dados e envia para o WhatsApp. O sistema envia uma notificação quando um job de otimização em background termina.
+            </p>
+            <Input
+              placeholder="https://hooks.zapier.com/hooks/catch/..."
+              value={form[SETTING_KEYS.whatsapp_webhook] ?? ""}
+              onChange={(e) => updateField(SETTING_KEYS.whatsapp_webhook, e.target.value)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Knowledge URLs */}
       <Card>
         <CardHeader>
