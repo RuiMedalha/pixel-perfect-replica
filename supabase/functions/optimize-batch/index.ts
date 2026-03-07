@@ -209,16 +209,28 @@ serve(async (req) => {
       if (Date.now() - startTime > MAX_PROCESSING_MS) {
         console.log(`⏱️ Timeout approaching at index ${currentIndex}, self-invoking to continue...`);
 
-        // Self-invoke to continue processing
-        const continueBody = JSON.stringify({ jobId: job.id, startIndex: currentIndex });
-        fetch(`${SUPABASE_URL}/functions/v1/optimize-batch`, {
-          method: "POST",
-          headers: {
-            Authorization: authHeader,
-            "Content-Type": "application/json",
-          },
-          body: continueBody,
-        }).catch((err) => console.error("Self-invoke failed:", err));
+        const continued = await selfInvokeWithRetry(authHeader, job.id, currentIndex);
+
+        if (!continued) {
+          await supabase
+            .from("optimization_jobs")
+            .update({
+              status: "queued",
+              error_message: "Job pausado por rate limit temporário; wakeup automático irá retomar.",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", job.id);
+
+          return new Response(
+            JSON.stringify({
+              status: "paused",
+              jobId: job.id,
+              processedSoFar: totalProcessed,
+              nextIndex: currentIndex,
+            }),
+            { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
         return new Response(
           JSON.stringify({
