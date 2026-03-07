@@ -72,6 +72,9 @@ serve(async (req) => {
         fieldsToOptimize,
         modelOverride,
         workspaceId,
+        skipKnowledge,
+        skipScraping,
+        skipReranking,
       } = body;
 
       if (!Array.isArray(productIds) || productIds.length === 0) {
@@ -93,6 +96,7 @@ serve(async (req) => {
           fields_to_optimize: fieldsToOptimize || [],
           model_override: modelOverride || null,
           started_at: new Date().toISOString(),
+          results: JSON.parse(JSON.stringify({ skipKnowledge, skipScraping, skipReranking })),
         })
         .select()
         .single();
