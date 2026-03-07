@@ -19,7 +19,7 @@ export function useProducts() {
         let query = supabase
           .from("products")
           .select("*")
-          .order("created_at", { ascending: false })
+          .order("updated_at", { ascending: false })
           .range(from, from + pageSize - 1);
         if (activeWorkspace) {
           query = query.eq("workspace_id", activeWorkspace.id);
