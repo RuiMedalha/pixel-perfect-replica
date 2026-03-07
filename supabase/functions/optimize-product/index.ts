@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     const userId = claimsData.claims.sub;
 
-    const { productIds, fieldsToOptimize, modelOverride, workspaceId } = await req.json();
+    const { productIds, fieldsToOptimize, modelOverride, workspaceId, phase } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "productIds é obrigatório" }), {
         status: 400,
@@ -45,11 +45,28 @@ serve(async (req) => {
       });
     }
 
-    const fields = fieldsToOptimize || [
-      "title", "description", "short_description",
-      "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
-      "upsells", "crosssells", "image_alt", "category"
-    ];
+    // Phase-based field mapping
+    const PHASE_FIELDS: Record<number, string[]> = {
+      1: ["title", "description", "short_description", "tags", "category"],
+      2: ["meta_title", "meta_description", "seo_slug", "faq", "image_alt"],
+      3: ["price", "upsells", "crosssells"],
+    };
+
+    let fields: string[];
+    if (phase && PHASE_FIELDS[phase]) {
+      // Phase mode: use phase fields, intersected with fieldsToOptimize if provided
+      const phaseFields = PHASE_FIELDS[phase];
+      fields = fieldsToOptimize
+        ? phaseFields.filter((f: string) => fieldsToOptimize.includes(f))
+        : phaseFields;
+      console.log(`🔄 Phase ${phase}: optimizing fields [${fields.join(", ")}]`);
+    } else {
+      fields = fieldsToOptimize || [
+        "title", "description", "short_description",
+        "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
+        "upsells", "crosssells", "image_alt", "category"
+      ];
+    }
 
     // Fetch products
     const { data: products, error: fetchError } = await supabase
@@ -678,7 +695,13 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 - Categoria: ${product.category || "N/A"}
 - Preço: ${product.original_price || "N/A"}€
 - SKU: ${product.sku || "N/A"}
-- Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
+- Ref. Fornecedor: ${product.supplier_ref || "N/A"}${
+  (phase === 2 || phase === 3) ? `\n\nDADOS JÁ OTIMIZADOS (Fase anterior):
+- Título Otimizado: ${product.optimized_title || "N/A"}
+- Descrição Otimizada: ${(product.optimized_description || "").substring(0, 500) || "N/A"}
+- Descrição Curta Otimizada: ${product.optimized_short_description || "N/A"}
+- Tags: ${(product.tags || []).join(", ") || "N/A"}
+- Focus Keywords: ${(product.focus_keyword || []).join(", ") || "N/A"}` : ""}`;
 
         // === COMPATIBILITY ENGINE: score products for upsell/cross-sell ===
         let productCatalogContext = "";
@@ -850,13 +873,15 @@ REGRAS GLOBAIS:
           toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
           requiredFields.push("suggested_category");
         }
-        // Always generate focus keywords
-        toolProperties.focus_keywords = {
-          type: "array",
-          description: "1 a 3 focus keywords SEO principais para este produto, ordenadas por relevância. A primeira é a principal.",
-          items: { type: "string" },
-        };
-        requiredFields.push("focus_keywords");
+        // Only generate focus keywords in phase 1 (or when no phase is set)
+        if (!phase || phase === 1) {
+          toolProperties.focus_keywords = {
+            type: "array",
+            description: "1 a 3 focus keywords SEO principais para este produto, ordenadas por relevância. A primeira é a principal.",
+            items: { type: "string" },
+          };
+          requiredFields.push("focus_keywords");
+        }
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",

@@ -8,20 +8,41 @@ export type OptimizationField =
   | "tags" | "price" | "faq" | "upsells" | "crosssells"
   | "image_alt" | "category";
 
-export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string }[] = [
-  { key: "title", label: "Título" },
-  { key: "description", label: "Descrição" },
-  { key: "short_description", label: "Descrição Curta" },
-  { key: "meta_title", label: "Meta Title" },
-  { key: "meta_description", label: "Meta Description" },
-  { key: "seo_slug", label: "SEO Slug" },
-  { key: "tags", label: "Tags" },
-  { key: "price", label: "Preço" },
-  { key: "faq", label: "FAQ" },
-  { key: "upsells", label: "Upsells" },
-  { key: "crosssells", label: "Cross-sells" },
-  { key: "image_alt", label: "Alt Text Imagens" },
-  { key: "category", label: "Categoria Sugerida" },
+export const OPTIMIZATION_PHASES = [
+  {
+    phase: 1 as const,
+    label: "Conteúdo Base",
+    description: "Título, descrição, tags, categoria e keywords",
+    fields: ["title", "description", "short_description", "tags", "category"] as OptimizationField[],
+  },
+  {
+    phase: 2 as const,
+    label: "SEO",
+    description: "Meta title, meta description, slug, FAQ e alt text",
+    fields: ["meta_title", "meta_description", "seo_slug", "faq", "image_alt"] as OptimizationField[],
+  },
+  {
+    phase: 3 as const,
+    label: "Comercial",
+    description: "Preço, upsells e cross-sells",
+    fields: ["price", "upsells", "crosssells"] as OptimizationField[],
+  },
+];
+
+export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string; phase: number }[] = [
+  { key: "title", label: "Título", phase: 1 },
+  { key: "description", label: "Descrição", phase: 1 },
+  { key: "short_description", label: "Descrição Curta", phase: 1 },
+  { key: "tags", label: "Tags", phase: 1 },
+  { key: "category", label: "Categoria Sugerida", phase: 1 },
+  { key: "meta_title", label: "Meta Title", phase: 2 },
+  { key: "meta_description", label: "Meta Description", phase: 2 },
+  { key: "seo_slug", label: "SEO Slug", phase: 2 },
+  { key: "faq", label: "FAQ", phase: 2 },
+  { key: "image_alt", label: "Alt Text Imagens", phase: 2 },
+  { key: "price", label: "Preço", phase: 3 },
+  { key: "upsells", label: "Upsells", phase: 3 },
+  { key: "crosssells", label: "Cross-sells", phase: 3 },
 ];
 
 export const AI_MODELS = [
@@ -41,6 +62,8 @@ export interface OptimizationProgress {
   done: number;
   currentIndex: number;
   currentProductName: string;
+  currentPhase: number | null;
+  currentPhaseLabel: string;
   estimatedSecondsLeft: number | null;
   startedAt: number;
   cancelled?: boolean;
@@ -53,15 +76,16 @@ export class CancellationToken {
   get isCancelled() { return this._cancelled; }
 }
 
-// Process ONE product at a time to avoid edge function timeouts
+// Process ONE product, ONE phase at a time
 async function optimizeSingle(
   productId: string,
   fieldsToOptimize?: OptimizationField[],
   modelOverride?: string,
-  workspaceId?: string
+  workspaceId?: string,
+  phase?: number,
 ) {
   const { data, error } = await supabase.functions.invoke("optimize-product", {
-    body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId },
+    body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId, phase },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
@@ -75,6 +99,7 @@ export function useOptimizeProducts() {
     mutationFn: async ({
       productIds,
       fieldsToOptimize,
+      selectedPhases,
       modelOverride,
       workspaceId,
       onProgress,
@@ -83,6 +108,7 @@ export function useOptimizeProducts() {
     }: {
       productIds: string[];
       fieldsToOptimize?: OptimizationField[];
+      selectedPhases?: number[];
       modelOverride?: string;
       workspaceId?: string;
       onProgress?: (progress: OptimizationProgress) => void;
@@ -94,17 +120,21 @@ export function useOptimizeProducts() {
       const startedAt = Date.now();
       const durations: number[] = [];
 
+      // Determine which phases to run
+      const phases = selectedPhases && selectedPhases.length > 0
+        ? OPTIMIZATION_PHASES.filter(p => selectedPhases.includes(p.phase))
+        : [{ phase: 0, label: "Completa", description: "", fields: [] as OptimizationField[] }]; // phase 0 = legacy all-at-once
+
+      const totalSteps = total * phases.length;
+      let stepsDone = 0;
+
       for (let i = 0; i < total; i++) {
-        // Check cancellation before each product
         if (cancellationToken?.isCancelled) {
           onProgress?.({
-            total,
-            done: i,
-            currentIndex: i,
-            currentProductName: "",
-            estimatedSecondsLeft: 0,
-            startedAt,
-            cancelled: true,
+            total, done: i, currentIndex: i,
+            currentProductName: "", currentPhase: null,
+            currentPhaseLabel: "",
+            estimatedSecondsLeft: 0, startedAt, cancelled: true,
           });
           toast.info(`Otimização cancelada. ${i} de ${total} produtos processados.`);
           break;
@@ -113,43 +143,56 @@ export function useOptimizeProducts() {
         const productId = productIds[i];
         const productName = productNames?.[productId] || `Produto ${i + 1}`;
 
-        // Calculate ETA based on average duration of completed items
-        let estimatedSecondsLeft: number | null = null;
-        if (durations.length > 0) {
-          const avgMs = durations.reduce((a, b) => a + b, 0) / durations.length;
-          estimatedSecondsLeft = Math.round((avgMs * (total - i)) / 1000);
+        for (const phaseInfo of phases) {
+          if (cancellationToken?.isCancelled) break;
+
+          // Calculate ETA
+          let estimatedSecondsLeft: number | null = null;
+          if (durations.length > 0) {
+            const avgMs = durations.reduce((a, b) => a + b, 0) / durations.length;
+            const remainingSteps = totalSteps - stepsDone;
+            estimatedSecondsLeft = Math.round((avgMs * remainingSteps) / 1000);
+          }
+
+          const phaseLabel = phaseInfo.phase === 0
+            ? "Completa"
+            : `Fase ${phaseInfo.phase}: ${phaseInfo.label}`;
+
+          onProgress?.({
+            total, done: i, currentIndex: i,
+            currentProductName: productName,
+            currentPhase: phaseInfo.phase || null,
+            currentPhaseLabel: phaseLabel,
+            estimatedSecondsLeft, startedAt,
+          });
+
+          const itemStart = Date.now();
+          try {
+            const data = await optimizeSingle(
+              productId,
+              phaseInfo.phase === 0 ? fieldsToOptimize : phaseInfo.fields,
+              modelOverride,
+              workspaceId,
+              phaseInfo.phase === 0 ? undefined : phaseInfo.phase,
+            );
+            if (data.results) allResults.push(...data.results);
+          } catch (err: any) {
+            allResults.push({ productId, status: "error", error: err.message });
+          }
+          durations.push(Date.now() - itemStart);
+          stepsDone++;
         }
 
-        onProgress?.({
-          total,
-          done: i,
-          currentIndex: i,
-          currentProductName: productName,
-          estimatedSecondsLeft,
-          startedAt,
-        });
-
-        const itemStart = Date.now();
-        try {
-          const data = await optimizeSingle(productId, fieldsToOptimize, modelOverride, workspaceId);
-          if (data.results) allResults.push(...data.results);
-        } catch (err: any) {
-          allResults.push({ productId, status: "error", error: err.message });
-        }
-        durations.push(Date.now() - itemStart);
-
-        // Invalidate between items so UI updates progressively
+        // Invalidate between products so UI updates progressively
         qc.invalidateQueries({ queryKey: ["products"] });
       }
 
       // Final progress
       onProgress?.({
-        total,
-        done: total,
-        currentIndex: total - 1,
-        currentProductName: "",
-        estimatedSecondsLeft: 0,
-        startedAt,
+        total, done: total, currentIndex: total - 1,
+        currentProductName: "", currentPhase: null,
+        currentPhaseLabel: "",
+        estimatedSecondsLeft: 0, startedAt,
       });
 
       return { results: allResults };

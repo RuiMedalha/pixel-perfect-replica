@@ -13,7 +13,7 @@ import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Sett
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
-import { useOptimizeProducts, OPTIMIZATION_FIELDS, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
+import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
@@ -44,6 +44,7 @@ const statusColors: Record<Enums<"product_status">, string> = {
 type FilterStatus = Enums<"product_status"> | "all";
 
 const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
+const ALL_PHASES = OPTIMIZATION_PHASES.map(p => p.phase);
 
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
@@ -67,6 +68,7 @@ const ProductsPage = () => {
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
+  const [selectedPhases, setSelectedPhases] = useState<Set<number>>(new Set(ALL_PHASES));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
   const [confirmReoptimize, setConfirmReoptimize] = useState(false);
@@ -156,7 +158,6 @@ const ProductsPage = () => {
   };
 
   const handleConfirmOptimize = () => {
-    // Build product name map for progress display
     const nameMap: Record<string, string> = {};
     (products ?? []).forEach(p => {
       if (pendingOptimizeIds.includes(p.id)) {
@@ -167,9 +168,16 @@ const ProductsPage = () => {
     const token = new CancellationToken();
     cancellationTokenRef.current = token;
 
+    // Get fields from selected phases
+    const phaseFields = OPTIMIZATION_PHASES
+      .filter(p => selectedPhases.has(p.phase))
+      .flatMap(p => p.fields);
+    const fieldsToUse = phaseFields.filter(f => selectedFields.has(f));
+
     optimizeProducts.mutate({
       productIds: pendingOptimizeIds,
-      fieldsToOptimize: Array.from(selectedFields),
+      fieldsToOptimize: fieldsToUse,
+      selectedPhases: Array.from(selectedPhases),
       modelOverride: selectedModel !== "default" ? selectedModel : undefined,
       workspaceId: activeWorkspace?.id,
       productNames: nameMap,
@@ -185,6 +193,31 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
+  };
+
+  const togglePhase = (phase: number) => {
+    setSelectedPhases(prev => {
+      const next = new Set(prev);
+      const phaseFields = OPTIMIZATION_PHASES.find(p => p.phase === phase)?.fields || [];
+      if (next.has(phase)) {
+        next.delete(phase);
+        // Also remove this phase's fields
+        setSelectedFields(prevF => {
+          const nf = new Set(prevF);
+          phaseFields.forEach(f => nf.delete(f));
+          return nf;
+        });
+      } else {
+        next.add(phase);
+        // Also add this phase's fields
+        setSelectedFields(prevF => {
+          const nf = new Set(prevF);
+          phaseFields.forEach(f => nf.add(f));
+          return nf;
+        });
+      }
+      return next;
+    });
   };
 
   const handleCancelOptimize = () => {
@@ -347,7 +380,7 @@ const ProductsPage = () => {
                   {batchProgress.cancelled
                     ? `Cancelado — ${batchProgress.done} de ${batchProgress.total} processados`
                     : batchProgress.done < batchProgress.total
-                      ? `A otimizar: ${batchProgress.currentProductName}`
+                      ? `A otimizar: ${batchProgress.currentProductName}${batchProgress.currentPhaseLabel ? ` — ${batchProgress.currentPhaseLabel}` : ""}`
                       : "Otimização concluída!"}
                 </span>
               </div>
@@ -759,22 +792,44 @@ const ProductsPage = () => {
               </>
             );
           })()}
-          <div className="grid grid-cols-2 gap-3 mt-2">
-            {OPTIMIZATION_FIELDS.map((field) => (
-              <label key={field.key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 cursor-pointer">
-                <Checkbox
-                  checked={selectedFields.has(field.key)}
-                  onCheckedChange={() => toggleField(field.key)}
-                />
-                <span className="text-sm">{field.label}</span>
-              </label>
+          <div className="space-y-3 mt-2">
+            {OPTIMIZATION_PHASES.map((phaseInfo) => (
+              <div key={phaseInfo.phase} className={cn(
+                "rounded-lg border p-3 transition-colors",
+                selectedPhases.has(phaseInfo.phase) ? "border-primary/40 bg-primary/5" : "border-border"
+              )}>
+                <label className="flex items-center gap-2 cursor-pointer mb-2">
+                  <Checkbox
+                    checked={selectedPhases.has(phaseInfo.phase)}
+                    onCheckedChange={() => togglePhase(phaseInfo.phase)}
+                  />
+                  <div>
+                    <span className="text-sm font-medium">Fase {phaseInfo.phase}: {phaseInfo.label}</span>
+                    <p className="text-[10px] text-muted-foreground">{phaseInfo.description}</p>
+                  </div>
+                </label>
+                {selectedPhases.has(phaseInfo.phase) && (
+                  <div className="grid grid-cols-2 gap-1 ml-6">
+                    {OPTIMIZATION_FIELDS.filter(f => f.phase === phaseInfo.phase).map((field) => (
+                      <label key={field.key} className="flex items-center gap-1.5 p-1 rounded hover:bg-muted/50 cursor-pointer">
+                        <Checkbox
+                          checked={selectedFields.has(field.key)}
+                          onCheckedChange={() => toggleField(field.key)}
+                          className="h-3.5 w-3.5"
+                        />
+                        <span className="text-xs">{field.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
           <div className="flex gap-2 mt-2">
-            <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set(ALL_FIELDS))}>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedPhases(new Set(ALL_PHASES)); setSelectedFields(new Set(ALL_FIELDS)); }}>
               Selecionar Todos
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedFields(new Set())}>
+            <Button variant="ghost" size="sm" onClick={() => { setSelectedPhases(new Set()); setSelectedFields(new Set()); }}>
               Limpar
             </Button>
           </div>
