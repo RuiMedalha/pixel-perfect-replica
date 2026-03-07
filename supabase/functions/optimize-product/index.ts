@@ -226,47 +226,98 @@ serve(async (req) => {
           }
         }
 
-        // 1. Search relevant knowledge chunks with multiple search strategies
+        // 1. HYBRID RAG: keyword + trigram + family search with reranking
         let knowledgeContext = "";
         const allChunks: any[] = [];
 
-        // Strategy 1: Search by product title (cleaned - remove codes/special chars)
-        const cleanTitle = (product.original_title || "")
+        // Extract product family/line keywords for targeted search
+        const titleRaw = product.original_title || "";
+        const cleanTitle = titleRaw
           .replace(/[+\-\/\\()]/g, " ")
           .replace(/\s+/g, " ")
           .trim();
-        // Extract meaningful words (3+ chars, no codes)
-        const titleWords = cleanTitle.split(" ").filter((w: string) => w.length >= 3 && !/^\d+$/.test(w));
-        const titleQuery = titleWords.slice(0, 5).join(" ");
 
-        // Strategy 2: Search by category keywords
-        const categoryQuery = (product.category || "")
+        // Detect product family patterns (e.g., "Linha 700", "Cesto 40", "Serie 900")
+        const familyPatterns = [
+          /linha\s*\d+/i, /line\s*\d+/i, /serie\s*\d+/i, /series\s*\d+/i,
+          /cesto\s*\d+/i, /basket\s*\d+/i,
+          /\d+\s*litros?/i, /\d+\s*l\b/i,
+          /\d+x\d+/i, // dimensions like 40x40
+          /\d+\s*bicos?/i, /\d+\s*queimadores?/i,
+          /gn\s*\d+\/\d+/i, // gastronorm sizes
+          /monof[aá]sic[oa]/i, /trif[aá]sic[oa]/i,
+          /g[aá]s/i, /el[eé]tric[oa]/i,
+        ];
+        const familyMatches: string[] = [];
+        for (const pattern of familyPatterns) {
+          const match = titleRaw.match(pattern);
+          if (match) familyMatches.push(match[0]);
+        }
+        // Also check category
+        const categoryRaw = product.category || "";
+        for (const pattern of familyPatterns) {
+          const match = categoryRaw.match(pattern);
+          if (match && !familyMatches.includes(match[0])) familyMatches.push(match[0]);
+        }
+        const familyKeywords = familyMatches.length > 0 
+          ? familyMatches.join(" ") + " " + cleanTitle.split(" ").filter((w: string) => w.length >= 4).slice(0, 3).join(" ")
+          : null;
+
+        // Extract meaningful title words for FTS
+        const titleWords = cleanTitle.split(" ").filter((w: string) => w.length >= 3 && !/^\d+$/.test(w));
+        const titleQuery = titleWords.slice(0, 6).join(" ");
+
+        // Category query
+        const categoryQuery = categoryRaw
           .replace(/>/g, " ")
           .replace(/[+\-\/\\()]/g, " ")
           .replace(/\s+/g, " ")
           .trim();
 
-        // Strategy 3: Search by SKU/ref
+        // SKU query  
         const skuQuery = product.sku || product.supplier_ref || "";
 
-        const searchQueries = [titleQuery, categoryQuery, skuQuery].filter((q) => q.length > 2);
-        
-        // Run all knowledge searches in parallel for speed
-        const searchPromises = searchQueries.map(async (query) => {
-          const searchArgs: any = { _query: query, _limit: 5 };
-          if (workspaceId) searchArgs._workspace_id = workspaceId;
+        // Build multiple search queries
+        const searchQueries = [
+          { query: titleQuery, family: familyKeywords },
+          { query: categoryQuery, family: familyKeywords },
+          { query: skuQuery, family: null },
+        ].filter((q) => q.query.length > 2);
+
+        // Also add a family-only search if we have family keywords
+        if (familyKeywords && familyKeywords.length > 3) {
+          searchQueries.push({ query: familyKeywords, family: familyKeywords });
+        }
+
+        // Run all hybrid searches in parallel
+        const searchPromises = searchQueries.map(async ({ query, family }) => {
           try {
-            const { data: chunks } = await supabase.rpc("search_knowledge", searchArgs);
+            const { data: chunks } = await supabase.rpc("search_knowledge_hybrid", {
+              _query: query,
+              _workspace_id: workspaceId || null,
+              _family_keywords: family,
+              _limit: 10,
+            });
             return chunks || [];
           } catch (e) {
-            console.warn(`Knowledge search error for "${query.substring(0, 40)}":`, e);
-            return [];
+            // Fallback to old search if hybrid fails
+            console.warn(`Hybrid search failed for "${query.substring(0, 30)}", falling back:`, e);
+            try {
+              const searchArgs: any = { _query: query, _limit: 8 };
+              if (workspaceId) searchArgs._workspace_id = workspaceId;
+              const { data: chunks } = await supabase.rpc("search_knowledge", searchArgs);
+              return (chunks || []).map((c: any) => ({ ...c, match_type: "fts_fallback" }));
+            } catch { return []; }
           }
         });
         const searchResults = await Promise.all(searchPromises);
+        
+        // Deduplicate and merge results
+        const seenIds = new Set<string>();
         for (const chunks of searchResults) {
           for (const c of chunks) {
-            if (!allChunks.find((existing: any) => existing.id === c.id)) {
+            if (!seenIds.has(c.id)) {
+              seenIds.add(c.id);
               allChunks.push(c);
             }
           }
@@ -274,14 +325,92 @@ serve(async (req) => {
 
         // Sort by rank and take top results
         allChunks.sort((a: any, b: any) => (b.rank || 0) - (a.rank || 0));
-        const topChunks = allChunks.slice(0, 8);
+
+        // AI Reranking: if we have many chunks, use AI to pick the most relevant
+        let topChunks = allChunks.slice(0, 12);
+        if (topChunks.length > 5) {
+          try {
+            const rerankPrompt = `Tens ${topChunks.length} excertos de conhecimento e precisas escolher os 6 mais relevantes para otimizar este produto:
+Produto: ${product.original_title || "N/A"} | Categoria: ${product.category || "N/A"} | SKU: ${product.sku || "N/A"}
+${familyKeywords ? `Família técnica: ${familyKeywords}` : ""}
+
+Excertos:
+${topChunks.map((c: any, i: number) => `[${i}] (${c.source_name || "?"}, match: ${c.match_type || "?"}): ${c.content.substring(0, 200)}`).join("\n")}
+
+Devolve os índices dos 6 excertos mais relevantes, priorizando:
+1. Informação técnica específica deste produto
+2. Informação da mesma família/linha técnica
+3. Fichas técnicas e tabelas de preços
+4. Informação genérica sobre a categoria`;
+
+            const rerankResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash-lite",
+                messages: [
+                  { role: "system", content: "Responde APENAS com a tool call. Seleciona os excertos mais relevantes." },
+                  { role: "user", content: rerankPrompt },
+                ],
+                tools: [{
+                  type: "function",
+                  function: {
+                    name: "select_chunks",
+                    description: "Seleciona os índices dos chunks mais relevantes",
+                    parameters: {
+                      type: "object",
+                      properties: {
+                        selected_indices: {
+                          type: "array",
+                          items: { type: "integer" },
+                          description: "Índices dos chunks selecionados (0-based)",
+                        },
+                        reasoning: { type: "string", description: "Breve justificação" },
+                      },
+                      required: ["selected_indices"],
+                      additionalProperties: false,
+                    },
+                  },
+                }],
+                tool_choice: { type: "function", function: { name: "select_chunks" } },
+              }),
+            });
+
+            if (rerankResponse.ok) {
+              const rerankData = await rerankResponse.json();
+              const rerankCall = rerankData.choices?.[0]?.message?.tool_calls?.[0];
+              if (rerankCall) {
+                const { selected_indices, reasoning } = JSON.parse(rerankCall.function.arguments);
+                if (Array.isArray(selected_indices) && selected_indices.length > 0) {
+                  const reranked = selected_indices
+                    .filter((i: number) => i >= 0 && i < topChunks.length)
+                    .map((i: number) => topChunks[i]);
+                  if (reranked.length >= 3) {
+                    topChunks = reranked;
+                    console.log(`🧠 AI Reranking: selected ${reranked.length} chunks. Reason: ${reasoning || "N/A"}`);
+                  }
+                }
+              }
+            }
+          } catch (rerankErr) {
+            console.warn("AI reranking failed (non-fatal), using rank-sorted chunks:", rerankErr);
+          }
+        }
+
+        // Cap at 8 after reranking
+        topChunks = topChunks.slice(0, 8);
 
         if (topChunks.length > 0) {
-          console.log(`✅ Knowledge found: ${topChunks.length} chunks from: ${[...new Set(topChunks.map((c: any) => c.source_name))].join(", ")}`);
+          const matchTypes = topChunks.map((c: any) => c.match_type || "unknown");
+          const matchSummary = [...new Set(matchTypes)].join("+");
+          console.log(`✅ Hybrid RAG: ${topChunks.length} chunks (${matchSummary}) from: ${[...new Set(topChunks.map((c: any) => c.source_name))].join(", ")}${familyKeywords ? ` | Family: ${familyKeywords}` : ""}`);
           const parts = topChunks.map((c: any) => `[${c.source_name}] ${c.content}`).join("\n\n");
-          knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante encontrado nos PDFs e ficheiros):\n${parts.substring(0, 12000)}`;
+          knowledgeContext = `\n\nINFORMAÇÃO DE REFERÊNCIA (conhecimento relevante — hybrid RAG: keywords + fuzzy + família técnica):\n${parts.substring(0, 14000)}`;
         } else {
-          console.log(`⚠️ No knowledge found for queries: ${searchQueries.map(q => `"${q.substring(0, 30)}"`).join(", ")} (workspace: ${workspaceId || "all"})`);
+          console.log(`⚠️ No knowledge found via hybrid search for: "${titleQuery.substring(0, 30)}" (workspace: ${workspaceId || "all"})${familyKeywords ? ` | Family: ${familyKeywords}` : ""}`);
         }
 
         // 2. Auto-scrape supplier page by SKU
