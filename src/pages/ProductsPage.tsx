@@ -56,6 +56,7 @@ const ProductsPage = () => {
   const applyVariations = useApplyVariations();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
