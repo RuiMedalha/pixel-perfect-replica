@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
@@ -15,6 +16,7 @@ import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useProductOptimizationLogs } from "@/hooks/useOptimizationLogs";
+import { calculateSeoScore, getSeoScoreColor, getSeoScoreBg } from "@/lib/seoScore";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -47,6 +49,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
         tags: (product.tags ?? []).join(", "),
         optimized_price: product.optimized_price ?? product.original_price ?? "",
         category: product.category ?? "",
+        focus_keyword: (product as any).focus_keyword ?? "",
       });
       setHasChanges(false);
     }
@@ -70,6 +73,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
       tags: editData.tags ? editData.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : null,
       optimized_price: editData.optimized_price ? Number(editData.optimized_price) : null,
       category: editData.category || null,
+      focus_keyword: editData.focus_keyword || null,
     };
 
     // Collect image alt texts from edit fields
@@ -111,8 +115,14 @@ export function ProductDetailModal({ product, onClose }: Props) {
         <Tabs defaultValue="textos" className="mt-2">
           <TabsList className="w-full justify-start flex-wrap h-auto gap-1">
             <TabsTrigger value="textos">Textos</TabsTrigger>
+            <TabsTrigger value="comparacao">
+              <Columns className="w-3.5 h-3.5 mr-1" /> Comparação
+            </TabsTrigger>
             <TabsTrigger value="imagens">Imagens</TabsTrigger>
             <TabsTrigger value="seo">SEO</TabsTrigger>
+            <TabsTrigger value="seo-score">
+              <BarChart3 className="w-3.5 h-3.5 mr-1" /> Score SEO
+            </TabsTrigger>
             <TabsTrigger value="faq">FAQ</TabsTrigger>
             <TabsTrigger value="relacionados">
               <Shuffle className="w-3.5 h-3.5 mr-1" /> Upsells / Cross-sells
@@ -149,6 +159,60 @@ export function ProductDetailModal({ product, onClose }: Props) {
               multiline
               large
             />
+          </TabsContent>
+
+          {/* COMPARISON TAB - Side by Side */}
+          <TabsContent value="comparacao" className="space-y-4 mt-4">
+            <p className="text-sm text-muted-foreground">Comparação lado a lado: original vs otimizado (somente leitura)</p>
+            {[
+              { label: "Título", original: product.original_title, optimized: product.optimized_title },
+              { label: "Descrição Curta", original: product.short_description, optimized: product.optimized_short_description },
+              { label: "Descrição", original: product.original_description, optimized: product.optimized_description },
+              { label: "Preço", original: product.original_price != null ? `${product.original_price}€` : null, optimized: product.optimized_price != null ? `${product.optimized_price}€` : null },
+            ].map(({ label, original, optimized }) => (
+              <div key={label} className="border border-border/50 rounded-lg p-4">
+                <h4 className="text-sm font-semibold mb-3">{label}</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Original</p>
+                    <div className="p-3 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+                      {original ?? "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-primary mb-1">Otimizado</p>
+                    <div className={cn(
+                      "p-3 rounded-lg text-sm whitespace-pre-wrap max-h-[200px] overflow-y-auto",
+                      optimized ? "bg-primary/5 border border-primary/20" : "bg-muted/50"
+                    )}>
+                      {optimized ?? "—"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* SEO fields comparison */}
+            <div className="border border-border/50 rounded-lg p-4">
+              <h4 className="text-sm font-semibold mb-3">Campos SEO</h4>
+              <div className="space-y-3">
+                {[
+                  { label: "Meta Title", value: product.meta_title },
+                  { label: "Meta Description", value: product.meta_description },
+                  { label: "Slug", value: product.seo_slug },
+                  { label: "Categoria", value: product.category },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex items-start gap-3">
+                    <span className="text-xs text-muted-foreground w-28 shrink-0 pt-1">{label}</span>
+                    <div className={cn(
+                      "flex-1 p-2 rounded text-sm",
+                      value ? "bg-primary/5" : "bg-muted/50 text-muted-foreground"
+                    )}>
+                      {value ?? "—"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </TabsContent>
 
           {/* SEO TAB */}
@@ -211,6 +275,64 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 </div>
               </div>
             </div>
+          </TabsContent>
+
+          {/* SEO SCORE TAB */}
+          <TabsContent value="seo-score" className="mt-4 space-y-4">
+            {(() => {
+              const { score, checks } = calculateSeoScore(product);
+              return (
+                <>
+                  <div className="flex items-center gap-6">
+                    <div className="relative w-24 h-24">
+                      <svg viewBox="0 0 36 36" className="w-24 h-24 -rotate-90">
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
+                        <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" className={getSeoScoreColor(score).replace("text-", "stroke-")} strokeWidth="3" strokeDasharray={`${score}, 100`} strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className={cn("text-2xl font-bold", getSeoScoreColor(score))}>{score}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className={cn("text-lg font-bold", getSeoScoreColor(score))}>
+                        {score >= 80 ? "Bom" : score >= 50 ? "Médio" : "Fraco"}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        {checks.filter(c => c.passed).length}/{checks.length} verificações passaram
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {checks.map((check, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+                          check.passed ? "bg-green-500/20 text-green-600" : "bg-red-500/20 text-red-600"
+                        )}>
+                          {check.passed ? <Check className="w-3 h-3" /> : <X className="w-3 h-3" />}
+                        </div>
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">{check.label}</span>
+                          <span className="text-xs text-muted-foreground ml-2">({check.weight}pts)</span>
+                        </div>
+                        <span className={cn("text-xs", check.passed ? "text-green-600" : "text-muted-foreground")}>{check.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Focus keyword input */}
+                  <div className="border border-border/50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold mb-2">Focus Keyword (RankMath)</h4>
+                    <Input
+                      value={editData.focus_keyword ?? (product as any).focus_keyword ?? ""}
+                      onChange={(e) => handleFieldChange("focus_keyword", e.target.value)}
+                      placeholder="Ex: fritadeira industrial"
+                      className="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">A keyword principal para otimização SEO deste produto.</p>
+                  </div>
+                </>
+              );
+            })()}
           </TabsContent>
 
           {/* FAQ TAB */}

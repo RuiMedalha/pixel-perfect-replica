@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,7 @@ import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
+import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
 
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
@@ -409,6 +410,7 @@ const ProductsPage = () => {
                     <th className="p-3 text-left font-medium text-muted-foreground">Desc. Curta</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Slug</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Estado</th>
+                    <th className="p-3 text-center font-medium text-muted-foreground">SEO</th>
                     <th className="p-3 text-right font-medium text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
@@ -558,6 +560,14 @@ const ProductsPage = () => {
                             {statusLabels[product.status]}
                           </Badge>
                         </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        {(() => {
+                          const { score } = calculateSeoScore(product);
+                          return (
+                            <span className={cn("text-xs font-bold", getSeoScoreColor(score))}>{score}</span>
+                          );
+                        })()}
                       </td>
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">

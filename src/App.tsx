@@ -13,6 +13,7 @@ import UploadPage from "./pages/UploadPage";
 import ProductsPage from "./pages/ProductsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
+import CategoriesPage from "./pages/CategoriesPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -46,6 +47,7 @@ function ProtectedRoutes() {
           <Route path="/" element={<Index />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/produtos" element={<ProductsPage />} />
+          <Route path="/categorias" element={<CategoriesPage />} />
           {profile?.isAdmin && (
             <>
               <Route path="/configuracoes" element={<SettingsPage />} />
