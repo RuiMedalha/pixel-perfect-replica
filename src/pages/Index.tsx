@@ -1,11 +1,11 @@
-import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3 } from "lucide-react";
+import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3, TrendingUp, AlertTriangle, Tag, Cpu } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useProductStats } from "@/hooks/useProducts";
 import { useRecentActivity } from "@/hooks/useActivityLog";
-import { useTokenUsageSummary } from "@/hooks/useOptimizationLogs";
+import { useTokenUsageSummary, useQualityMetrics } from "@/hooks/useOptimizationLogs";
 import { formatDistanceToNow } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -22,6 +22,7 @@ const Dashboard = () => {
   const { data: stats, isLoading: statsLoading } = useProductStats();
   const { data: activity, isLoading: activityLoading } = useRecentActivity();
   const { data: tokenSummary, isLoading: tokenLoading } = useTokenUsageSummary();
+  const { data: quality, isLoading: qualityLoading } = useQualityMetrics();
 
   const statCards = [
     { label: "Produtos Pendentes", value: stats?.pending ?? 0, icon: Clock, color: "text-warning" },
@@ -54,6 +55,110 @@ const Dashboard = () => {
           </Card>
         ))}
       </div>
+
+      {/* Quality Dashboard */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="w-4 h-4" />
+            Qualidade &amp; Métricas
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {qualityLoading ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : !quality || quality.total === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">Sem dados de qualidade disponíveis.</p>
+          ) : (
+            <div className="space-y-5">
+              {/* Key Rates */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-success">{quality.acceptanceRate}%</p>
+                  <p className="text-xs text-muted-foreground">Taxa de Aceitação</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-primary">{quality.publishRate}%</p>
+                  <p className="text-xs text-muted-foreground">Taxa de Publicação</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-destructive">{quality.errorRate}%</p>
+                  <p className="text-xs text-muted-foreground">Taxa de Erro</p>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-2xl font-bold text-foreground">{quality.optimized + quality.published}</p>
+                  <p className="text-xs text-muted-foreground">Aceites / {quality.total}</p>
+                </div>
+              </div>
+
+              {/* Model Comparison */}
+              {quality.modelStats && Object.keys(quality.modelStats).length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <Cpu className="w-3 h-3" /> Comparação por Modelo de IA
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-muted/30">
+                          <th className="p-2 text-left text-xs font-medium text-muted-foreground">Modelo</th>
+                          <th className="p-2 text-center text-xs font-medium text-muted-foreground">Otimizações</th>
+                          <th className="p-2 text-center text-xs font-medium text-muted-foreground">Tokens Totais</th>
+                          <th className="p-2 text-center text-xs font-medium text-muted-foreground">c/ Conhecimento</th>
+                          <th className="p-2 text-center text-xs font-medium text-muted-foreground">Avg Chunks</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(quality.modelStats)
+                          .sort(([, a], [, b]) => b.count - a.count)
+                          .map(([model, stats]) => (
+                            <tr key={model} className="border-b last:border-0">
+                              <td className="p-2 font-mono text-xs">{model}</td>
+                              <td className="p-2 text-center">{stats.count}</td>
+                              <td className="p-2 text-center text-muted-foreground">{stats.tokens.toLocaleString()}</td>
+                              <td className="p-2 text-center">
+                                <Badge variant={stats.withKnowledge > 0 ? "default" : "secondary"} className="text-[10px]">
+                                  {stats.withKnowledge}/{stats.count}
+                                </Badge>
+                              </td>
+                              <td className="p-2 text-center text-muted-foreground">{stats.avgChunks}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Category Distribution */}
+              {quality.topCategories.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    <Tag className="w-3 h-3" /> Distribuição por Categoria
+                  </h4>
+                  <div className="space-y-1.5">
+                    {quality.topCategories.map((cat, i) => {
+                      const maxCount = quality.topCategories[0]?.count || 1;
+                      return (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-xs truncate w-48 shrink-0">{cat.name}</span>
+                          <div className="flex-1 h-4 rounded-full bg-muted/50 overflow-hidden">
+                            <div
+                              className="h-full bg-primary/70 rounded-full transition-all"
+                              style={{ width: `${(cat.count / maxCount) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-muted-foreground w-8 text-right">{cat.count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Token Usage Summary */}
       <Card>

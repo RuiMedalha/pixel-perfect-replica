@@ -66,6 +66,13 @@ export function useTokenUsageSummary() {
         }
       });
 
+      // Model usage breakdown
+      const modelCounts: Record<string, number> = {};
+      logs.forEach((l) => {
+        const m = l.model || "unknown";
+        modelCounts[m] = (modelCounts[m] || 0) + 1;
+      });
+
       // Top knowledge sources
       const sourceCount = new Map<string, number>();
       logs.forEach((l) => {
@@ -93,6 +100,75 @@ export function useTokenUsageSummary() {
         matchTypeTotals,
         totalChunksUsed,
         avgChunksPerOptimization: totalOptimizations > 0 ? +(totalChunksUsed / totalOptimizations).toFixed(1) : 0,
+        modelCounts,
+      };
+    },
+  });
+}
+
+export function useQualityMetrics() {
+  return useQuery({
+    queryKey: ["quality-metrics"],
+    queryFn: async () => {
+      // Fetch products with status info
+      const { data: products, error: pErr } = await supabase
+        .from("products")
+        .select("id, status, category, optimized_title, original_title, created_at, updated_at");
+      if (pErr) throw pErr;
+
+      const total = products?.length || 0;
+      const optimized = products?.filter((p: any) => p.status === "optimized" || p.status === "published").length || 0;
+      const published = products?.filter((p: any) => p.status === "published").length || 0;
+      const pending = products?.filter((p: any) => p.status === "pending").length || 0;
+      const errors = products?.filter((p: any) => p.status === "error").length || 0;
+
+      // Acceptance rate: products that went from optimized to published (or stayed optimized = accepted)
+      const acceptanceRate = total > 0 ? +((optimized + published) / total * 100).toFixed(1) : 0;
+      const publishRate = optimized + published > 0 ? +(published / (optimized + published) * 100).toFixed(1) : 0;
+      const errorRate = total > 0 ? +(errors / total * 100).toFixed(1) : 0;
+
+      // Category distribution
+      const categoryMap: Record<string, number> = {};
+      (products || []).forEach((p: any) => {
+        const cat = p.category || "Sem categoria";
+        categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+      });
+      const topCategories = Object.entries(categoryMap)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 8)
+        .map(([name, count]) => ({ name, count }));
+
+      // Optimization logs by model
+      const { data: logs } = await supabase
+        .from("optimization_logs")
+        .select("model, total_tokens, created_at, had_knowledge, chunks_used");
+
+      const modelStats: Record<string, { count: number; tokens: number; withKnowledge: number; avgChunks: number }> = {};
+      (logs || []).forEach((l: any) => {
+        const m = (l.model || "unknown").replace("google/", "").replace("openai/", "");
+        if (!modelStats[m]) modelStats[m] = { count: 0, tokens: 0, withKnowledge: 0, avgChunks: 0 };
+        modelStats[m].count++;
+        modelStats[m].tokens += l.total_tokens || 0;
+        if (l.had_knowledge) modelStats[m].withKnowledge++;
+        modelStats[m].avgChunks += l.chunks_used || 0;
+      });
+      // Calculate averages
+      for (const m of Object.keys(modelStats)) {
+        modelStats[m].avgChunks = modelStats[m].count > 0
+          ? +(modelStats[m].avgChunks / modelStats[m].count).toFixed(1) : 0;
+      }
+
+      return {
+        total,
+        optimized,
+        published,
+        pending,
+        errors,
+        acceptanceRate,
+        publishRate,
+        errorRate,
+        topCategories,
+        modelStats,
       };
     },
   });
