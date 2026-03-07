@@ -46,6 +46,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
         seo_slug: product.seo_slug ?? "",
         tags: (product.tags ?? []).join(", "),
         optimized_price: product.optimized_price ?? product.original_price ?? "",
+        category: product.category ?? "",
       });
       setHasChanges(false);
     }
@@ -68,6 +69,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
       seo_slug: editData.seo_slug || null,
       tags: editData.tags ? editData.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : null,
       optimized_price: editData.optimized_price ? Number(editData.optimized_price) : null,
+      category: editData.category || null,
     };
 
     // Collect image alt texts from edit fields

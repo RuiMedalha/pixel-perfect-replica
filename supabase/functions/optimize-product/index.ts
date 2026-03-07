@@ -93,6 +93,83 @@ serve(async (req) => {
     });
 
     // Fetch existing categories for AI context
+    // === SEMANTIC SYNONYM MAP for category matching ===
+    const CATEGORY_SYNONYMS: Record<string, string[]> = {
+      "gyros": ["kebab", "döner", "doner", "shawarma", "churrasco vertical"],
+      "kebab": ["gyros", "döner", "doner", "shawarma", "churrasco vertical"],
+      "fritadeira": ["fryer", "deep fryer", "frigideira industrial"],
+      "forno": ["oven", "forno convetor", "forno combinado", "combi"],
+      "fogão": ["fogao", "cooker", "placa", "cooking range"],
+      "grelhador": ["grill", "char grill", "chapa", "plancha", "griddle"],
+      "chapa": ["plancha", "griddle", "grelhador", "grill"],
+      "vitrine": ["expositor", "display", "montra", "showcase"],
+      "frigorifico": ["frigorífico", "refrigerador", "fridge", "refrigeration", "armário refrigerado"],
+      "congelador": ["freezer", "ultracongelador", "abatedor", "blast chiller"],
+      "lava-louça": ["lava louça", "máquina de lavar", "dishwasher", "lavagem"],
+      "microondas": ["micro-ondas", "microwave"],
+      "salamandra": ["salamander", "gratinador"],
+      "banho-maria": ["banho maria", "bain marie", "aquecedor"],
+      "cortador": ["slicer", "fatiador", "cortadora"],
+      "batedeira": ["mixer", "misturadora", "amassadeira"],
+      "tostadeira": ["torradeira", "toaster", "tostador"],
+      "máquina de gelo": ["ice maker", "fabricador de gelo", "produtora de gelo"],
+      "máquina de café": ["coffee machine", "cafeteira", "espresso"],
+      "pizza": ["forno de pizza", "pizza oven"],
+      "wok": ["wok range", "fogão wok"],
+      "pasta": ["cozedor de massa", "pasta cooker"],
+      "arroz": ["rice cooker", "cozedor de arroz"],
+    };
+
+    function normalizeForCategoryMatch(text: string): string {
+      return text.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9\s>]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function findSemanticCategory(productTitle: string, productCategory: string, existingCats: string[]): string[] {
+      const normalized = normalizeForCategoryMatch(`${productTitle} ${productCategory}`);
+      const words = normalized.split(" ");
+      
+      // Find matching categories using synonyms
+      const matchedCats: { cat: string; score: number }[] = [];
+      
+      for (const cat of existingCats) {
+        const normalizedCat = normalizeForCategoryMatch(cat);
+        let score = 0;
+        
+        // Direct word match
+        for (const word of words) {
+          if (word.length < 3) continue;
+          if (normalizedCat.includes(word)) score += 10;
+        }
+        
+        // Synonym match
+        for (const word of words) {
+          const synonyms = CATEGORY_SYNONYMS[word] || [];
+          // Also check if any synonym key matches this word
+          for (const [key, syns] of Object.entries(CATEGORY_SYNONYMS)) {
+            if (syns.includes(word) || key === word) {
+              const allTerms = [key, ...syns];
+              for (const term of allTerms) {
+                if (normalizedCat.includes(normalizeForCategoryMatch(term))) {
+                  score += 8;
+                }
+              }
+            }
+          }
+        }
+        
+        if (score > 0) matchedCats.push({ cat, score });
+      }
+      
+      return matchedCats
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(m => m.cat);
+    }
+
     let existingCategories: string[] = [];
     if (fields.includes("category")) {
       const { data: catData } = await supabase
