@@ -303,19 +303,23 @@ const ProductsPage = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {batchProgress.done < batchProgress.total ? (
+                {batchProgress.cancelled ? (
+                  <Ban className="w-4 h-4 text-muted-foreground" />
+                ) : batchProgress.done < batchProgress.total ? (
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 ) : (
                   <Check className="w-4 h-4 text-primary" />
                 )}
                 <span className="text-sm font-medium">
-                  {batchProgress.done < batchProgress.total
-                    ? `A otimizar: ${batchProgress.currentProductName}`
-                    : "Otimização concluída!"}
+                  {batchProgress.cancelled
+                    ? `Cancelado — ${batchProgress.done} de ${batchProgress.total} processados`
+                    : batchProgress.done < batchProgress.total
+                      ? `A otimizar: ${batchProgress.currentProductName}`
+                      : "Otimização concluída!"}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                {batchProgress.estimatedSecondsLeft != null && batchProgress.done < batchProgress.total && (
+                {batchProgress.estimatedSecondsLeft != null && batchProgress.done < batchProgress.total && !batchProgress.cancelled && (
                   <span className="text-xs text-muted-foreground">
                     ~{batchProgress.estimatedSecondsLeft > 60
                       ? `${Math.round(batchProgress.estimatedSecondsLeft / 60)}min`
@@ -325,6 +329,11 @@ const ProductsPage = () => {
                 <span className="text-sm font-mono text-muted-foreground">
                   {batchProgress.done}/{batchProgress.total}
                 </span>
+                {batchProgress.done < batchProgress.total && !batchProgress.cancelled && (
+                  <Button size="sm" variant="destructive" onClick={handleCancelOptimize} className="h-7 px-2 text-xs">
+                    <Ban className="w-3 h-3 mr-1" /> Cancelar
+                  </Button>
+                )}
               </div>
             </div>
             <Progress value={(batchProgress.done / batchProgress.total) * 100} className="h-2" />
