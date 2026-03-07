@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
+import { PDFDocument } from "pdf-lib";
 
 export type ColumnMapping = Record<string, string>; // productField -> excelColumn
 
@@ -90,6 +91,47 @@ async function computeFileHash(file: File): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+const MAX_PDF_PART_SIZE = 10 * 1024 * 1024; // 10MB
+
+async function splitPdfFile(file: File): Promise<File[]> {
+  const buffer = await file.arrayBuffer();
+  if (file.size <= MAX_PDF_PART_SIZE) return [file];
+
+  try {
+    const srcDoc = await PDFDocument.load(buffer);
+    const totalPages = srcDoc.getPageCount();
+    if (totalPages <= 1) return [file];
+
+    // Estimate pages per part based on average page size
+    const avgPageSize = file.size / totalPages;
+    const pagesPerPart = Math.max(1, Math.floor(MAX_PDF_PART_SIZE / avgPageSize));
+    const parts: File[] = [];
+    const baseName = file.name.replace(/\.pdf$/i, "");
+
+    for (let start = 0; start < totalPages; start += pagesPerPart) {
+      const end = Math.min(start + pagesPerPart, totalPages);
+      const newDoc = await PDFDocument.create();
+      const copiedPages = await newDoc.copyPages(srcDoc, Array.from({ length: end - start }, (_, i) => start + i));
+      copiedPages.forEach((p) => newDoc.addPage(p));
+      const pdfBytes = await newDoc.save();
+      const partNum = Math.floor(start / pagesPerPart) + 1;
+      const totalParts = Math.ceil(totalPages / pagesPerPart);
+      const blob = new Blob([pdfBytes.buffer as ArrayBuffer], { type: "application/pdf" });
+      const partFile = new File(
+        [blob],
+        `${baseName}_parte${partNum}de${totalParts}.pdf`,
+        { type: "application/pdf" }
+      );
+      parts.push(partFile);
+    }
+
+    return parts;
+  } catch (e) {
+    console.warn("PDF split failed, uploading as single file:", e);
+    return [file];
+  }
+}
+
 export function useUploadCatalog() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [customFields, setCustomFields] = useState<ProductField[]>([]);
@@ -134,29 +176,43 @@ export function useUploadCatalog() {
     const newFiles: UploadedFile[] = [];
 
     for (const f of accepted) {
-      // Check for duplicates
-      const hash = await computeFileHash(f);
-      const isDuplicate = await checkDuplicate(f.name, hash);
-      if (isDuplicate) {
-        toast.warning(`"${f.name}" já foi carregado anteriormente. A ignorar.`);
-        continue;
-      }
-
       const isPdf = f.name.endsWith(".pdf");
-      const base: UploadedFile = {
-        id: crypto.randomUUID(),
-        file: f,
-        name: f.name,
-        size: f.size,
-        type: isPdf ? "PDF" : "Excel",
-        uploadType,
-        status: isPdf ? "aguardando" : (uploadType === "knowledge" ? "aguardando" : "a_mapear"),
-        progress: 0,
-      };
+
+      // Split large PDFs into parts
+      const filesToProcess: File[] = isPdf && f.size > MAX_PDF_PART_SIZE
+        ? await (async () => {
+            toast.info(`"${f.name}" tem ${(f.size / 1024 / 1024).toFixed(1)}MB. A dividir em partes...`);
+            const parts = await splitPdfFile(f);
+            if (parts.length > 1) {
+              toast.success(`"${f.name}" dividido em ${parts.length} partes para melhor extração.`);
+            }
+            return parts;
+          })()
+        : [f];
+
+      for (const partFile of filesToProcess) {
+        // Check for duplicates
+        const hash = await computeFileHash(partFile);
+        const isDuplicate = await checkDuplicate(partFile.name, hash);
+        if (isDuplicate) {
+          toast.warning(`"${partFile.name}" já foi carregado anteriormente. A ignorar.`);
+          continue;
+        }
+
+        const base: UploadedFile = {
+          id: crypto.randomUUID(),
+          file: partFile,
+          name: partFile.name,
+          size: partFile.size,
+          type: isPdf ? "PDF" : "Excel",
+          uploadType,
+          status: isPdf ? "aguardando" : (uploadType === "knowledge" ? "aguardando" : "a_mapear"),
+          progress: 0,
+        };
 
       if (!isPdf && uploadType === "products") {
         try {
-          const workbook = await readExcelFile(f);
+          const workbook = await readExcelFile(partFile);
           base.sheetNames = workbook.SheetNames;
           const firstSheet = workbook.SheetNames[0];
           if (firstSheet) {
@@ -172,7 +228,8 @@ export function useUploadCatalog() {
         }
       }
 
-      newFiles.push(base);
+        newFiles.push(base);
+      }
     }
 
     setFiles((prev) => [...prev, ...newFiles]);
