@@ -73,6 +73,7 @@ const ProductsPage = () => {
 
   // Batch progress tracking
   const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
+  const cancellationTokenRef = useRef<CancellationToken | null>(null);
 
   // Extract unique categories for filter
   const uniqueCategories = Array.from(
