@@ -13,6 +13,7 @@ import { useSettings, useSaveSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { FieldPromptsSettings } from "@/components/FieldPromptsSettings";
+import { DescriptionTemplateEditor } from "@/components/DescriptionTemplateEditor";
 import { AI_MODELS } from "@/hooks/useOptimizeProducts";
 
 interface Supplier {
@@ -166,6 +167,9 @@ const SettingsPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Description Template */}
+      <DescriptionTemplateEditor />
 
       {/* Per-field prompts */}
       <FieldPromptsSettings />
