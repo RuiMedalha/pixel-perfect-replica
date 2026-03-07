@@ -22,7 +22,7 @@ const adminItems = [
   { to: "/admin/utilizadores", icon: Users, label: "Utilizadores" },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { signOut, user } = useAuth();
@@ -118,6 +118,7 @@ export function AppSidebar() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                onClick={onNavigate}
                 className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                   isActive
