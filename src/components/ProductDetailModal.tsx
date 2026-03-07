@@ -49,7 +49,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
         tags: (product.tags ?? []).join(", "),
         optimized_price: product.optimized_price ?? product.original_price ?? "",
         category: product.category ?? "",
-        focus_keyword: (product as any).focus_keyword ?? "",
+        focus_keyword: (Array.isArray(product.focus_keyword) ? product.focus_keyword : []).join(", "),
       });
       setHasChanges(false);
     }
@@ -73,7 +73,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
       tags: editData.tags ? editData.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : null,
       optimized_price: editData.optimized_price ? Number(editData.optimized_price) : null,
       category: editData.category || null,
-      focus_keyword: editData.focus_keyword || null,
+      focus_keyword: editData.focus_keyword ? editData.focus_keyword.split(",").map((t: string) => t.trim()).filter(Boolean) : null,
     };
 
     // Collect image alt texts from edit fields
@@ -319,17 +319,31 @@ export function ProductDetailModal({ product, onClose }: Props) {
                       </div>
                     ))}
                   </div>
-                  {/* Focus keyword input */}
-                  <div className="border border-border/50 rounded-lg p-4">
-                    <h4 className="text-sm font-semibold mb-2">Focus Keyword (RankMath)</h4>
-                    <Input
-                      value={editData.focus_keyword ?? (product as any).focus_keyword ?? ""}
-                      onChange={(e) => handleFieldChange("focus_keyword", e.target.value)}
-                      placeholder="Ex: fritadeira industrial"
-                      className="text-sm"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">A keyword principal para otimização SEO deste produto.</p>
-                  </div>
+                   {/* Focus keywords input */}
+                   <div className="border border-border/50 rounded-lg p-4">
+                     <h4 className="text-sm font-semibold mb-2">Focus Keywords (RankMath)</h4>
+                     <Input
+                       value={editData.focus_keyword ?? ""}
+                       onChange={(e) => handleFieldChange("focus_keyword", e.target.value)}
+                       placeholder="Ex: fritadeira industrial, fryer profissional, fritadeira a gás"
+                       className="text-sm"
+                     />
+                     <p className="text-xs text-muted-foreground mt-1">Separadas por vírgula. A primeira é a keyword principal. Geradas automaticamente pela IA durante a otimização.</p>
+                     {(() => {
+                       const kws = editData.focus_keyword ? editData.focus_keyword.split(",").map((k: string) => k.trim()).filter(Boolean) : [];
+                       if (kws.length === 0) return null;
+                       return (
+                         <div className="flex flex-wrap gap-1.5 mt-2">
+                           {kws.map((kw: string, i: number) => (
+                             <Badge key={i} variant={i === 0 ? "default" : "secondary"} className="text-xs">
+                               {kw}
+                               {i === 0 && <span className="ml-1 opacity-60">principal</span>}
+                             </Badge>
+                           ))}
+                         </div>
+                       );
+                     })()}
+                   </div>
                 </>
               );
             })()}
