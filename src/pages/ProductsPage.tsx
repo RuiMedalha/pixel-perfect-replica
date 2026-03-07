@@ -454,7 +454,67 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      {/* Filters */}
+      {/* Background Job Progress Bar */}
+      {activeJob && activeJob.status !== "completed" && activeJob.status !== "cancelled" && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Rocket className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">
+                  Background: {activeJob.current_product_name || "A processar..."}
+                </span>
+                <Badge variant="secondary" className="text-[10px]">5x paralelo</Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-mono text-muted-foreground">
+                  {activeJob.processed_products}/{activeJob.total_products}
+                </span>
+                {activeJob.failed_products > 0 && (
+                  <Badge variant="destructive" className="text-[10px]">
+                    {activeJob.failed_products} erros
+                  </Badge>
+                )}
+                <Button size="sm" variant="destructive" onClick={cancelJob} className="h-7 px-2 text-xs">
+                  <Ban className="w-3 h-3 mr-1" /> Cancelar
+                </Button>
+              </div>
+            </div>
+            <Progress value={activeJob.total_products > 0 ? (activeJob.processed_products / activeJob.total_products) * 100 : 0} className="h-2" />
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              Pode fechar o browser — o processamento continua em segundo plano.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Background Job Completed */}
+      {activeJob && (activeJob.status === "completed" || activeJob.status === "cancelled") && (
+        <Card className={cn(
+          "border-l-4",
+          activeJob.status === "completed" ? "border-l-green-500" : "border-l-yellow-500"
+        )}>
+          <CardContent className="p-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {activeJob.status === "completed" ? (
+                <Check className="w-4 h-4 text-green-600" />
+              ) : (
+                <Ban className="w-4 h-4 text-yellow-600" />
+              )}
+              <span className="text-sm">
+                {activeJob.status === "completed"
+                  ? `Job concluído: ${activeJob.processed_products - activeJob.failed_products} otimizados, ${activeJob.failed_products} erros`
+                  : `Job cancelado: ${activeJob.processed_products} de ${activeJob.total_products} processados`
+                }
+              </span>
+            </div>
+            <Button size="sm" variant="ghost" onClick={dismissJob} className="h-7 px-2 text-xs">
+              <XCircle className="w-3 h-3 mr-1" /> Fechar
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="space-y-3">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
