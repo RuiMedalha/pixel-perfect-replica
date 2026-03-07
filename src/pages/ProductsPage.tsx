@@ -63,6 +63,7 @@ const ProductsPage = () => {
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
+  const [confirmReoptimize, setConfirmReoptimize] = useState(false);
   const [showVariations, setShowVariations] = useState(false);
   const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
