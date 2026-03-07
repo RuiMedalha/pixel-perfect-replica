@@ -63,6 +63,7 @@ const ProductsPage = () => {
   const [seoScoreFilter, setSeoScoreFilter] = useState<string>("all"); // "all", "good", "medium", "weak"
   const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all"); // "all", "yes", "no"
   const [productTypeFilter, setProductTypeFilter] = useState<string>("all"); // "all", "simple", "variable", "variation"
+  const [phaseFilter, setPhaseFilter] = useState<string>("all"); // "all", "missing1", "missing2", "missing3", "complete", "none"
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
