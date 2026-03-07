@@ -43,6 +43,14 @@ export interface OptimizationProgress {
   currentProductName: string;
   estimatedSecondsLeft: number | null;
   startedAt: number;
+  cancelled?: boolean;
+}
+
+/** Simple cancellation token shared between caller and mutation loop */
+export class CancellationToken {
+  private _cancelled = false;
+  cancel() { this._cancelled = true; }
+  get isCancelled() { return this._cancelled; }
 }
 
 // Process ONE product at a time to avoid edge function timeouts
