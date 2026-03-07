@@ -561,6 +561,14 @@ const ProductsPage = () => {
                           </Badge>
                         </div>
                       </td>
+                      <td className="p-3 text-center">
+                        {(() => {
+                          const { score } = calculateSeoScore(product);
+                          return (
+                            <span className={cn("text-xs font-bold", getSeoScoreColor(score))}>{score}</span>
+                          );
+                        })()}
+                      </td>
                       <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button size="sm" variant="ghost" onClick={() => setDetailProduct(product)}>
