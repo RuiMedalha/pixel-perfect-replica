@@ -12,6 +12,8 @@ import { Plus, Trash2, Save, Eye, EyeOff, Loader2, Zap } from "lucide-react";
 import { useSettings, useSaveSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { FieldPromptsSettings } from "@/components/FieldPromptsSettings";
+import { AI_MODELS } from "@/hooks/useOptimizeProducts";
 
 interface Supplier {
   name: string;
@@ -146,16 +148,16 @@ const SettingsPage = () => {
       {/* Optimization Prompt */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">✍️ Prompt de Otimização</CardTitle>
+          <CardTitle className="text-base">✍️ Prompt Global de Otimização</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Prompt Global</Label>
+            <Label>Prompt Global (contexto base para todos os campos)</Label>
             <p className="text-xs text-muted-foreground">
-              Este prompt é usado pela IA para otimizar todos os produtos. Personalize-o conforme as suas necessidades.
+              Este prompt é incluído como contexto base em todas as otimizações. Os prompts por campo abaixo adicionam regras específicas.
             </p>
             <Textarea
-              rows={12}
+              rows={8}
               className="font-mono text-xs"
               placeholder={DEFAULT_OPTIMIZATION_PROMPT}
               value={form[SETTING_KEYS.optimization_prompt] ?? DEFAULT_OPTIMIZATION_PROMPT}
@@ -164,6 +166,9 @@ const SettingsPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Per-field prompts */}
+      <FieldPromptsSettings />
 
       {/* Knowledge URLs */}
       <Card>
@@ -213,13 +218,12 @@ const SettingsPage = () => {
           <Separator />
           <div className="space-y-2">
             <Label>Modelo Padrão</Label>
-            <Select value={form[SETTING_KEYS.default_model] ?? "gemini-flash"} onValueChange={(v) => updateField(SETTING_KEYS.default_model, v)}>
+            <Select value={form[SETTING_KEYS.default_model] ?? "gemini-3-flash"} onValueChange={(v) => updateField(SETTING_KEYS.default_model, v)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="gemini-flash">Gemini 3 Flash (Recomendado)</SelectItem>
-                <SelectItem value="gemini-pro">Gemini 2.5 Pro</SelectItem>
-                <SelectItem value="gpt5">GPT-5</SelectItem>
-                <SelectItem value="gpt5-mini">GPT-5 Mini</SelectItem>
+                {AI_MODELS.map((m) => (
+                  <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">Modelo usado por defeito na otimização (pode ser alterado por otimização).</p>

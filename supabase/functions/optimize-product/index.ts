@@ -48,7 +48,7 @@ serve(async (req) => {
     const fields = fieldsToOptimize || [
       "title", "description", "short_description",
       "meta_title", "meta_description", "seo_slug", "tags", "price", "faq",
-      "upsells", "crosssells", "image_alt"
+      "upsells", "crosssells", "image_alt", "category"
     ];
 
     // Fetch products
@@ -73,6 +73,36 @@ serve(async (req) => {
       .maybeSingle();
 
     const customPrompt = promptSetting?.value || null;
+
+    // Fetch per-field custom prompts
+    const fieldPromptKeys = [
+      "prompt_field_title", "prompt_field_description", "prompt_field_short_description",
+      "prompt_field_meta_title", "prompt_field_meta_description", "prompt_field_seo_slug",
+      "prompt_field_tags", "prompt_field_price", "prompt_field_faq",
+      "prompt_field_upsells", "prompt_field_crosssells", "prompt_field_image_alt",
+      "prompt_field_category",
+    ];
+    const { data: fieldPromptSettings } = await supabase
+      .from("settings")
+      .select("key, value")
+      .in("key", fieldPromptKeys);
+    
+    const fieldPrompts: Record<string, string> = {};
+    (fieldPromptSettings || []).forEach((s: any) => {
+      if (s.value) fieldPrompts[s.key] = s.value;
+    });
+
+    // Fetch existing categories for AI context
+    let existingCategories: string[] = [];
+    if (fields.includes("category")) {
+      const { data: catData } = await supabase
+        .from("products")
+        .select("category")
+        .not("category", "is", null);
+      const cats = new Set<string>();
+      (catData || []).forEach((p: any) => { if (p.category) cats.add(p.category); });
+      existingCategories = Array.from(cats).sort();
+    }
 
     // Mark as processing
     await supabase
@@ -313,44 +343,48 @@ serve(async (req) => {
 - SKU: ${product.sku || "N/A"}
 - Ref. Fornecedor: ${product.supplier_ref || "N/A"}`;
 
-        // Build field-specific instructions
+        // Build field-specific instructions using per-field prompts
+        const getFieldPrompt = (key: string, fallback: string) => {
+          return fieldPrompts[`prompt_field_${key}`] || fallback;
+        };
+
         const fieldInstructions: string[] = [];
-        if (fields.includes("title")) fieldInstructions.push("1. Um título otimizado (máx 70 chars, com keyword principal)");
-        if (fields.includes("description")) fieldInstructions.push(`2. Uma descrição otimizada com a seguinte ESTRUTURA OBRIGATÓRIA:
-   - PRIMEIRO: Um parágrafo comercial persuasivo (150-250 chars) com benefícios e keywords
-   - SEGUNDO: Uma tabela HTML de características técnicas (<table>) com TODAS as specs do produto (dimensões, peso, material, potência, etc.)
-   - TERCEIRO: Uma secção FAQ com 3-5 perguntas e respostas frequentes em formato HTML (<h3>Perguntas Frequentes</h3> seguido de <details><summary>Pergunta</summary><p>Resposta</p></details>)
-   IMPORTANTE: NÃO mistures dados técnicos no texto comercial. As specs devem estar APENAS na tabela.`);
-        if (fields.includes("short_description")) fieldInstructions.push("3. Uma descrição curta otimizada (máx 160 chars, resumo conciso para listagens)");
-        if (fields.includes("meta_title")) fieldInstructions.push("4. Meta title SEO (máx 60 chars)");
-        if (fields.includes("meta_description")) fieldInstructions.push("5. Meta description SEO (máx 155 chars, com call-to-action)");
-        if (fields.includes("seo_slug")) fieldInstructions.push("6. SEO slug (url-friendly, lowercase, hífens, sem acentos)");
-        if (fields.includes("tags")) fieldInstructions.push("7. Tags relevantes (3-6 palavras-chave)");
-        if (fields.includes("price")) fieldInstructions.push("8. Preço sugerido (pode manter o original ou ajustar ligeiramente)");
-        if (fields.includes("faq")) fieldInstructions.push("9. FAQ com 3-5 perguntas e respostas frequentes sobre o produto (em formato array de objetos {question, answer}). Estas FAQs devem ser DIFERENTES e complementares às que estão na descrição.");
-        if (fields.includes("upsells")) fieldInstructions.push("10. Upsells: Sugere 2-4 produtos SUPERIORES do catálogo (mais caros, melhor qualidade, versão premium) que o cliente pode preferir. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
-        if (fields.includes("crosssells")) fieldInstructions.push("11. Cross-sells: Sugere 2-4 produtos COMPLEMENTARES do catálogo (acessórios, produtos relacionados que combinam) que o cliente também pode querer. Devolve array de objetos {sku, title} com SKUs REAIS do catálogo.");
+        if (fields.includes("title")) fieldInstructions.push(`TÍTULO:\n${getFieldPrompt("title", "Um título otimizado (máx 70 chars, com keyword principal)")}`);
+        if (fields.includes("description")) fieldInstructions.push(`DESCRIÇÃO COMPLETA:\n${getFieldPrompt("description", "Uma descrição otimizada com: parágrafo comercial + tabela HTML de specs + secção FAQ HTML")}`);
+        if (fields.includes("short_description")) fieldInstructions.push(`DESCRIÇÃO CURTA:\n${getFieldPrompt("short_description", "Descrição curta concisa para listagens, máx 160 chars")}`);
+        if (fields.includes("meta_title")) fieldInstructions.push(`META TITLE:\n${getFieldPrompt("meta_title", "Meta title SEO (máx 60 chars)")}`);
+        if (fields.includes("meta_description")) fieldInstructions.push(`META DESCRIPTION:\n${getFieldPrompt("meta_description", "Meta description SEO (máx 155 chars, com call-to-action)")}`);
+        if (fields.includes("seo_slug")) fieldInstructions.push(`SEO SLUG:\n${getFieldPrompt("seo_slug", "SEO slug (url-friendly, lowercase, hífens, sem acentos)")}`);
+        if (fields.includes("tags")) fieldInstructions.push(`TAGS:\n${getFieldPrompt("tags", "Tags relevantes (3-6 palavras-chave)")}`);
+        if (fields.includes("price")) fieldInstructions.push(`PREÇO:\n${getFieldPrompt("price", "Preço sugerido")}`);
+        if (fields.includes("faq")) fieldInstructions.push(`FAQ:\n${getFieldPrompt("faq", "FAQ com 3-5 perguntas e respostas frequentes")}`);
+        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS:\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
+        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS:\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
         if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
-          fieldInstructions.push(`12. Alt text para ${product.image_urls.length} imagem(ns) do produto. Para cada imagem, gera um alt text descritivo e otimizado para SEO (máx 125 chars), relevante para o produto. Devolve array de objetos {url, alt_text} na mesma ordem das imagens.`);
+          fieldInstructions.push(`ALT TEXT IMAGENS (${product.image_urls.length} imagens):\n${getFieldPrompt("image_alt", "Alt text descritivo e SEO para cada imagem (máx 125 chars)")}`);
+        }
+        if (fields.includes("category")) {
+          const catList = existingCategories.length > 0
+            ? `\nCATEGORIAS EXISTENTES: ${existingCategories.join(", ")}`
+            : "";
+          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Sugere a melhor categoria no formato 'Categoria > Subcategoria'")}${catList}`);
         }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
 
 ${productInfo}${knowledgeContext}${supplierContext}${catalogContext}
 
-Gera:
-${fieldInstructions.join("\n")}
+INSTRUÇÕES POR CAMPO:
+${fieldInstructions.join("\n\n---\n\n")}
 
-IMPORTANTE: 
-- Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na TABELA de specs, NÃO no texto comercial.
-- O texto comercial deve ser persuasivo e focado nos benefícios, sem dados técnicos misturados.
-- As FAQs na descrição devem ser práticas e úteis para o cliente.
-- Se existir informação de referência ou do fornecedor acima, usa-a para enriquecer o produto com dados reais.
-- Para upsells e cross-sells, usa APENAS SKUs que existam no catálogo fornecido. NÃO inventes SKUs.
+REGRAS GLOBAIS:
+- Mantém specs técnicas na tabela, texto comercial nos parágrafos
+- Se existir informação de referência ou do fornecedor, usa-a
+- Para upsells/cross-sells, usa APENAS SKUs do catálogo. NÃO inventes.
 - Traduz tudo para português europeu.`;
 
         const finalPrompt = customPrompt
-          ? `${customPrompt}\n\n${productInfo}${knowledgeContext}${supplierContext}`
+          ? `${customPrompt}\n\n${productInfo}${knowledgeContext}${supplierContext}${catalogContext}\n\nINSTRUÇÕES POR CAMPO:\n${fieldInstructions.join("\n\n---\n\n")}`
           : defaultPrompt;
 
         // Build tool properties dynamically
@@ -411,6 +445,10 @@ IMPORTANTE:
             },
           };
           requiredFields.push("image_alt_texts");
+        }
+        if (fields.includes("category")) {
+          toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
+          requiredFields.push("suggested_category");
         }
 
         const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -529,6 +567,7 @@ IMPORTANTE:
         if (optimized.upsell_skus) updateData.upsell_skus = optimized.upsell_skus;
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
         if (optimized.image_alt_texts) updateData.image_alt_texts = optimized.image_alt_texts;
+        if (optimized.suggested_category) updateData.category = optimized.suggested_category;
 
         const { error: updateError } = await supabase
           .from("products")
