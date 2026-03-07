@@ -104,6 +104,13 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+
+      if (job.status !== "processing") {
+        await supabase
+          .from("optimization_jobs")
+          .update({ status: "processing", updated_at: new Date().toISOString(), error_message: null })
+          .eq("id", job.id);
+      }
     } else {
       // Create new job and return immediately (background kickoff)
       const {
