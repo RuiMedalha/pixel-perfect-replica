@@ -410,6 +410,7 @@ const ProductsPage = () => {
                     <th className="p-3 text-left font-medium text-muted-foreground">Desc. Curta</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Slug</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Estado</th>
+                    <th className="p-3 text-center font-medium text-muted-foreground">SEO</th>
                     <th className="p-3 text-right font-medium text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
