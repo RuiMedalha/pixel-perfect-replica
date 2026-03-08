@@ -363,9 +363,9 @@ const VariationsPage = () => {
                             </button>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">{group.parent_title}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 <Badge variant="secondary" className="text-[10px]">{group.variations.length} variações</Badge>
-                                <Badge variant="outline" className="text-[10px]">{group.attribute_name}</Badge>
+                                {group.attribute_names.map(n => <Badge key={n} variant="outline" className="text-[10px]">{n}</Badge>)}
                               </div>
                             </div>
                           </div>
