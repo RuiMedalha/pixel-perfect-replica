@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Search, Check, X, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Network, Plus } from "lucide-react";
+import { Loader2, Search, Check, X, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Network, Plus, RefreshCw, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, type Product } from "@/hooks/useProducts";
@@ -29,6 +29,7 @@ const VariationsPage = () => {
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [expandedAdditions, setExpandedAdditions] = useState<Set<number>>(new Set());
   const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0 });
+  const [reclassifySuggestions, setReclassifySuggestions] = useState<any[]>([]);
 
   const variableProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "variable"), [products]);
   const variationProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "variation"), [products]);
@@ -68,7 +69,7 @@ const VariationsPage = () => {
     });
   }, [variableProducts, variationProducts]);
 
-  const handleFullAnalysis = async () => {
+  const handleAnalysis = async (mode: "simple" | "full") => {
     if (!activeWorkspace) return;
     setAnalysisState("analyzing");
 
@@ -77,43 +78,83 @@ const VariationsPage = () => {
       let knowledgeContext = "";
       try {
         const { data: chunks } = await supabase.rpc("search_knowledge", {
-          _query: "variações tamanhos dimensões capacidade modelos série família",
+          _query: "variações tamanhos dimensões capacidade modelos série família cores materiais",
           _workspace_id: activeWorkspace.id,
-          _limit: 10,
+          _limit: 15,
         });
         if (chunks && chunks.length > 0) {
           knowledgeContext = chunks.map((c: any) => `[${c.source_name}]: ${c.content}`).join("\n\n");
         }
       } catch { /* knowledge search is optional */ }
 
+      const allProducts = products ?? [];
+      const productsToAnalyze = mode === "full" ? allProducts : simpleProducts;
+
       const batchSize = 500;
       const allGroups: VariationGroup[] = [];
       const allAdditions: AddToExistingGroup[] = [];
-      const total = Math.ceil(simpleProducts.length / batchSize);
+      const allReclassify: any[] = [];
+      const total = Math.ceil(productsToAnalyze.length / batchSize);
       setAnalysisProgress({ current: 0, total });
 
-      for (let i = 0; i < simpleProducts.length; i += batchSize) {
-        const batch = simpleProducts.slice(i, i + batchSize);
-        const result = await detectVariations.mutateAsync({
-          workspaceId: activeWorkspace.id,
-          products: batch.map(p => ({
-            id: p.id, sku: p.sku, original_title: p.original_title,
-            optimized_title: p.optimized_title, category: p.category,
-            original_price: p.original_price, original_description: p.original_description,
-            short_description: p.short_description, product_type: p.product_type,
-            attributes: p.attributes, crosssell_skus: p.crosssell_skus,
-            upsell_skus: p.upsell_skus,
-          })),
-          existingGroups: existingGroupsContext,
-          knowledgeContext,
+      for (let i = 0; i < productsToAnalyze.length; i += batchSize) {
+        const batch = productsToAnalyze.slice(i, i + batchSize);
+        const { data, error } = await supabase.functions.invoke("detect-variations", {
+          body: {
+            workspaceId: activeWorkspace.id,
+            products: batch.map(p => ({
+              id: p.id, sku: p.sku, original_title: p.original_title,
+              optimized_title: p.optimized_title, category: p.category,
+              original_price: p.original_price, original_description: p.original_description,
+              short_description: p.short_description, product_type: p.product_type,
+              attributes: p.attributes, crosssell_skus: p.crosssell_skus,
+              upsell_skus: p.upsell_skus, parent_product_id: p.parent_product_id,
+            })),
+            existingGroups: existingGroupsContext,
+            knowledgeContext,
+            mode,
+          },
         });
-        allGroups.push(...result.groups);
-        allAdditions.push(...(result.addToExisting || []));
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        // Normalize results
+        const { normalizeGroup, normalizeAddition } = await import("@/hooks/useVariableProducts").then(m => ({
+          normalizeGroup: (g: any) => {
+            const attrNames = g.attribute_names || (g.attribute_name ? [g.attribute_name] : ["Variação"]);
+            return {
+              parent_title: g.parent_title,
+              attribute_names: attrNames,
+              variations: (g.variations || []).map((v: any) => ({
+                product_id: v.product_id,
+                attribute_values: v.attribute_values || (v.attribute_value ? { [attrNames[0]]: v.attribute_value } : {}),
+              })),
+            };
+          },
+          normalizeAddition: (a: any) => {
+            const attrNames = a.attribute_names || (a.attribute_name ? [a.attribute_name] : ["Variação"]);
+            return {
+              existing_parent_id: a.existing_parent_id,
+              existing_parent_title: a.existing_parent_title,
+              attribute_names: attrNames,
+              products_to_add: (a.products_to_add || []).map((v: any) => ({
+                product_id: v.product_id,
+                attribute_values: v.attribute_values || (v.attribute_value ? { [attrNames[0]]: v.attribute_value } : {}),
+              })),
+              reason: a.reason,
+            };
+          },
+        }));
+
+        allGroups.push(...(data.groups || []).map(normalizeGroup));
+        allAdditions.push(...(data.addToExisting || []).map(normalizeAddition));
+        if (data.reclassify) allReclassify.push(...data.reclassify);
         setAnalysisProgress({ current: Math.floor(i / batchSize) + 1, total });
       }
 
       setDetectedGroups(allGroups);
       setDetectedAdditions(allAdditions);
+      setReclassifySuggestions(allReclassify);
       setSelectedGroups(new Set(allGroups.map((_, i) => i)));
       setSelectedAdditions(new Set(allAdditions.map((_, i) => i)));
       setExpandedGroups(new Set());
@@ -122,12 +163,13 @@ const VariationsPage = () => {
 
       const totalNew = allGroups.reduce((s, g) => s + g.variations.length, 0);
       const totalAdded = allAdditions.reduce((s, g) => s + g.products_to_add.length, 0);
-      if (allGroups.length === 0 && allAdditions.length === 0) {
-        toast.info("Nenhuma variação potencial detetada.");
+      if (allGroups.length === 0 && allAdditions.length === 0 && allReclassify.length === 0) {
+        toast.info("Nenhuma variação ou correção detetada.");
       } else {
         const parts = [];
         if (allGroups.length > 0) parts.push(`${allGroups.length} novo(s) grupo(s) (${totalNew} prod.)`);
         if (allAdditions.length > 0) parts.push(`${allAdditions.length} adição(ões) a existentes (${totalAdded} prod.)`);
+        if (allReclassify.length > 0) parts.push(`${allReclassify.length} correção(ões)`);
         toast.success(`Detetado: ${parts.join(" + ")}`);
       }
     } catch (err: any) {
@@ -147,6 +189,7 @@ const VariationsPage = () => {
     setAnalysisState("idle");
     setDetectedGroups([]);
     setDetectedAdditions([]);
+    setReclassifySuggestions([]);
     setSelectedGroups(new Set());
     setSelectedAdditions(new Set());
   };
@@ -179,7 +222,7 @@ const VariationsPage = () => {
   }
 
   const totalSelected = selectedGroups.size + selectedAdditions.size;
-  const totalResults = detectedGroups.length + detectedAdditions.length;
+  const totalResults = detectedGroups.length + detectedAdditions.length + reclassifySuggestions.length;
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
@@ -296,17 +339,22 @@ const VariationsPage = () => {
             Análise IA do Catálogo
           </CardTitle>
           <CardDescription className="text-xs">
-            Analisa {simpleProducts.length} produtos simples para detetar novos grupos de variações
-            {variableProducts.length > 0 && ` e verificar se algum deve ser adicionado aos ${variableProducts.length} grupos existentes`}.
-            {" "}Utiliza dados de crosssell/upsell e o catálogo PDF como contexto.
+            Analisa o catálogo completo ({(products ?? []).length} produtos) para detetar novos agrupamentos, verificar existentes e corrigir inconsistências.
+            {" "}Utiliza dados de crosssell/upsell, catálogo PDF e tradução como contexto.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {analysisState === "idle" && (
-            <Button onClick={handleFullAnalysis} disabled={simpleProducts.length < 1 || detectVariations.isPending} className="w-full sm:w-auto">
-              <Sparkles className="w-4 h-4 mr-2" />
-              Analisar {simpleProducts.length} Produtos Simples
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => handleAnalysis("simple")} disabled={(products ?? []).length < 1 || detectVariations.isPending} className="sm:w-auto">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Analisar {simpleProducts.length} Simples
+              </Button>
+              <Button onClick={() => handleAnalysis("full")} disabled={(products ?? []).length < 1 || detectVariations.isPending} variant="outline" className="sm:w-auto">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Análise Completa ({(products ?? []).length} produtos)
+              </Button>
+            </div>
           )}
 
           {analysisState === "analyzing" && (
@@ -338,6 +386,7 @@ const VariationsPage = () => {
                         setAnalysisState("idle");
                         setDetectedGroups([]);
                         setDetectedAdditions([]);
+                        setReclassifySuggestions([]);
                       }}>
                         <X className="w-3.5 h-3.5 mr-1" /> Descartar
                       </Button>
@@ -493,6 +542,43 @@ const VariationsPage = () => {
                               </div>
                             );
                           })()}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Reclassify Suggestions */}
+                  {reclassifySuggestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5" /> Correções Sugeridas ({reclassifySuggestions.length})
+                      </p>
+                      {reclassifySuggestions.map((suggestion, idx) => (
+                        <div key={`fix-${idx}`} className="border rounded-lg p-3 bg-amber-500/5 border-amber-500/30">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-700">
+                              {suggestion.action === "move_variation" ? "Mover" :
+                               suggestion.action === "merge_groups" ? "Fundir" :
+                               suggestion.action === "split_group" ? "Dividir" :
+                               suggestion.action === "fix_parent_title" ? "Corrigir Título" : suggestion.action}
+                            </Badge>
+                            {suggestion.suggested_title && (
+                              <span className="text-xs font-medium">→ {suggestion.suggested_title}</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{suggestion.description}</p>
+                          {suggestion.product_ids && suggestion.product_ids.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {suggestion.product_ids.map((pid: string) => {
+                                const p = productMap.get(pid);
+                                return (
+                                  <Badge key={pid} variant="secondary" className="text-[10px]">
+                                    {p?.sku || pid.substring(0, 8)}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
