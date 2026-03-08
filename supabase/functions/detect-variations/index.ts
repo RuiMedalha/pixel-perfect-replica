@@ -123,35 +123,34 @@ ${isFullMode ? `3. **VERIFICAR GRUPOS EXISTENTES**: Revê os grupos variáveis a
    - Grupos que deviam ser fundidos (mesmo produto base)
    - Variações órfãs ou grupos vazios` : ""}
 
-REGRAS CRÍTICAS PARA attribute_values:
-- **OBRIGATÓRIO**: Cada variação DEVE ter valores concretos extraídos do título/SKU/descrição para TODOS os atributos.
-- **NUNCA** deixes attribute_values vazio ou com "—". Extrai o valor do título do produto.
-- Exemplos de extração:
-  * "Pie Portacubos Dourado Vintage" → {"Material": "Dourado", "Cor": "Vintage"} 
-  * "Coqueteleira Inox 0.70 Lts" → {"Capacidade": "0.70 Lts"}
-  * "Band Cam Antidesliz.40 Castanho" → {"Tamanho": "40", "Cor": "Castanho"}
-  * "M.buffet Baixo+T.MAD 120 Cubic" → {"Tipo": "Baixo+T.MAD", "Dimensão": "120"}
-- Se não consegues determinar o valor, usa a parte diferenciadora do título.
+REGRAS CRÍTICAS PARA attribute_names e attribute_values:
+- **SÓ ATRIBUTOS QUE VARIAM**: Um atributo só deve aparecer em attribute_names se o seu valor É DIFERENTE entre pelo menos 2 variações do grupo.
+- Se TODAS as variações têm o mesmo diâmetro (ex: "16 cm"), NÃO incluas "Diâmetro" como atributo — inclui-o no parent_title.
+  * ERRADO: attribute_names: ["Diâmetro", "Cor"] quando todas têm Diâmetro="16 cm" → valores ficam "—"
+  * CERTO: parent_title: "Caçarola com Cabo Reto Cool 16 cm", attribute_names: ["Cor"] com valores reais
+- **OBRIGATÓRIO**: Cada variação DEVE ter valores concretos para TODOS os atributos listados. Se um atributo fica vazio ou "—", é porque NÃO devia ser atributo.
+- Exemplos de extração correcta:
+  * "Caçarola Cabo Reto Cool 16 cm Amar" + "...16 cm Naran" → parent: "Caçarola com Cabo Reto Cool 16 cm", attrs: ["Cor"], valores: "Amarelo", "Laranja"
+  * "Bandeja 35 Preto" + "Bandeja 40 Preto" + "Bandeja 35 Castanho" → attrs: ["Tamanho", "Cor"] (ambos variam)
+  * "Bandeja 35 Preto" + "Bandeja 35 Castanho" → attrs: ["Cor"] apenas, "35" no parent_title
+- Corrige abreviações: "Amar" → "Amarelo", "Naran"/"Nara" → "Laranja", "Roj" → "Vermelho", "Neg" → "Preto", "Blan" → "Branco", "Castaño" → "Castanho"
 
 MÚLTIPLOS ATRIBUTOS:
-- Um grupo pode ter MAIS QUE UM atributo. Ex: "Bandeja Antideslizante" pode variar em Cor E Tamanho.
-- Se o mesmo produto base existe em Preto 35cm, Preto 40cm, Castanho 35cm, Castanho 40cm → UM grupo com attribute_names: ["Cor", "Tamanho"].
-- NÃO cries grupos separados para cada cor se o tamanho também varia.
+- Um grupo pode ter MAIS QUE UM atributo APENAS se ambos realmente variam.
+- Se todas têm 35cm mas cores diferentes → attribute_names: ["Cor"] apenas.
 
 TRADUÇÃO / CONSISTÊNCIA:
-- O catálogo pode ter títulos misturados em Português, Espanhol ou abreviados. Nota inconsistências como "Castaño" vs "Castanho".
-- O parent_title deve ser em Português de Portugal, limpo e genérico (sem atributos específicos).
+- Normaliza sempre para Português de Portugal.
+- O parent_title deve incluir atributos FIXOS (que não variam) e excluir os que variam.
 
 Critérios de agrupamento:
-- Mesmo produto com diferentes tamanhos, dimensões, capacidades, voltagens, cores, materiais ou configurações
+- Mesmo produto com diferentes tamanhos, dimensões, capacidades, voltagens, cores, materiais
 - SKUs com base similar mas sufixos diferentes
 - Títulos muito semelhantes diferindo em 1+ atributos
-- Produtos que partilham crosssell/upsell SKUs
-- Informação do catálogo PDF/website indica que são variantes
 
 NÃO agrupa:
 - Produtos genuinamente diferentes
-- Acessórios com equipamento principal (crosssell, não variação)
+- Acessórios com equipamento principal
 - Produtos de séries/modelos completamente diferentes
 
 Responde APENAS com a tool call.`;
