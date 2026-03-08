@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { productIds, publishFields } = await req.json();
+    const { productIds, publishFields, pricing } = await req.json();
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "Nenhum produto selecionado" }), {
         status: 400,
@@ -44,6 +44,10 @@ Deno.serve(async (req) => {
 
     const fields = publishFields && Array.isArray(publishFields) ? new Set(publishFields) : null;
     const has = (key: string) => !fields || fields.has(key);
+
+    // Pricing adjustments
+    const markupPercent = pricing?.markupPercent ?? 0;
+    const discountPercent = pricing?.discountPercent ?? 0;
 
     // Get WooCommerce settings
     const { data: settings } = await supabase
