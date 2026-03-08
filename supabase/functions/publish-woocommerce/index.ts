@@ -716,9 +716,20 @@ async function publishVariation(
     const variationAttrs = buildVariationAttributes(variation);
     if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
 
-    const action: "created" | "updated" = variation.woocommerce_id ? "updated" : "created";
-    const varWooData = variation.woocommerce_id
-      ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${variation.woocommerce_id}`, "PUT", variationPayload)
+    let existingVarWooId = variation.woocommerce_id;
+    if (!existingVarWooId && variation.sku) {
+      existingVarWooId = await findWooVariationBySku(baseUrl, auth, parentWooId, variation.sku);
+      if (existingVarWooId) {
+        await supabase
+          .from("products")
+          .update({ woocommerce_id: existingVarWooId })
+          .eq("id", variation.id);
+      }
+    }
+
+    const action: "created" | "updated" = existingVarWooId ? "updated" : "created";
+    const varWooData = existingVarWooId
+      ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
       : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
 
     await supabase
