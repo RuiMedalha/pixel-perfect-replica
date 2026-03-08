@@ -222,7 +222,7 @@ const VariationsPage = () => {
   }
 
   const totalSelected = selectedGroups.size + selectedAdditions.size;
-  const totalResults = detectedGroups.length + detectedAdditions.length;
+  const totalResults = detectedGroups.length + detectedAdditions.length + reclassifySuggestions.length;
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
