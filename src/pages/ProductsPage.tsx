@@ -237,7 +237,21 @@ const ProductsPage = () => {
   };
 
   const handleOptimizeClick = (ids: string[]) => {
-    setPendingOptimizeIds(ids);
+    // Auto-include children of variable products for group optimization
+    const allProducts = products ?? [];
+    const expandedIds = new Set(ids);
+    ids.forEach(id => {
+      const p = allProducts.find(pr => pr.id === id);
+      if (p?.product_type === "variable") {
+        // Add all children of this variable product
+        allProducts.filter(c => c.parent_product_id === id).forEach(c => expandedIds.add(c.id));
+      }
+    });
+    const finalIds = Array.from(expandedIds);
+    if (finalIds.length > ids.length) {
+      toast.info(`${finalIds.length - ids.length} variação(ões) incluídas automaticamente para otimização em grupo.`);
+    }
+    setPendingOptimizeIds(finalIds);
     setConfirmReoptimize(false);
     setShowFieldSelector(true);
   };
