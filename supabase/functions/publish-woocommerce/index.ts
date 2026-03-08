@@ -115,6 +115,25 @@ Deno.serve(async (req) => {
       return resp.json();
     };
 
+    // Helper: find existing WooCommerce product by SKU
+    const findWooProductBySku = async (sku: string | null): Promise<number | null> => {
+      if (!sku) return null;
+      try {
+        const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products?sku=${encodeURIComponent(sku)}&per_page=1`, {
+          method: "GET",
+          headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        if (Array.isArray(data) && data.length > 0 && data[0].id) {
+          return data[0].id;
+        }
+      } catch {
+        // SKU lookup failed, will create new
+      }
+      return null;
+    };
+
     // Helper: resolve SKUs to WooCommerce IDs
     const resolveSkusToWooIds = async (skus: any[]): Promise<number[]> => {
       if (!skus || skus.length === 0) return [];
@@ -309,8 +328,23 @@ Deno.serve(async (req) => {
 
         wooProduct.type = "simple";
 
-        const wooData = product.woocommerce_id
-          ? await wooFetch(`/products/${product.woocommerce_id}`, "PUT", wooProduct)
+        let existingWooId = product.woocommerce_id;
+        let action: "created" | "updated" = "created";
+
+        // If no local woocommerce_id, try to find by SKU in WooCommerce
+        if (!existingWooId && product.sku) {
+          const foundId = await findWooProductBySku(product.sku);
+          if (foundId) {
+            existingWooId = foundId;
+          }
+        }
+
+        if (existingWooId) {
+          action = "updated";
+        }
+
+        const wooData = existingWooId
+          ? await wooFetch(`/products/${existingWooId}`, "PUT", wooProduct)
           : await wooFetch(`/products`, "POST", wooProduct);
 
         await supabase
@@ -318,7 +352,7 @@ Deno.serve(async (req) => {
           .update({ woocommerce_id: wooData.id, status: "published" as any })
           .eq("id", product.id);
 
-        results.push({ id: product.id, status: "published", woocommerce_id: wooData.id });
+        results.push({ id: product.id, status: action, woocommerce_id: wooData.id });
       } catch (e) {
         results.push({ id: product.id, status: "error", error: (e as Error).message });
       }
@@ -356,8 +390,17 @@ Deno.serve(async (req) => {
         delete parentPayload.sale_price;
 
         // Create or update parent
-        const parentWooData = parent.woocommerce_id
-          ? await wooFetch(`/products/${parent.woocommerce_id}`, "PUT", parentPayload)
+        let existingParentWooId = parent.woocommerce_id;
+        let parentAction: "created" | "updated" = "created";
+
+        if (!existingParentWooId && parent.sku) {
+          const foundId = await findWooProductBySku(parent.sku);
+          if (foundId) existingParentWooId = foundId;
+        }
+        if (existingParentWooId) parentAction = "updated";
+
+        const parentWooData = existingParentWooId
+          ? await wooFetch(`/products/${existingParentWooId}`, "PUT", parentPayload)
           : await wooFetch(`/products`, "POST", parentPayload);
 
         const parentWooId = parentWooData.id;
@@ -367,7 +410,7 @@ Deno.serve(async (req) => {
           .update({ woocommerce_id: parentWooId, status: "published" as any })
           .eq("id", parent.id);
 
-        results.push({ id: parent.id, status: "published", woocommerce_id: parentWooId });
+        results.push({ id: parent.id, status: parentAction, woocommerce_id: parentWooId });
 
         // Now publish each variation
         for (const child of children) {
@@ -381,6 +424,7 @@ Deno.serve(async (req) => {
             }
 
             // Create or update variation
+            const childAction: "created" | "updated" = child.woocommerce_id ? "updated" : "created";
             const varWooData = child.woocommerce_id
               ? await wooFetch(`/products/${parentWooId}/variations/${child.woocommerce_id}`, "PUT", variationPayload)
               : await wooFetch(`/products/${parentWooId}/variations`, "POST", variationPayload);
@@ -390,7 +434,7 @@ Deno.serve(async (req) => {
               .update({ woocommerce_id: varWooData.id, status: "published" as any })
               .eq("id", child.id);
 
-            results.push({ id: child.id, status: "published", woocommerce_id: varWooData.id });
+            results.push({ id: child.id, status: childAction, woocommerce_id: varWooData.id });
           } catch (e) {
             results.push({ id: child.id, status: "error", error: (e as Error).message });
           }
@@ -424,6 +468,7 @@ Deno.serve(async (req) => {
             variationPayload.attributes = variationAttrs;
           }
 
+          const standaloneAction: "created" | "updated" = variation.woocommerce_id ? "updated" : "created";
           const varWooData = variation.woocommerce_id
             ? await wooFetch(`/products/${parentWooId}/variations/${variation.woocommerce_id}`, "PUT", variationPayload)
             : await wooFetch(`/products/${parentWooId}/variations`, "POST", variationPayload);
@@ -433,7 +478,7 @@ Deno.serve(async (req) => {
             .update({ woocommerce_id: varWooData.id, status: "published" as any })
             .eq("id", variation.id);
 
-          results.push({ id: variation.id, status: "published", woocommerce_id: varWooData.id });
+          results.push({ id: variation.id, status: standaloneAction, woocommerce_id: varWooData.id });
         } else {
           // Parent not published yet — skip with warning
           results.push({
@@ -452,7 +497,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
-    const published = results.filter((r: WooResult) => r.status === "published").length;
+    const published = results.filter((r: WooResult) => r.status === "created" || r.status === "updated").length;
     const errors = results.filter((r: WooResult) => r.status === "error").length;
     await adminClient.from("activity_log").insert({
       user_id: user.id,
