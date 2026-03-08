@@ -394,7 +394,6 @@ const ProductsPage = () => {
 
   const ProductRow = ({ product }: { product: Product }) => (
     <tr
-      key={product.id}
       className={cn(
         "border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer",
         product.status === "processing" && "bg-primary/5"
