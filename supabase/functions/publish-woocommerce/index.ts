@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     };
 
     // Build base product payload (shared between simple/variable/variation)
-    const buildBasePayload = (product: any, isVariation = false): Record<string, unknown> => {
+    const buildBasePayload = async (product: any, isVariation = false): Promise<Record<string, unknown>> => {
       const wooProduct: Record<string, unknown> = {};
 
       // Content
