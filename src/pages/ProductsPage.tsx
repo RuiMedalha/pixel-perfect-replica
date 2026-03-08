@@ -20,6 +20,7 @@ import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
+import { WooPublishModal } from "@/components/WooPublishModal";
 import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/hooks/useVariableProducts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
@@ -84,6 +85,7 @@ const ProductsPage = () => {
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showPublishModal, setShowPublishModal] = useState(false);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -649,7 +651,7 @@ const ProductsPage = () => {
               <Button size="sm" variant="destructive" className="text-xs h-8" onClick={handleBulkDelete} disabled={deleteProducts.isPending}>
                 <Trash2 className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Eliminar </span>({selected.size})
               </Button>
-              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
+              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => setShowPublishModal(true)} disabled={publishWoo.isPending}>
                 <Send className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Publicar </span>WC ({selected.size})
               </Button>
               <Button size="sm" variant="secondary" className="text-xs h-8" onClick={() => handleOptimizeClick(Array.from(selected))} disabled={optimizeProducts.isPending}>
@@ -1449,6 +1451,19 @@ const ProductsPage = () => {
       <ProductDetailModal
         product={detailProduct}
         onClose={() => setDetailProduct(null)}
+      />
+
+      {/* WooCommerce Publish Modal */}
+      <WooPublishModal
+        open={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        productCount={selected.size}
+        isPending={publishWoo.isPending}
+        onConfirm={(fields) => {
+          publishWoo.mutate({ productIds: Array.from(selected), publishFields: fields });
+          setSelected(new Set());
+          setShowPublishModal(false);
+        }}
       />
     </div>
   );

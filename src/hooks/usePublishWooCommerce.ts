@@ -6,9 +6,9 @@ export function usePublishWooCommerce() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (productIds: string[]) => {
+    mutationFn: async ({ productIds, publishFields }: { productIds: string[]; publishFields?: string[] }) => {
       const { data, error } = await supabase.functions.invoke("publish-woocommerce", {
-        body: { productIds },
+        body: { productIds, publishFields },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

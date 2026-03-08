@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -15,6 +16,7 @@ import { toast } from "sonner";
 import { FieldPromptsSettings } from "@/components/FieldPromptsSettings";
 import { DescriptionTemplateEditor } from "@/components/DescriptionTemplateEditor";
 import { AI_MODELS } from "@/hooks/useOptimizeProducts";
+import { WOO_PUBLISH_GROUPS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 
 interface Supplier {
   name: string;
@@ -65,6 +67,7 @@ const SettingsPage = () => {
   const [testingSku, setTestingSku] = useState<Record<number, string>>({});
   const [testingLoading, setTestingLoading] = useState<Record<number, boolean>>({});
   const [testResult, setTestResult] = useState<{ index: number; preview: string; chars: number; url: string } | null>(null);
+  const [wooPublishFields, setWooPublishFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
   useEffect(() => {
     if (settings) {
       setForm(settings);
@@ -75,6 +78,10 @@ const SettingsPage = () => {
       try {
         const parsed = JSON.parse(settings[SETTING_KEYS.knowledge_urls] ?? "[]");
         if (Array.isArray(parsed) && parsed.length > 0) setKnowledgeUrls(parsed);
+      } catch { /* keep default */ }
+      try {
+        const parsed = JSON.parse(settings[SETTING_KEY_WOO_PUBLISH_FIELDS] ?? "null");
+        if (Array.isArray(parsed)) setWooPublishFields(new Set(parsed));
       } catch { /* keep default */ }
     }
   }, [settings]);
@@ -128,6 +135,7 @@ const SettingsPage = () => {
       ...form,
       [SETTING_KEYS.suppliers]: JSON.stringify(suppliers),
       [SETTING_KEYS.knowledge_urls]: JSON.stringify(knowledgeUrls.filter(Boolean)),
+      [SETTING_KEY_WOO_PUBLISH_FIELDS]: JSON.stringify(Array.from(wooPublishFields)),
     };
     saveSettings.mutate(data);
   };
@@ -271,7 +279,61 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
-      {/* Amazon S3 */}
+      {/* WooCommerce Publish Fields */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">📋 Campos a Publicar no WooCommerce</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Defina os campos enviados por defeito ao publicar no WooCommerce. Pode ajustar caso a caso no momento da publicação.
+          </p>
+          {WOO_PUBLISH_GROUPS.map(group => {
+            const groupFieldKeys = group.fields.map(f => f.key);
+            const selectedCount = groupFieldKeys.filter(k => wooPublishFields.has(k)).length;
+            const allSelected = selectedCount === groupFieldKeys.length;
+            const someSelected = selectedCount > 0 && !allSelected;
+
+            return (
+              <div key={group.key} className="space-y-1">
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-sm">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={() => {
+                      setWooPublishFields(prev => {
+                        const next = new Set(prev);
+                        groupFieldKeys.forEach(k => {
+                          if (allSelected) next.delete(k); else next.add(k);
+                        });
+                        return next;
+                      });
+                    }}
+                  />
+                  {group.icon} {group.label}
+                </label>
+                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1">
+                  {group.fields.map(field => (
+                    <label key={field.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <Checkbox
+                        checked={wooPublishFields.has(field.key)}
+                        onCheckedChange={() => {
+                          setWooPublishFields(prev => {
+                            const next = new Set(prev);
+                            if (next.has(field.key)) next.delete(field.key); else next.add(field.key);
+                            return next;
+                          });
+                        }}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">☁️ Amazon S3</CardTitle>
