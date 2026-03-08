@@ -372,7 +372,7 @@ const VariationsPage = () => {
                           </div>
                         )}
                       </div>
-                    )))}
+                    ))}
                   </div>
                 </>
               )}
