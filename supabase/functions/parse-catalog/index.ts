@@ -266,6 +266,13 @@ serve(async (req) => {
         for (const key of mappedFieldKeys) {
           if (fieldMap[key]) fieldMap[key]();
         }
+        // Remove null/empty values to avoid overwriting existing data with blanks
+        for (const k of Object.keys(data)) {
+          if (data[k] === null || data[k] === "" || data[k] === undefined) {
+            delete data[k];
+          }
+        }
+        console.log(`📋 [UPDATE] columnMapping keys: ${JSON.stringify(Object.keys(columnMapping || {}))}, mapped fields used: ${mappedFieldKeys.join(",")}, final update keys: ${Object.keys(data).join(",")}`);
       } else {
         // Set all fields (new product without specific mapping, or PDF import)
         for (const [key, fn] of Object.entries(fieldMap)) {
