@@ -364,6 +364,24 @@ const ProductsPage = () => {
               />
             </div>
           )}
+          <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
+            <Button
+              size="sm"
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              className="text-xs h-7 px-2"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="w-3.5 h-3.5 mr-1" /> Lista
+            </Button>
+            <Button
+              size="sm"
+              variant={viewMode === "grouped" ? "secondary" : "ghost"}
+              className="text-xs h-7 px-2"
+              onClick={() => setViewMode("grouped")}
+            >
+              <Network className="w-3.5 h-3.5 mr-1" /> Agrupado
+            </Button>
+          </div>
           <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
             const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
             exportProductsToExcel(selectedProducts);
