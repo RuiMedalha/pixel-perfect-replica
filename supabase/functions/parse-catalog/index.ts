@@ -156,49 +156,182 @@ serve(async (req) => {
       });
     }
 
-    // Insert products in batches of 50
+    // SKU deduplication: query existing SKUs in workspace
+    const productSkus = products
+      .map((p) => toStr(p.sku, 100))
+      .filter((s): s is string => !!s);
+
+    const existingSkuSet = new Set<string>();
+    if (productSkus.length > 0) {
+      for (let i = 0; i < productSkus.length; i += 200) {
+        const batch = productSkus.slice(i, i + 200);
+        const query = supabase.from("products").select("sku").in("sku", batch);
+        if (workspaceId) query.eq("workspace_id", workspaceId);
+        const { data: existingProducts } = await query;
+        (existingProducts || []).forEach((p: any) => {
+          if (p.sku) existingSkuSet.add(p.sku);
+        });
+      }
+      if (existingSkuSet.size > 0) {
+        console.log(`🔍 Found ${existingSkuSet.size} existing SKUs in workspace, will skip duplicates`);
+      }
+    }
+
+    // Detect WooCommerce mode
+    const isWooMode = products.some((p) => p.product_type || p.parent_sku);
+    if (isWooMode) console.log("🛒 WooCommerce mode detected");
+
+    // Insert products in batches of 50 (Pass 1)
     const batchSize = 50;
     let inserted = 0;
+    let skipped = 0;
     const errors: string[] = [];
+    const parentSkuMap: Array<{ productId: string; parentSku: string }> = [];
 
     for (let i = 0; i < products.length; i += batchSize) {
-      const batch = products.slice(i, i + batchSize).map((p) => ({
-        user_id: userId,
-        workspace_id: workspaceId || null,
-        original_title: toStr(p.title, 500),
-        original_description: toStr(p.description, 5000),
-        short_description: toStr(p.short_description, 1000),
-        technical_specs: toStr(p.technical_specs, 5000),
-        original_price: parsePrice(p.price),
-        sku: toStr(p.sku, 100),
-        category: toStr(p.category, 200),
-        supplier_ref: toStr(p.supplier_ref, 200),
-        image_urls: p.image_urls ? (Array.isArray(p.image_urls) ? p.image_urls : [String(p.image_urls)]) : null,
-        source_file: fileName,
-        status: "pending" as const,
-      }));
+      const batchProducts = products.slice(i, i + batchSize);
+      const batch = batchProducts
+        .filter((p) => {
+          const sku = toStr(p.sku, 100);
+          if (sku && existingSkuSet.has(sku)) {
+            skipped++;
+            return false;
+          }
+          return true;
+        })
+        .map((p) => {
+          // Parse attributes from WooCommerce format
+          const attributes: any[] = [];
+          for (let a = 1; a <= 3; a++) {
+            const name = p[`attribute_${a}_name`];
+            const vals = p[`attribute_${a}_values`];
+            if (name && vals) {
+              attributes.push({
+                name: String(name),
+                values: String(vals).split(",").map((v: string) => v.trim()).filter(Boolean),
+              });
+            }
+          }
+
+          // Parse upsell/crosssell from comma-separated SKUs
+          const upsellSkus = p.upsell_skus
+            ? String(p.upsell_skus).split(",").map((s: string) => s.trim()).filter(Boolean)
+            : [];
+          const crosssellSkus = p.crosssell_skus
+            ? String(p.crosssell_skus).split(",").map((s: string) => s.trim()).filter(Boolean)
+            : [];
+
+          // Parse image URLs (comma or pipe separated)
+          let imageUrls: string[] = [];
+          if (p.image_urls) {
+            if (Array.isArray(p.image_urls)) {
+              imageUrls = p.image_urls;
+            } else {
+              imageUrls = String(p.image_urls).split(/[,|]/).map((s: string) => s.trim()).filter(Boolean);
+            }
+          }
+
+          // Build technical specs from weight/dimensions
+          let techSpecs = toStr(p.technical_specs, 5000);
+          const specParts: string[] = [];
+          if (p.weight) specParts.push(`Peso: ${p.weight}kg`);
+          if (p.length) specParts.push(`Comprimento: ${p.length}cm`);
+          if (p.width) specParts.push(`Largura: ${p.width}cm`);
+          if (p.height) specParts.push(`Altura: ${p.height}cm`);
+          if (specParts.length > 0) {
+            techSpecs = techSpecs ? `${techSpecs}\n${specParts.join(" | ")}` : specParts.join(" | ");
+          }
+
+          return {
+            user_id: userId,
+            workspace_id: workspaceId || null,
+            original_title: toStr(p.title, 500),
+            original_description: toStr(p.description, 5000),
+            short_description: toStr(p.short_description, 1000),
+            technical_specs: techSpecs,
+            original_price: parsePrice(p.price),
+            optimized_price: parsePrice(p.sale_price),
+            sku: toStr(p.sku, 100),
+            category: toStr(p.category, 200),
+            supplier_ref: toStr(p.supplier_ref, 200),
+            image_urls: imageUrls.length > 0 ? imageUrls : null,
+            source_file: fileName,
+            status: "pending" as const,
+            product_type: toStr(p.product_type, 50) || "simple",
+            attributes: attributes.length > 0 ? attributes : [],
+            upsell_skus: upsellSkus.length > 0 ? upsellSkus : [],
+            crosssell_skus: crosssellSkus.length > 0 ? crosssellSkus : [],
+            meta_title: toStr(p.meta_title, 200),
+            meta_description: toStr(p.meta_description, 500),
+            focus_keyword: p.focus_keyword
+              ? String(p.focus_keyword).split(",").map((s: string) => s.trim()).filter(Boolean)
+              : null,
+            seo_slug: toStr(p.seo_slug, 200),
+          };
+        });
+
+      if (batch.length === 0) continue;
 
       const { error: insertError, data: insertedData } = await supabase
         .from("products")
         .insert(batch)
-        .select("id");
+        .select("id, sku");
 
       if (insertError) {
         errors.push(`Batch ${i / batchSize + 1}: ${insertError.message}`);
       } else {
         inserted += insertedData?.length || 0;
+        // Track parent_sku relationships for Pass 2
+        if (isWooMode) {
+          batchProducts.forEach((p) => {
+            if (p.parent_sku) {
+              const matchedInserted = insertedData?.find((d: any) => d.sku === toStr(p.sku, 100));
+              if (matchedInserted) {
+                parentSkuMap.push({ productId: matchedInserted.id, parentSku: String(p.parent_sku) });
+              }
+            }
+          });
+        }
       }
+    }
+
+    // Pass 2: Resolve Parent SKU → parent_product_id
+    if (parentSkuMap.length > 0) {
+      const parentSkus = [...new Set(parentSkuMap.map((m) => m.parentSku))];
+      const { data: parentProducts } = await supabase
+        .from("products")
+        .select("id, sku")
+        .in("sku", parentSkus);
+
+      const skuToId = new Map<string, string>();
+      (parentProducts || []).forEach((p: any) => {
+        if (p.sku) skuToId.set(p.sku, p.id);
+      });
+
+      let resolved = 0;
+      for (const { productId, parentSku } of parentSkuMap) {
+        const parentId = skuToId.get(parentSku);
+        if (parentId) {
+          await supabase.from("products").update({ parent_product_id: parentId }).eq("id", productId);
+          resolved++;
+        }
+      }
+      console.log(`🔗 Pass 2: Resolved ${resolved}/${parentSkuMap.length} parent-child relationships`);
+    }
+
+    if (skipped > 0) {
+      console.log(`⏭️ Skipped ${skipped} duplicate products (existing SKUs)`);
     }
 
     // Log activity
     await supabase.from("activity_log").insert({
       user_id: userId,
       action: "upload",
-      details: { file: fileName, products_count: inserted },
+      details: { file: fileName, products_count: inserted, skipped, woo_mode: isWooMode },
     });
 
     return new Response(
-      JSON.stringify({ count: inserted, total: products.length, errors }),
+      JSON.stringify({ count: inserted, total: products.length, skipped, errors }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
