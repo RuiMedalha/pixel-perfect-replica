@@ -132,6 +132,11 @@ export function ProductDetailModal({ product, onClose }: Props) {
             <TabsTrigger value="historico">
               <History className="w-3.5 h-3.5 mr-1" /> Versões
             </TabsTrigger>
+            {product.product_type === "variable" && (
+              <TabsTrigger value="variacoes">
+                <GitBranch className="w-3.5 h-3.5 mr-1" /> Variações
+              </TabsTrigger>
+            )}
             <TabsTrigger value="ai-log">
               <Brain className="w-3.5 h-3.5 mr-1" /> Log IA
             </TabsTrigger>
