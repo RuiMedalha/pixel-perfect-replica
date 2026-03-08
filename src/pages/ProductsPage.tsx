@@ -1471,8 +1471,8 @@ const ProductsPage = () => {
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={publishWoo.isPending}
-            onConfirm={(fields) => {
-              publishWoo.mutate({ productIds: allPublishIds, publishFields: fields });
+            onConfirm={(fields, pricing) => {
+              publishWoo.mutate({ productIds: allPublishIds, publishFields: fields, pricing });
               setSelected(new Set());
               setShowPublishModal(false);
             }}
