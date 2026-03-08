@@ -16,6 +16,7 @@ import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/usePr
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { useOptimizationJob } from "@/hooks/useOptimizationJob";
 import { usePublishWooCommerce, type PublishResult } from "@/hooks/usePublishWooCommerce";
+import { usePublishJob } from "@/hooks/usePublishJob";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
