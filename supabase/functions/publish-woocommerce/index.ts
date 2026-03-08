@@ -90,6 +90,12 @@ Deno.serve(async (req) => {
         if (has("price")) {
           wooProduct.regular_price = String(product.optimized_price || product.original_price || "0");
         }
+        if (has("sale_price")) {
+          const sp = product.optimized_sale_price ?? product.sale_price;
+          if (sp != null) {
+            wooProduct.sale_price = String(sp);
+          }
+        }
 
         // SKU
         if (has("sku")) {
