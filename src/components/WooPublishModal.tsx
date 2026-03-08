@@ -13,6 +13,8 @@ interface Props {
   onClose: () => void;
   onConfirm: (fields: string[]) => void;
   productCount: number;
+  variableParentCount?: number;
+  autoIncludedVariationsCount?: number;
   isPending: boolean;
 }
 
