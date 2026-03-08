@@ -69,7 +69,7 @@ const VariationsPage = () => {
     });
   }, [variableProducts, variationProducts]);
 
-  const handleFullAnalysis = async () => {
+  const handleAnalysis = async (mode: "simple" | "full") => {
     if (!activeWorkspace) return;
     setAnalysisState("analyzing");
 
@@ -78,43 +78,83 @@ const VariationsPage = () => {
       let knowledgeContext = "";
       try {
         const { data: chunks } = await supabase.rpc("search_knowledge", {
-          _query: "variações tamanhos dimensões capacidade modelos série família",
+          _query: "variações tamanhos dimensões capacidade modelos série família cores materiais",
           _workspace_id: activeWorkspace.id,
-          _limit: 10,
+          _limit: 15,
         });
         if (chunks && chunks.length > 0) {
           knowledgeContext = chunks.map((c: any) => `[${c.source_name}]: ${c.content}`).join("\n\n");
         }
       } catch { /* knowledge search is optional */ }
 
+      const allProducts = products ?? [];
+      const productsToAnalyze = mode === "full" ? allProducts : simpleProducts;
+
       const batchSize = 500;
       const allGroups: VariationGroup[] = [];
       const allAdditions: AddToExistingGroup[] = [];
-      const total = Math.ceil(simpleProducts.length / batchSize);
+      const allReclassify: any[] = [];
+      const total = Math.ceil(productsToAnalyze.length / batchSize);
       setAnalysisProgress({ current: 0, total });
 
-      for (let i = 0; i < simpleProducts.length; i += batchSize) {
-        const batch = simpleProducts.slice(i, i + batchSize);
-        const result = await detectVariations.mutateAsync({
-          workspaceId: activeWorkspace.id,
-          products: batch.map(p => ({
-            id: p.id, sku: p.sku, original_title: p.original_title,
-            optimized_title: p.optimized_title, category: p.category,
-            original_price: p.original_price, original_description: p.original_description,
-            short_description: p.short_description, product_type: p.product_type,
-            attributes: p.attributes, crosssell_skus: p.crosssell_skus,
-            upsell_skus: p.upsell_skus,
-          })),
-          existingGroups: existingGroupsContext,
-          knowledgeContext,
+      for (let i = 0; i < productsToAnalyze.length; i += batchSize) {
+        const batch = productsToAnalyze.slice(i, i + batchSize);
+        const { data, error } = await supabase.functions.invoke("detect-variations", {
+          body: {
+            workspaceId: activeWorkspace.id,
+            products: batch.map(p => ({
+              id: p.id, sku: p.sku, original_title: p.original_title,
+              optimized_title: p.optimized_title, category: p.category,
+              original_price: p.original_price, original_description: p.original_description,
+              short_description: p.short_description, product_type: p.product_type,
+              attributes: p.attributes, crosssell_skus: p.crosssell_skus,
+              upsell_skus: p.upsell_skus, parent_product_id: p.parent_product_id,
+            })),
+            existingGroups: existingGroupsContext,
+            knowledgeContext,
+            mode,
+          },
         });
-        allGroups.push(...result.groups);
-        allAdditions.push(...(result.addToExisting || []));
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        // Normalize results
+        const { normalizeGroup, normalizeAddition } = await import("@/hooks/useVariableProducts").then(m => ({
+          normalizeGroup: (g: any) => {
+            const attrNames = g.attribute_names || (g.attribute_name ? [g.attribute_name] : ["Variação"]);
+            return {
+              parent_title: g.parent_title,
+              attribute_names: attrNames,
+              variations: (g.variations || []).map((v: any) => ({
+                product_id: v.product_id,
+                attribute_values: v.attribute_values || (v.attribute_value ? { [attrNames[0]]: v.attribute_value } : {}),
+              })),
+            };
+          },
+          normalizeAddition: (a: any) => {
+            const attrNames = a.attribute_names || (a.attribute_name ? [a.attribute_name] : ["Variação"]);
+            return {
+              existing_parent_id: a.existing_parent_id,
+              existing_parent_title: a.existing_parent_title,
+              attribute_names: attrNames,
+              products_to_add: (a.products_to_add || []).map((v: any) => ({
+                product_id: v.product_id,
+                attribute_values: v.attribute_values || (v.attribute_value ? { [attrNames[0]]: v.attribute_value } : {}),
+              })),
+              reason: a.reason,
+            };
+          },
+        }));
+
+        allGroups.push(...(data.groups || []).map(normalizeGroup));
+        allAdditions.push(...(data.addToExisting || []).map(normalizeAddition));
+        if (data.reclassify) allReclassify.push(...data.reclassify);
         setAnalysisProgress({ current: Math.floor(i / batchSize) + 1, total });
       }
 
       setDetectedGroups(allGroups);
       setDetectedAdditions(allAdditions);
+      setReclassifySuggestions(allReclassify);
       setSelectedGroups(new Set(allGroups.map((_, i) => i)));
       setSelectedAdditions(new Set(allAdditions.map((_, i) => i)));
       setExpandedGroups(new Set());
@@ -123,12 +163,13 @@ const VariationsPage = () => {
 
       const totalNew = allGroups.reduce((s, g) => s + g.variations.length, 0);
       const totalAdded = allAdditions.reduce((s, g) => s + g.products_to_add.length, 0);
-      if (allGroups.length === 0 && allAdditions.length === 0) {
-        toast.info("Nenhuma variação potencial detetada.");
+      if (allGroups.length === 0 && allAdditions.length === 0 && allReclassify.length === 0) {
+        toast.info("Nenhuma variação ou correção detetada.");
       } else {
         const parts = [];
         if (allGroups.length > 0) parts.push(`${allGroups.length} novo(s) grupo(s) (${totalNew} prod.)`);
         if (allAdditions.length > 0) parts.push(`${allAdditions.length} adição(ões) a existentes (${totalAdded} prod.)`);
+        if (allReclassify.length > 0) parts.push(`${allReclassify.length} correção(ões)`);
         toast.success(`Detetado: ${parts.join(" + ")}`);
       }
     } catch (err: any) {
