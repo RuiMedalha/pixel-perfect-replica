@@ -77,13 +77,23 @@ function autoMapColumns(headers: string[]): ColumnMapping {
   const patterns: Record<string, RegExp> = {
     title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
     description: /^(description|descri[cç][aã]o|desc|detalhe|details|content|conteudo|conteúdo)$/i,
-    short_description: /^(short_description|descri[cç][aã]o_curta|resumo|summary|excerpt)$/i,
+    short_description: /^(short[\s_-]?description|descri[cç][aã]o[\s_-]?curta|resumo|summary|excerpt)$/i,
     technical_specs: /^(technical_specs|especifica[cç][oõ]es|specs|caracter[ií]sticas|ficha_t[eé]cnica)$/i,
-    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price)$/i,
+    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price|regular[\s_-]?price)$/i,
+    sale_price: /^(sale[\s_-]?price|pre[cç]o[\s_-]?promocional)$/i,
     sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
-    category: /^(category|categoria|cat|tipo|type|grupo|group|fam[ií]lia|categorias_de_produto)$/i,
-    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand|short_description)$/i,
-    image_urls: /^(image|imagem|images|imagens|image_url|foto|photo|thumbnail)$/i,
+    category: /^(category|categoria|cat|categories|categorias[\s_-]?de[\s_-]?produto|grupo|group|fam[ií]lia)$/i,
+    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
+    image_urls: /^(image|imagem|images|imagens|image[\s_-]?url|foto|photo|thumbnail)$/i,
+    product_type: /^(type|tipo)$/i,
+    parent_sku: /^(parent|parent[\s_-]?sku|sku[\s_-]?pai)$/i,
+    upsell_skus: /^(up[\s_-]?sells?|upsells?)$/i,
+    crosssell_skus: /^(cross[\s_-]?sells?|crosssells?)$/i,
+    meta_title: /^(meta[\s_:-]?title|rank[\s_-]?math[\s_-]?title|meta:rank_math_title)$/i,
+    meta_description: /^(meta[\s_:-]?description|rank[\s_-]?math[\s_-]?description|meta:rank_math_description)$/i,
+    focus_keyword: /^(meta[\s_:-]?focus[\s_-]?keyword|rank[\s_-]?math[\s_-]?focus[\s_-]?keyword|focus[\s_-]?keyword|meta:rank_math_focus_keyword)$/i,
+    seo_slug: /^(slug|seo[\s_-]?slug|permalink)$/i,
+    weight: /^(weight|peso)$/i,
   };
 
   for (const [field, regex] of Object.entries(patterns)) {

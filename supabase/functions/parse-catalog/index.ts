@@ -523,11 +523,26 @@ async function parseExcel(
 
   const autoMap: Record<string, RegExp> = {
     title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
-    description: /^(description|descri[cç][aã]o|desc|detalhe|details)$/i,
-    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price)$/i,
+    description: /^(description|descri[cç][aã]o|desc|detalhe|details|content|conteudo|conteúdo)$/i,
+    short_description: /^(short[\s_-]?description|descri[cç][aã]o[\s_-]?curta|resumo|summary|excerpt)$/i,
+    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price|regular[\s_-]?price)$/i,
+    sale_price: /^(sale[\s_-]?price|pre[cç]o[\s_-]?promocional)$/i,
     sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
-    category: /^(category|categoria|cat|tipo|type|grupo|group|fam[ií]lia)$/i,
+    category: /^(category|categoria|cat|categories|categorias)$/i,
     supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
+    product_type: /^(type|tipo)$/i,
+    parent_sku: /^(parent|parent[\s_-]?sku|sku[\s_-]?pai)$/i,
+    upsell_skus: /^(up[\s_-]?sells?|upsells?)$/i,
+    crosssell_skus: /^(cross[\s_-]?sells?|crosssells?)$/i,
+    image_urls: /^(image|imagem|images|imagens|image[\s_-]?url|foto|photo|thumbnail)$/i,
+    weight: /^(weight|peso)$/i,
+    length: /^(length|comprimento)$/i,
+    width: /^(width|largura)$/i,
+    height: /^(height|altura)$/i,
+    meta_title: /^(meta[\s_:-]?title|rank[\s_-]?math[\s_-]?title|meta:rank_math_title)$/i,
+    meta_description: /^(meta[\s_:-]?description|rank[\s_-]?math[\s_-]?description|meta:rank_math_description)$/i,
+    focus_keyword: /^(meta[\s_:-]?focus[\s_-]?keyword|rank[\s_-]?math[\s_-]?focus[\s_-]?keyword|focus[\s_-]?keyword|meta:rank_math_focus_keyword)$/i,
+    seo_slug: /^(slug|seo[\s_-]?slug|permalink)$/i,
   };
 
   const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
@@ -535,6 +550,17 @@ async function parseExcel(
   for (const [field, regex] of Object.entries(autoMap)) {
     const found = headers.find((h) => regex.test(h.trim()));
     if (found) detectedMapping[field] = found;
+  }
+
+  // Handle WooCommerce attribute columns (Attribute 1 name, Attribute 1 value(s), etc.)
+  for (const h of headers) {
+    const attrNameMatch = h.match(/^Attribute\s+(\d+)\s+name$/i);
+    if (attrNameMatch) {
+      const num = attrNameMatch[1];
+      detectedMapping[`attribute_${num}_name`] = h;
+      const valCol = headers.find((vh) => new RegExp(`^Attribute\\s+${num}\\s+value`, "i").test(vh));
+      if (valCol) detectedMapping[`attribute_${num}_values`] = valCol;
+    }
   }
 
   return rows.map((row) => {

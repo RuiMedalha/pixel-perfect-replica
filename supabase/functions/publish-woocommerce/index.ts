@@ -91,16 +91,33 @@ Deno.serve(async (req) => {
           }));
         }
 
+        // Resolve upsell/crosssell SKUs → WooCommerce IDs
+        const resolveSkusToWooIds = async (skus: any[]): Promise<number[]> => {
+          if (!skus || skus.length === 0) return [];
+          // Handle both string[] and {sku}[] formats
+          const skuList = skus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
+          if (skuList.length === 0) return [];
+          const { data: found } = await supabase
+            .from("products")
+            .select("woocommerce_id")
+            .in("sku", skuList)
+            .not("woocommerce_id", "is", null);
+          return (found || []).map((p: any) => p.woocommerce_id).filter(Boolean);
+        };
+
+        const upsellIds = await resolveSkusToWooIds(product.upsell_skus || []);
+        const crosssellIds = await resolveSkusToWooIds(product.crosssell_skus || []);
+        if (upsellIds.length > 0) wooProduct.upsell_ids = upsellIds;
+        if (crosssellIds.length > 0) wooProduct.cross_sell_ids = crosssellIds;
+
         let response: Response;
         if (product.woocommerce_id) {
-          // Update existing
           response = await fetch(`${baseUrl}/wp-json/wc/v3/products/${product.woocommerce_id}`, {
             method: "PUT",
             headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
             body: JSON.stringify(wooProduct),
           });
         } else {
-          // Create new
           response = await fetch(`${baseUrl}/wp-json/wc/v3/products`, {
             method: "POST",
             headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
@@ -115,7 +132,6 @@ Deno.serve(async (req) => {
 
         const wooData = await response.json();
 
-        // Update product with woocommerce_id and status
         await supabase
           .from("products")
           .update({ woocommerce_id: wooData.id, status: "published" as any })

@@ -426,12 +426,16 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 <p className="text-sm text-muted-foreground">Nenhum upsell sugerido.</p>
               ) : (
                 <div className="space-y-2">
-                  {upsells.map((item: { sku: string; title: string }, idx: number) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
-                      <Badge variant="outline" className="font-mono text-xs shrink-0">{item.sku}</Badge>
-                      <span className="text-sm">{item.title}</span>
-                    </div>
-                  ))}
+                  {upsells.map((item: any, idx: number) => {
+                    const sku = typeof item === "string" ? item : item.sku;
+                    const title = typeof item === "string" ? null : item.title;
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                        <Badge variant="outline" className="font-mono text-xs shrink-0">{sku}</Badge>
+                        {title && <span className="text-sm">{title}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -444,12 +448,16 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 <p className="text-sm text-muted-foreground">Nenhum cross-sell sugerido.</p>
               ) : (
                 <div className="space-y-2">
-                  {crosssells.map((item: { sku: string; title: string }, idx: number) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
-                      <Badge variant="outline" className="font-mono text-xs shrink-0">{item.sku}</Badge>
-                      <span className="text-sm">{item.title}</span>
-                    </div>
-                  ))}
+                  {crosssells.map((item: any, idx: number) => {
+                    const sku = typeof item === "string" ? item : item.sku;
+                    const title = typeof item === "string" ? null : item.title;
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30">
+                        <Badge variant="outline" className="font-mono text-xs shrink-0">{sku}</Badge>
+                        {title && <span className="text-sm">{title}</span>}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
