@@ -49,16 +49,20 @@ const VariationsPage = () => {
     return variableProducts.map(parent => {
       const children = variationProducts.filter(p => p.parent_product_id === parent.id);
       const attrs = Array.isArray(parent.attributes) ? parent.attributes as any[] : [];
+      const attrNames = attrs.map((a: any) => a.name).filter(Boolean);
       return {
         parent_id: parent.id,
         parent_title: parent.optimized_title || parent.original_title || "",
-        attribute_name: attrs[0]?.name || "Variação",
+        attribute_names: attrNames.length > 0 ? attrNames : ["Variação"],
         existing_variations: children.map(c => {
           const childAttrs = Array.isArray(c.attributes) ? c.attributes as any[] : [];
-          return {
-            sku: c.sku,
-            attribute_value: childAttrs[0]?.value || c.original_title || "",
-          };
+          const vals: Record<string, string> = {};
+          childAttrs.forEach((a: any) => { if (a.name && a.value) vals[a.name] = a.value; });
+          // Fallback for legacy single-value
+          if (Object.keys(vals).length === 0 && childAttrs[0]?.value) {
+            vals[attrNames[0] || "Variação"] = childAttrs[0].value;
+          }
+          return { sku: c.sku, attribute_values: vals };
         }),
       };
     });
