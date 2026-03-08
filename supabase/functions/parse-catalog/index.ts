@@ -612,7 +612,7 @@ async function parseExcel(
     price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price|regular[\s_-]?price)$/i,
     sale_price: /^(sale[\s_-]?price|pre[cç]o[\s_-]?promocional)$/i,
     sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
-    category: /^(category|categoria|cat|categories|categorias)$/i,
+    category: /^(category|categoria|cat|categories|categorias|product[\s_-]?cat)$/i,
     supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
     product_type: /^(type|tipo)$/i,
     parent_sku: /^(parent|parent[\s_-]?sku|sku[\s_-]?pai)$/i,
