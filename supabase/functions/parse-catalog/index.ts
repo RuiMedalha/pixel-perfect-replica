@@ -181,6 +181,15 @@ serve(async (req) => {
     const mappedFieldKeys = new Set<string>(columnMapping ? Object.keys(columnMapping) : []);
     // If no columnMapping provided (e.g. PDF), treat all fields as mapped
     const hasMapping = mappedFieldKeys.size > 0;
+    console.log(`📋 Column mapping keys: [${[...mappedFieldKeys].join(", ")}]`);
+    console.log(`📋 Full columnMapping:`, JSON.stringify(columnMapping));
+    // Log sample product data to verify category is being read
+    if (products.length > 0) {
+      const sample = products[0];
+      console.log(`📋 Sample product keys: [${Object.keys(sample).join(", ")}]`);
+      console.log(`📋 Sample product category: "${sample.category}"`);
+      console.log(`📋 Sample product title: "${sample.title}"`);
+    }
 
     // Helper: build product data object with only mapped fields
     function buildProductData(p: Record<string, unknown>, onlyMapped: boolean) {
