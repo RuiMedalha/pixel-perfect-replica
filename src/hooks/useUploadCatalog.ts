@@ -95,6 +95,7 @@ function autoMapColumns(headers: string[]): ColumnMapping {
     focus_keyword: /^(meta[\s_:-]?focus[\s_-]?keyword|rank[\s_-]?math[\s_-]?focus[\s_-]?keyword|focus[\s_-]?keyword|meta:rank_math_focus_keyword)$/i,
     seo_slug: /^(slug|seo[\s_-]?slug|permalink)$/i,
     weight: /^(weight|peso)$/i,
+    woocommerce_id: /^(id|product[\s_-]?id|woocommerce[\s_-]?id|woo[\s_-]?id)$/i,
   };
 
   for (const [field, regex] of Object.entries(patterns)) {
