@@ -43,7 +43,6 @@ serve(async (req) => {
       });
     }
 
-    // Use products sent from client
     let products = clientProducts;
     if (!products || !Array.isArray(products) || products.length === 0) {
       const { data, error: fetchError } = await supabase
@@ -67,7 +66,6 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Build compact product list with crosssell/upsell hints
     const productList = products.map((p: any) => {
       const item: any = {
         id: p.id,
@@ -77,7 +75,6 @@ serve(async (req) => {
         price: p.original_price,
         desc: (p.original_description || "").substring(0, 150),
       };
-      // Add cross/upsell SKU hints (they often indicate related products)
       const crossSkus = Array.isArray(p.crosssell_skus) ? p.crosssell_skus : [];
       const upSkus = Array.isArray(p.upsell_skus) ? p.upsell_skus : [];
       if (crossSkus.length > 0) item.cross = crossSkus.slice(0, 5);
@@ -85,24 +82,23 @@ serve(async (req) => {
       return item;
     });
 
-    // Build existing groups context
     let existingGroupsContext = "";
     if (existingGroups && Array.isArray(existingGroups) && existingGroups.length > 0) {
       existingGroupsContext = `\n\n=== GRUPOS VARIÁVEIS JÁ EXISTENTES ===
-Estes produtos variáveis já existem no catálogo. Verifica se algum produto simples deveria ser adicionado a estes grupos como nova variação.
+Estes produtos variáveis já existem. Verifica se algum produto simples deveria ser adicionado.
 ${JSON.stringify(existingGroups.map((g: any) => ({
         parent_id: g.parent_id,
         parent_title: g.parent_title,
-        attribute_name: g.attribute_name,
-        existing_variations: g.existing_variations?.map((v: any) => v.sku + ": " + v.attribute_value).join(", "),
+        attribute_names: g.attribute_names,
+        existing_variations: g.existing_variations?.slice(0, 10).map((v: any) => 
+          v.sku + ": " + JSON.stringify(v.attribute_values)
+        ).join(", "),
       })), null, 1).substring(0, 8000)}`;
     }
 
-    // Build knowledge context from PDF catalog
     let knowledgeSection = "";
     if (knowledgeContext && typeof knowledgeContext === "string" && knowledgeContext.length > 0) {
       knowledgeSection = `\n\n=== CONTEXTO DO CATÁLOGO PDF ===
-Informação extraída do catálogo do fornecedor que pode ajudar a identificar famílias/grupos de produtos:
 ${knowledgeContext.substring(0, 6000)}`;
     }
 
@@ -113,26 +109,44 @@ ${knowledgeContext.substring(0, 6000)}`;
 1. **Identifica NOVOS grupos** de produtos simples que são variações do mesmo produto base
 2. ${hasExistingGroups ? "**Identifica produtos simples que devem ser ADICIONADOS a grupos variáveis já existentes**" : ""}
 
+IMPORTANTE - MÚLTIPLOS ATRIBUTOS:
+- Um grupo pode ter MAIS QUE UM atributo de variação. Exemplo: "Bandeja Antideslizante" pode variar em Cor E Tamanho simultaneamente.
+- Se o mesmo produto base existe em Preto 35cm, Preto 40cm, Castanho 35cm, Castanho 40cm — isto é UM ÚNICO grupo com attribute_names: ["Cor", "Tamanho"].
+- NÃO cries grupos separados para cada cor se o tamanho também varia. Agrupa TUDO num só grupo variável.
+- Cada variação deve ter um valor para CADA atributo no campo attribute_values.
+
 Critérios de agrupamento:
 - Mesmo produto mas com diferentes tamanhos, dimensões, capacidades, voltagens, cores ou configurações
-- SKUs com base similar mas sufixos diferentes (ex: P-123-60, P-123-80 são variações)
-- Títulos muito semelhantes diferindo apenas num atributo
-- Mesmo modelo/referência em diferentes versões
-- Produtos que partilham crosssell/upsell SKUs frequentemente pertencem à mesma família
-- Informação do catálogo PDF indica que são variantes do mesmo produto
+- SKUs com base similar mas sufixos diferentes
+- Títulos muito semelhantes diferindo em 1+ atributos
+- Produtos que partilham crosssell/upsell SKUs
+- Informação do catálogo PDF indica que são variantes
 
 NÃO agrupa:
-- Produtos genuinamente diferentes (uma panela e um forno não são variações)
-- Acessórios com o equipamento principal (isso é crosssell, não variação)
-- Produtos da mesma categoria mas de séries/modelos completamente diferentes
+- Produtos genuinamente diferentes
+- Acessórios com equipamento principal
+- Produtos de séries/modelos completamente diferentes
 
 Responde APENAS com a tool call.`;
 
-    const userContent = `Analisa estes ${productList.length} produtos simples e identifica variações:
+    const userContent = `Analisa estes ${productList.length} produtos simples e identifica variações (lembra-te: múltiplos atributos por grupo quando aplicável):
 
 ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsContext}${knowledgeSection}`;
 
-    const toolParameters: any = {
+    const variationItemSchema = {
+      type: "object",
+      properties: {
+        product_id: { type: "string" },
+        attribute_values: {
+          type: "object",
+          description: "Mapa atributo→valor. Ex: {\"Cor\": \"Preto\", \"Tamanho\": \"35\"}",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["product_id", "attribute_values"],
+    };
+
+    const toolParameters = {
       type: "object",
       properties: {
         new_groups: {
@@ -141,46 +155,33 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
           items: {
             type: "object",
             properties: {
-              parent_title: { type: "string", description: "Título genérico do produto pai" },
-              attribute_name: { type: "string", description: "Nome do atributo que varia" },
-              variations: {
+              parent_title: { type: "string", description: "Título genérico do produto pai (sem atributos específicos)" },
+              attribute_names: {
                 type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    product_id: { type: "string" },
-                    attribute_value: { type: "string" },
-                  },
-                  required: ["product_id", "attribute_value"],
-                },
+                items: { type: "string" },
+                description: "Nomes dos atributos que variam. Ex: [\"Cor\", \"Tamanho\"]",
               },
+              variations: { type: "array", items: variationItemSchema },
             },
-            required: ["parent_title", "attribute_name", "variations"],
+            required: ["parent_title", "attribute_names", "variations"],
           },
         },
         add_to_existing: {
           type: "array",
-          description: "Produtos simples que devem ser adicionados a grupos variáveis já existentes",
+          description: "Produtos simples para adicionar a grupos variáveis existentes",
           items: {
             type: "object",
             properties: {
-              existing_parent_id: { type: "string", description: "ID do produto variável existente" },
-              existing_parent_title: { type: "string", description: "Título do produto variável existente" },
-              attribute_name: { type: "string" },
-              products_to_add: {
+              existing_parent_id: { type: "string" },
+              existing_parent_title: { type: "string" },
+              attribute_names: {
                 type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    product_id: { type: "string" },
-                    attribute_value: { type: "string" },
-                  },
-                  required: ["product_id", "attribute_value"],
-                },
+                items: { type: "string" },
               },
-              reason: { type: "string", description: "Justificação breve de porque este produto pertence a este grupo" },
+              products_to_add: { type: "array", items: variationItemSchema },
+              reason: { type: "string" },
             },
-            required: ["existing_parent_id", "existing_parent_title", "attribute_name", "products_to_add"],
+            required: ["existing_parent_id", "existing_parent_title", "attribute_names", "products_to_add"],
           },
         },
       },
@@ -205,7 +206,7 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
             type: "function",
             function: {
               name: "detect_variations",
-              description: "Devolve os grupos de variações detetados e sugestões de adição a grupos existentes",
+              description: "Devolve os grupos de variações detetados com suporte a múltiplos atributos",
               parameters: toolParameters,
             },
           },
@@ -232,7 +233,6 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
     const newGroups = parsed.new_groups || [];
     const addToExisting = parsed.add_to_existing || [];
 
-    // Validate product IDs
     const allProductIds = new Set(products.map((p: any) => p.id));
     const validNewGroups = newGroups
       .map((g: any) => ({
