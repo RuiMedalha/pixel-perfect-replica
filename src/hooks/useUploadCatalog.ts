@@ -383,21 +383,42 @@ export function useUploadCatalog() {
       });
 
       if (error) throw new Error(error.message || "Erro ao processar ficheiro");
-      if (data?.error && data?.count === undefined) throw new Error(data.error);
+      if (data?.error && data?.count === undefined && !data?.background) throw new Error(data.error);
 
-      const count = data?.count || 0;
-      const updatedCount = data?.updated || 0;
-      await registerUpload(uploadedFile, user.id, filePath, count + updatedCount, workspaceId);
-
-      updateFile(uploadedFile.id, {
-        status: "concluido",
-        progress: 100,
-        productsCount: count + updatedCount,
-      });
-      const parts: string[] = [];
-      if (count > 0) parts.push(`${count} novo(s)`);
-      if (updatedCount > 0) parts.push(`${updatedCount} atualizado(s)`);
-      toast.success(`${parts.join(", ")} de "${uploadedFile.name}"`);
+      if (data?.background) {
+        // Background mode: poll uploaded_files for parseResult in metadata
+        toast.info(`A processar "${uploadedFile.name}" em segundo plano...`);
+        const result = await pollForParseResult(uploadedFile.name, user.id, workspaceId);
+        const count = result?.count || 0;
+        const updatedCount = result?.updated || 0;
+        await registerUpload(uploadedFile, user.id, filePath, count + updatedCount, workspaceId);
+        updateFile(uploadedFile.id, {
+          status: "concluido",
+          progress: 100,
+          productsCount: count + updatedCount,
+        });
+        const msgParts: string[] = [];
+        if (count > 0) msgParts.push(`${count} novo(s)`);
+        if (updatedCount > 0) msgParts.push(`${updatedCount} atualizado(s)`);
+        if (msgParts.length > 0) {
+          toast.success(`${msgParts.join(", ")} de "${uploadedFile.name}"`);
+        } else {
+          toast.success(`"${uploadedFile.name}" processado.`);
+        }
+      } else {
+        const count = data?.count || 0;
+        const updatedCount = data?.updated || 0;
+        await registerUpload(uploadedFile, user.id, filePath, count + updatedCount, workspaceId);
+        updateFile(uploadedFile.id, {
+          status: "concluido",
+          progress: 100,
+          productsCount: count + updatedCount,
+        });
+        const msgParts: string[] = [];
+        if (count > 0) msgParts.push(`${count} novo(s)`);
+        if (updatedCount > 0) msgParts.push(`${updatedCount} atualizado(s)`);
+        toast.success(`${msgParts.join(", ")} de "${uploadedFile.name}"`);
+      }
 
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["product-stats"] });
