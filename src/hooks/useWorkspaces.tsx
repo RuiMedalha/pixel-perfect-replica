@@ -91,6 +91,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     qc.invalidateQueries({ queryKey: ["recent-activity"] });
     qc.invalidateQueries({ queryKey: ["token-usage-summary"] });
     qc.invalidateQueries({ queryKey: ["optimization-logs"] });
+    qc.invalidateQueries({ queryKey: ["quality-metrics"] });
   };
 
   const createMutation = useMutation({
