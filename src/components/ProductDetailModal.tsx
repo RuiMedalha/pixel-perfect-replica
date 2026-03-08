@@ -644,7 +644,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
               <Check className="w-4 h-4 mr-1" /> Aprovar
             </Button>
             <Button size="sm" variant="outline" onClick={() => { 
-              publishWoo.mutate([product.id]); 
+              publishWoo.mutate({ productIds: [product.id] }); 
               onClose(); 
             }} disabled={publishWoo.isPending}>
               <Send className="w-4 h-4 mr-1" /> Publicar

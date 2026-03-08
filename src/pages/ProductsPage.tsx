@@ -649,7 +649,7 @@ const ProductsPage = () => {
               <Button size="sm" variant="destructive" className="text-xs h-8" onClick={handleBulkDelete} disabled={deleteProducts.isPending}>
                 <Trash2 className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Eliminar </span>({selected.size})
               </Button>
-              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => { publishWoo.mutate(Array.from(selected)); setSelected(new Set()); }} disabled={publishWoo.isPending}>
+              <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => setShowPublishModal(true)} disabled={publishWoo.isPending}>
                 <Send className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Publicar </span>WC ({selected.size})
               </Button>
               <Button size="sm" variant="secondary" className="text-xs h-8" onClick={() => handleOptimizeClick(Array.from(selected))} disabled={optimizeProducts.isPending}>
