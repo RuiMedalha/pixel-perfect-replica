@@ -367,6 +367,39 @@ async function findWooVariationBySku(baseUrl: string, auth: string, parentWooId:
   return null;
 }
 
+async function deleteWooProduct(baseUrl: string, auth: string, productId: number): Promise<boolean> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${productId}?force=true`, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    return resp.ok;
+  } catch { return false; }
+}
+
+async function handleVariationSkuConflict(
+  baseUrl: string, auth: string, parentWooId: number, childId: string, sku: string,
+  variationPayload: Record<string, unknown>, skuErr: WooSkuConflictError, supabase: any
+): Promise<any> {
+  // The resource_id from SKU conflict might be a standalone product, NOT a variation under this parent.
+  // Step 1: Try to find the variation by SKU under the correct parent
+  const realVarId = await findWooVariationBySku(baseUrl, auth, parentWooId, sku);
+  if (realVarId) {
+    console.log(`Found existing variation ${realVarId} under parent ${parentWooId} for child ${childId}`);
+    const varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${realVarId}`, "PUT", variationPayload);
+    await supabase.from("products").update({ woocommerce_id: realVarId }).eq("id", childId);
+    return varWooData;
+  }
+
+  // Step 2: The conflicting SKU is a standalone product — delete it and create as variation
+  console.log(`SKU conflict resource_id ${skuErr.resourceId} is not a variation under parent ${parentWooId}. Deleting standalone and creating variation.`);
+  await deleteWooProduct(baseUrl, auth, skuErr.resourceId);
+
+  // Now create the variation fresh
+  const varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+  return varWooData;
+}
+
 async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: string, auth: string, skus: any[]): Promise<number[]> {
   if (!skus || skus.length === 0) return [];
   const skuList = skus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
@@ -763,10 +796,8 @@ async function publishVariableProduct(
           : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
       } catch (skuErr) {
         if (skuErr instanceof WooSkuConflictError) {
-          // SKU already exists as a different variation — update it instead
-          console.log(`SKU conflict for variation ${child.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
-          varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${skuErr.resourceId}`, "PUT", variationPayload);
-          await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", child.id);
+          console.log(`SKU conflict for variation ${child.id}, handling properly`);
+          varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, child.id, child.sku || "", variationPayload, skuErr, supabase);
         } else {
           throw skuErr;
         }
@@ -826,9 +857,8 @@ async function publishVariation(
         : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
     } catch (skuErr) {
       if (skuErr instanceof WooSkuConflictError) {
-        console.log(`SKU conflict for variation ${variation.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
-        varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${skuErr.resourceId}`, "PUT", variationPayload);
-        await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", variation.id);
+        console.log(`SKU conflict for standalone variation ${variation.id}, handling properly`);
+        varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, variation.id, variation.sku || "", variationPayload, skuErr, supabase);
         action = "updated";
       } else {
         throw skuErr;
