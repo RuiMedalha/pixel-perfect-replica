@@ -372,7 +372,7 @@ Deno.serve(async (req) => {
         // Now publish each variation
         for (const child of children) {
           try {
-            const variationPayload = buildBasePayload(child, true);
+            const variationPayload = await buildBasePayload(child, true);
 
             // Set the variation attributes (e.g. Color: Red, Size: M)
             const variationAttrs = buildVariationAttributes(child);
