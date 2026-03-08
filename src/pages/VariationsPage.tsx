@@ -419,31 +419,70 @@ const VariationsPage = () => {
                               </div>
                             </div>
                           </div>
-                          {expandedAdditions.has(idx) && (
-                            <div className="px-3 pb-3 pl-12">
-                              <div className="border rounded-lg overflow-hidden">
-                                <table className="w-full text-xs">
-                                  <thead className="bg-muted/50"><tr>
-                                    <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
-                                    <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
-                                    <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
-                                  </tr></thead>
-                                  <tbody>
-                                    {addition.products_to_add.map((v, vi) => {
-                                      const p = productMap.get(v.product_id);
-                                      return (
-                                        <tr key={vi} className="border-t">
-                                          <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
-                                          <td className="p-2 truncate max-w-[200px]">{p?.original_title ?? "—"}</td>
-                                          <td className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_value}</Badge></td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                          {expandedAdditions.has(idx) && (() => {
+                            const existingGroup = existingGroupsContext.find(g => g.parent_id === addition.existing_parent_id);
+                            const existingVariations = existingGroup?.existing_variations || [];
+                            return (
+                              <div className="px-3 pb-3 pl-12">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  {/* Current variations */}
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                      <Network className="w-3 h-3" /> Variações Atuais ({existingVariations.length})
+                                    </p>
+                                    <div className="border rounded-lg overflow-hidden">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-muted/50"><tr>
+                                          <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
+                                          <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                        </tr></thead>
+                                        <tbody>
+                                          {existingVariations.length === 0 ? (
+                                            <tr><td colSpan={2} className="p-2 text-muted-foreground italic">Sem variações</td></tr>
+                                          ) : existingVariations.map((ev, evi) => (
+                                            <tr key={evi} className="border-t">
+                                              <td className="p-2 font-mono">{ev.sku ?? "—"}</td>
+                                              <td className="p-2"><Badge variant="outline" className="text-[10px]">{ev.attribute_value}</Badge></td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                  {/* New suggested variations */}
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                      <Plus className="w-3 h-3" /> Novas Sugeridas ({addition.products_to_add.length})
+                                    </p>
+                                    <div className="border border-primary/30 rounded-lg overflow-hidden bg-primary/5">
+                                      <table className="w-full text-xs">
+                                        <thead className="bg-primary/10"><tr>
+                                          <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
+                                          <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
+                                          <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                        </tr></thead>
+                                        <tbody>
+                                          {addition.products_to_add.map((v, vi) => {
+                                            const p = productMap.get(v.product_id);
+                                            return (
+                                              <tr key={vi} className="border-t border-primary/10">
+                                                <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
+                                                <td className="p-2 truncate max-w-[150px]">{p?.original_title ?? "—"}</td>
+                                                <td className="p-2"><Badge className="text-[10px] bg-primary/20 text-primary border-0">{v.attribute_value}</Badge></td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+                                {addition.reason && (
+                                  <p className="text-[10px] text-muted-foreground mt-2 italic">💡 {addition.reason}</p>
+                                )}
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
