@@ -156,142 +156,205 @@ serve(async (req) => {
       });
     }
 
-    // SKU deduplication: query existing SKUs in workspace
+    // SKU lookup: query existing SKUs in workspace to decide insert vs update
     const productSkus = products
       .map((p) => toStr(p.sku, 100))
       .filter((s): s is string => !!s);
 
-    const existingSkuSet = new Set<string>();
+    const existingSkuMap = new Map<string, string>(); // sku -> product id
     if (productSkus.length > 0) {
       for (let i = 0; i < productSkus.length; i += 200) {
         const batch = productSkus.slice(i, i + 200);
-        const query = supabase.from("products").select("sku").in("sku", batch);
+        const query = supabase.from("products").select("id, sku").in("sku", batch);
         if (workspaceId) query.eq("workspace_id", workspaceId);
         const { data: existingProducts } = await query;
         (existingProducts || []).forEach((p: any) => {
-          if (p.sku) existingSkuSet.add(p.sku);
+          if (p.sku) existingSkuMap.set(p.sku, p.id);
         });
       }
-      if (existingSkuSet.size > 0) {
-        console.log(`🔍 Found ${existingSkuSet.size} existing SKUs in workspace, will skip duplicates`);
+      if (existingSkuMap.size > 0) {
+        console.log(`🔍 Found ${existingSkuMap.size} existing SKUs in workspace, will update mapped fields only`);
       }
+    }
+
+    // Build a set of mapped field keys from columnMapping
+    const mappedFieldKeys = new Set<string>(columnMapping ? Object.keys(columnMapping) : []);
+    // If no columnMapping provided (e.g. PDF), treat all fields as mapped
+    const hasMapping = mappedFieldKeys.size > 0;
+
+    // Helper: build product data object with only mapped fields
+    function buildProductData(p: Record<string, unknown>, onlyMapped: boolean) {
+      const data: Record<string, unknown> = {};
+
+      // Parse complex fields
+      const attributes: any[] = [];
+      for (let a = 1; a <= 3; a++) {
+        const name = p[`attribute_${a}_name`];
+        const vals = p[`attribute_${a}_values`];
+        if (name && vals) {
+          attributes.push({
+            name: String(name),
+            values: String(vals).split(",").map((v: string) => v.trim()).filter(Boolean),
+          });
+        }
+      }
+
+      const upsellSkus = p.upsell_skus
+        ? String(p.upsell_skus).split(",").map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      const crosssellSkus = p.crosssell_skus
+        ? String(p.crosssell_skus).split(",").map((s: string) => s.trim()).filter(Boolean)
+        : [];
+
+      let imageUrls: string[] = [];
+      if (p.image_urls) {
+        if (Array.isArray(p.image_urls)) {
+          imageUrls = p.image_urls;
+        } else {
+          imageUrls = String(p.image_urls).split(/[,|]/).map((s: string) => s.trim()).filter(Boolean);
+        }
+      }
+
+      let techSpecs = toStr(p.technical_specs, 5000);
+      const specParts: string[] = [];
+      if (p.weight) specParts.push(`Peso: ${p.weight}kg`);
+      if (p.length) specParts.push(`Comprimento: ${p.length}cm`);
+      if (p.width) specParts.push(`Largura: ${p.width}cm`);
+      if (p.height) specParts.push(`Altura: ${p.height}cm`);
+      if (specParts.length > 0) {
+        techSpecs = techSpecs ? `${techSpecs}\n${specParts.join(" | ")}` : specParts.join(" | ");
+      }
+
+      // Field mapping: columnMapping key -> DB column(s) + value
+      const fieldMap: Record<string, () => void> = {
+        title: () => { data.original_title = toStr(p.title, 500); },
+        description: () => { data.original_description = toStr(p.description, 5000); },
+        short_description: () => { data.short_description = toStr(p.short_description, 1000); },
+        technical_specs: () => { data.technical_specs = techSpecs; },
+        price: () => { data.original_price = parsePrice(p.price); },
+        sale_price: () => { data.sale_price = parsePrice(p.sale_price); },
+        sku: () => { data.sku = toStr(p.sku, 100); },
+        category: () => { data.category = toStr(p.category, 200); },
+        supplier_ref: () => { data.supplier_ref = toStr(p.supplier_ref, 200); },
+        image_urls: () => { data.image_urls = imageUrls.length > 0 ? imageUrls : null; },
+        product_type: () => { data.product_type = toStr(p.product_type, 50) || "simple"; },
+        upsell_skus: () => { data.upsell_skus = upsellSkus.length > 0 ? upsellSkus : []; },
+        crosssell_skus: () => { data.crosssell_skus = crosssellSkus.length > 0 ? crosssellSkus : []; },
+        meta_title: () => { data.meta_title = toStr(p.meta_title, 200); },
+        meta_description: () => { data.meta_description = toStr(p.meta_description, 500); },
+        focus_keyword: () => {
+          data.focus_keyword = p.focus_keyword
+            ? String(p.focus_keyword).split(",").map((s: string) => s.trim()).filter(Boolean)
+            : null;
+        },
+        seo_slug: () => { data.seo_slug = toStr(p.seo_slug, 200); },
+        weight: () => { /* already handled in technical_specs */ },
+        woocommerce_id: () => { data.woocommerce_id = p.woocommerce_id ? parseInt(String(p.woocommerce_id), 10) || null : null; },
+      };
+
+      if (onlyMapped && hasMapping) {
+        // Only set fields that the user explicitly mapped
+        for (const key of mappedFieldKeys) {
+          if (fieldMap[key]) fieldMap[key]();
+        }
+      } else {
+        // Set all fields (new product without specific mapping, or PDF import)
+        for (const [key, fn] of Object.entries(fieldMap)) {
+          fn();
+        }
+      }
+
+      // Attributes are always set if present (parsed from attribute_N_name columns)
+      if (attributes.length > 0) {
+        data.attributes = attributes;
+      }
+
+      return data;
     }
 
     // Detect WooCommerce mode
     const isWooMode = products.some((p) => p.product_type || p.parent_sku);
     if (isWooMode) console.log("🛒 WooCommerce mode detected");
 
-    // Insert products in batches of 50 (Pass 1)
+    // Process products in batches of 50
     const batchSize = 50;
     let inserted = 0;
+    let updated = 0;
     let skipped = 0;
     const errors: string[] = [];
     const parentSkuMap: Array<{ productId: string; parentSku: string }> = [];
 
     for (let i = 0; i < products.length; i += batchSize) {
       const batchProducts = products.slice(i, i + batchSize);
-      const batch = batchProducts
-        .filter((p) => {
-          const sku = toStr(p.sku, 100);
-          if (sku && existingSkuSet.has(sku)) {
+      
+      // Separate into new products (insert) and existing products (update)
+      const toInsert: any[] = [];
+      const toUpdate: Array<{ id: string; data: Record<string, unknown>; product: Record<string, unknown> }> = [];
+
+      for (const p of batchProducts) {
+        const sku = toStr(p.sku, 100);
+        const existingId = sku ? existingSkuMap.get(sku) : null;
+
+        if (existingId) {
+          // Existing product: build update with only mapped fields
+          const updateData = buildProductData(p, true);
+          if (Object.keys(updateData).length > 0) {
+            toUpdate.push({ id: existingId, data: updateData, product: p });
+          } else {
             skipped++;
-            return false;
           }
-          return true;
-        })
-        .map((p) => {
-          // Parse attributes from WooCommerce format
-          const attributes: any[] = [];
-          for (let a = 1; a <= 3; a++) {
-            const name = p[`attribute_${a}_name`];
-            const vals = p[`attribute_${a}_values`];
-            if (name && vals) {
-              attributes.push({
-                name: String(name),
-                values: String(vals).split(",").map((v: string) => v.trim()).filter(Boolean),
-              });
-            }
-          }
+        } else {
+          // New product: insert with all mapped fields + required system fields
+          const productData = buildProductData(p, false);
+          productData.user_id = userId;
+          productData.workspace_id = workspaceId || null;
+          productData.source_file = fileName;
+          productData.status = "pending";
+          if (!productData.sku) productData.sku = toStr(p.sku, 100);
+          if (!productData.product_type) productData.product_type = "simple";
+          if (!productData.original_title) productData.original_title = toStr(p.title, 500);
+          toInsert.push(productData);
+        }
+      }
 
-          // Parse upsell/crosssell from comma-separated SKUs
-          const upsellSkus = p.upsell_skus
-            ? String(p.upsell_skus).split(",").map((s: string) => s.trim()).filter(Boolean)
-            : [];
-          const crosssellSkus = p.crosssell_skus
-            ? String(p.crosssell_skus).split(",").map((s: string) => s.trim()).filter(Boolean)
-            : [];
+      // Batch INSERT new products
+      if (toInsert.length > 0) {
+        const { error: insertError, data: insertedData } = await supabase
+          .from("products")
+          .insert(toInsert)
+          .select("id, sku");
 
-          // Parse image URLs (comma or pipe separated)
-          let imageUrls: string[] = [];
-          if (p.image_urls) {
-            if (Array.isArray(p.image_urls)) {
-              imageUrls = p.image_urls;
-            } else {
-              imageUrls = String(p.image_urls).split(/[,|]/).map((s: string) => s.trim()).filter(Boolean);
-            }
-          }
-
-          // Build technical specs from weight/dimensions
-          let techSpecs = toStr(p.technical_specs, 5000);
-          const specParts: string[] = [];
-          if (p.weight) specParts.push(`Peso: ${p.weight}kg`);
-          if (p.length) specParts.push(`Comprimento: ${p.length}cm`);
-          if (p.width) specParts.push(`Largura: ${p.width}cm`);
-          if (p.height) specParts.push(`Altura: ${p.height}cm`);
-          if (specParts.length > 0) {
-            techSpecs = techSpecs ? `${techSpecs}\n${specParts.join(" | ")}` : specParts.join(" | ");
-          }
-
-          return {
-            user_id: userId,
-            workspace_id: workspaceId || null,
-            original_title: toStr(p.title, 500),
-            original_description: toStr(p.description, 5000),
-            short_description: toStr(p.short_description, 1000),
-            technical_specs: techSpecs,
-            original_price: parsePrice(p.price),
-            sale_price: parsePrice(p.sale_price),
-            sku: toStr(p.sku, 100),
-            category: toStr(p.category, 200),
-            supplier_ref: toStr(p.supplier_ref, 200),
-            image_urls: imageUrls.length > 0 ? imageUrls : null,
-            source_file: fileName,
-            status: "pending" as const,
-            product_type: toStr(p.product_type, 50) || "simple",
-            attributes: attributes.length > 0 ? attributes : [],
-            upsell_skus: upsellSkus.length > 0 ? upsellSkus : [],
-            crosssell_skus: crosssellSkus.length > 0 ? crosssellSkus : [],
-            meta_title: toStr(p.meta_title, 200),
-            meta_description: toStr(p.meta_description, 500),
-            focus_keyword: p.focus_keyword
-              ? String(p.focus_keyword).split(",").map((s: string) => s.trim()).filter(Boolean)
-              : null,
-            seo_slug: toStr(p.seo_slug, 200),
-            woocommerce_id: p.woocommerce_id ? parseInt(String(p.woocommerce_id), 10) || null : null,
-          };
-        });
-
-      if (batch.length === 0) continue;
-
-      const { error: insertError, data: insertedData } = await supabase
-        .from("products")
-        .insert(batch)
-        .select("id, sku");
-
-      if (insertError) {
-        errors.push(`Batch ${i / batchSize + 1}: ${insertError.message}`);
-      } else {
-        inserted += insertedData?.length || 0;
-        // Track parent_sku relationships for Pass 2
-        if (isWooMode) {
-          batchProducts.forEach((p) => {
-            if (p.parent_sku) {
-              const matchedInserted = insertedData?.find((d: any) => d.sku === toStr(p.sku, 100));
-              if (matchedInserted) {
-                parentSkuMap.push({ productId: matchedInserted.id, parentSku: String(p.parent_sku) });
+        if (insertError) {
+          errors.push(`Insert batch ${i / batchSize + 1}: ${insertError.message}`);
+        } else {
+          inserted += insertedData?.length || 0;
+          if (isWooMode) {
+            batchProducts.forEach((p) => {
+              if (p.parent_sku) {
+                const matchedInserted = insertedData?.find((d: any) => d.sku === toStr(p.sku, 100));
+                if (matchedInserted) {
+                  parentSkuMap.push({ productId: matchedInserted.id, parentSku: String(p.parent_sku) });
+                }
               }
-            }
-          });
+            });
+          }
+        }
+      }
+
+      // UPDATE existing products one by one (only mapped fields)
+      for (const { id, data: updateData, product: p } of toUpdate) {
+        const { error: updateError } = await supabase
+          .from("products")
+          .update(updateData)
+          .eq("id", id);
+
+        if (updateError) {
+          errors.push(`Update SKU ${toStr(p.sku, 100)}: ${updateError.message}`);
+        } else {
+          updated++;
+          if (isWooMode && p.parent_sku) {
+            parentSkuMap.push({ productId: id, parentSku: String(p.parent_sku) });
+          }
         }
       }
     }
@@ -321,18 +384,21 @@ serve(async (req) => {
     }
 
     if (skipped > 0) {
-      console.log(`⏭️ Skipped ${skipped} duplicate products (existing SKUs)`);
+      console.log(`⏭️ Skipped ${skipped} products (no mapped fields to update)`);
+    }
+    if (updated > 0) {
+      console.log(`✏️ Updated ${updated} existing products (mapped fields only)`);
     }
 
     // Log activity
     await supabase.from("activity_log").insert({
       user_id: userId,
       action: "upload",
-      details: { file: fileName, products_count: inserted, skipped, woo_mode: isWooMode },
+      details: { file: fileName, products_count: inserted, updated, skipped, woo_mode: isWooMode },
     });
 
     return new Response(
-      JSON.stringify({ count: inserted, total: products.length, skipped, errors }),
+      JSON.stringify({ count: inserted, updated, total: products.length, skipped, errors }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
