@@ -5,12 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, GitBranch, Search, Check, X, AlertTriangle, Layers, ChevronDown, ChevronRight, Sparkles, Network } from "lucide-react";
+import { Loader2, Search, Check, X, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Network, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, type Product } from "@/hooks/useProducts";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
-import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/hooks/useVariableProducts";
+import { useDetectVariations, useApplyVariations, type VariationGroup, type AddToExistingGroup } from "@/hooks/useVariableProducts";
 import { supabase } from "@/integrations/supabase/client";
 
 type AnalysisState = "idle" | "analyzing" | "results";
@@ -23,35 +23,68 @@ const VariationsPage = () => {
 
   const [analysisState, setAnalysisState] = useState<AnalysisState>("idle");
   const [detectedGroups, setDetectedGroups] = useState<VariationGroup[]>([]);
+  const [detectedAdditions, setDetectedAdditions] = useState<AddToExistingGroup[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
+  const [selectedAdditions, setSelectedAdditions] = useState<Set<number>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+  const [expandedAdditions, setExpandedAdditions] = useState<Set<number>>(new Set());
   const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0 });
 
-  // Current variable products overview
   const variableProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "variable"), [products]);
   const variationProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "variation"), [products]);
   const simpleProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "simple"), [products]);
 
-  // Orphan variations (variation without valid parent)
   const orphanVariations = useMemo(() => {
     const parentIds = new Set((products ?? []).map(p => p.id));
     return variationProducts.filter(p => p.parent_product_id && !parentIds.has(p.parent_product_id));
   }, [products, variationProducts]);
 
-  // Variable products with no children
   const emptyVariables = useMemo(() => {
     const parentIdsWithChildren = new Set(variationProducts.map(p => p.parent_product_id).filter(Boolean));
     return variableProducts.filter(p => !parentIdsWithChildren.has(p.id));
   }, [variableProducts, variationProducts]);
 
+  // Build existing groups context for AI
+  const existingGroupsContext = useMemo(() => {
+    return variableProducts.map(parent => {
+      const children = variationProducts.filter(p => p.parent_product_id === parent.id);
+      const attrs = Array.isArray(parent.attributes) ? parent.attributes as any[] : [];
+      return {
+        parent_id: parent.id,
+        parent_title: parent.optimized_title || parent.original_title || "",
+        attribute_name: attrs[0]?.name || "Variação",
+        existing_variations: children.map(c => {
+          const childAttrs = Array.isArray(c.attributes) ? c.attributes as any[] : [];
+          return {
+            sku: c.sku,
+            attribute_value: childAttrs[0]?.value || c.original_title || "",
+          };
+        }),
+      };
+    });
+  }, [variableProducts, variationProducts]);
+
   const handleFullAnalysis = async () => {
     if (!activeWorkspace) return;
     setAnalysisState("analyzing");
-    
+
     try {
-      // Process in batches of 500 simple products
+      // Fetch knowledge context from PDF catalog
+      let knowledgeContext = "";
+      try {
+        const { data: chunks } = await supabase.rpc("search_knowledge", {
+          _query: "variações tamanhos dimensões capacidade modelos série família",
+          _workspace_id: activeWorkspace.id,
+          _limit: 10,
+        });
+        if (chunks && chunks.length > 0) {
+          knowledgeContext = chunks.map((c: any) => `[${c.source_name}]: ${c.content}`).join("\n\n");
+        }
+      } catch { /* knowledge search is optional */ }
+
       const batchSize = 500;
       const allGroups: VariationGroup[] = [];
+      const allAdditions: AddToExistingGroup[] = [];
       const total = Math.ceil(simpleProducts.length / batchSize);
       setAnalysisProgress({ current: 0, total });
 
@@ -59,22 +92,39 @@ const VariationsPage = () => {
         const batch = simpleProducts.slice(i, i + batchSize);
         const result = await detectVariations.mutateAsync({
           workspaceId: activeWorkspace.id,
-          products: batch.map(p => ({ id: p.id, sku: p.sku, original_title: p.original_title, optimized_title: p.optimized_title, category: p.category, original_price: p.original_price, original_description: p.original_description, short_description: p.short_description, product_type: p.product_type, attributes: p.attributes })),
+          products: batch.map(p => ({
+            id: p.id, sku: p.sku, original_title: p.original_title,
+            optimized_title: p.optimized_title, category: p.category,
+            original_price: p.original_price, original_description: p.original_description,
+            short_description: p.short_description, product_type: p.product_type,
+            attributes: p.attributes, crosssell_skus: p.crosssell_skus,
+            upsell_skus: p.upsell_skus,
+          })),
+          existingGroups: existingGroupsContext,
+          knowledgeContext,
         });
         allGroups.push(...result.groups);
+        allAdditions.push(...(result.addToExisting || []));
         setAnalysisProgress({ current: Math.floor(i / batchSize) + 1, total });
       }
 
       setDetectedGroups(allGroups);
+      setDetectedAdditions(allAdditions);
       setSelectedGroups(new Set(allGroups.map((_, i) => i)));
+      setSelectedAdditions(new Set(allAdditions.map((_, i) => i)));
       setExpandedGroups(new Set());
+      setExpandedAdditions(new Set());
       setAnalysisState("results");
 
-      if (allGroups.length === 0) {
-        toast.info("Nenhuma variação potencial detetada nos produtos simples.");
+      const totalNew = allGroups.reduce((s, g) => s + g.variations.length, 0);
+      const totalAdded = allAdditions.reduce((s, g) => s + g.products_to_add.length, 0);
+      if (allGroups.length === 0 && allAdditions.length === 0) {
+        toast.info("Nenhuma variação potencial detetada.");
       } else {
-        const totalVariations = allGroups.reduce((s, g) => s + g.variations.length, 0);
-        toast.success(`${allGroups.length} grupo(s) com ${totalVariations} variações detetados!`);
+        const parts = [];
+        if (allGroups.length > 0) parts.push(`${allGroups.length} novo(s) grupo(s) (${totalNew} prod.)`);
+        if (allAdditions.length > 0) parts.push(`${allAdditions.length} adição(ões) a existentes (${totalAdded} prod.)`);
+        toast.success(`Detetado: ${parts.join(" + ")}`);
       }
     } catch (err: any) {
       toast.error(err.message || "Erro na análise");
@@ -84,30 +134,30 @@ const VariationsPage = () => {
 
   const handleApplySelected = async () => {
     const groups = detectedGroups.filter((_, i) => selectedGroups.has(i));
-    if (groups.length === 0) {
-      toast.warning("Selecione pelo menos um grupo para aplicar.");
+    const additions = detectedAdditions.filter((_, i) => selectedAdditions.has(i));
+    if (groups.length === 0 && additions.length === 0) {
+      toast.warning("Selecione pelo menos um grupo ou adição para aplicar.");
       return;
     }
-    await applyVariations.mutateAsync({ groups });
+    await applyVariations.mutateAsync({ groups, addToExisting: additions });
     setAnalysisState("idle");
     setDetectedGroups([]);
+    setDetectedAdditions([]);
     setSelectedGroups(new Set());
+    setSelectedAdditions(new Set());
   };
 
   const toggleGroup = (idx: number) => {
-    setSelectedGroups(prev => {
-      const next = new Set(prev);
-      next.has(idx) ? next.delete(idx) : next.add(idx);
-      return next;
-    });
+    setSelectedGroups(prev => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next; });
   };
-
+  const toggleAddition = (idx: number) => {
+    setSelectedAdditions(prev => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next; });
+  };
   const toggleExpand = (idx: number) => {
-    setExpandedGroups(prev => {
-      const next = new Set(prev);
-      next.has(idx) ? next.delete(idx) : next.add(idx);
-      return next;
-    });
+    setExpandedGroups(prev => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next; });
+  };
+  const toggleExpandAddition = (idx: number) => {
+    setExpandedAdditions(prev => { const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next; });
   };
 
   const productMap = useMemo(() => {
@@ -124,6 +174,9 @@ const VariationsPage = () => {
     );
   }
 
+  const totalSelected = selectedGroups.size + selectedAdditions.size;
+  const totalResults = detectedGroups.length + detectedAdditions.length;
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 animate-fade-in">
       <div>
@@ -135,32 +188,24 @@ const VariationsPage = () => {
 
       {/* Overview Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{simpleProducts.length}</p>
-            <p className="text-xs text-muted-foreground">Simples</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-primary">{variableProducts.length}</p>
-            <p className="text-xs text-muted-foreground">Variáveis</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold text-foreground">{variationProducts.length}</p>
-            <p className="text-xs text-muted-foreground">Variações</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className={cn("text-2xl font-bold", (orphanVariations.length + emptyVariables.length) > 0 ? "text-destructive" : "text-success")}>
-              {orphanVariations.length + emptyVariables.length}
-            </p>
-            <p className="text-xs text-muted-foreground">Problemas</p>
-          </CardContent>
-        </Card>
+        <Card><CardContent className="p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{simpleProducts.length}</p>
+          <p className="text-xs text-muted-foreground">Simples</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 text-center">
+          <p className="text-2xl font-bold text-primary">{variableProducts.length}</p>
+          <p className="text-xs text-muted-foreground">Variáveis</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{variationProducts.length}</p>
+          <p className="text-xs text-muted-foreground">Variações</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-4 text-center">
+          <p className={cn("text-2xl font-bold", (orphanVariations.length + emptyVariables.length) > 0 ? "text-destructive" : "text-muted-foreground")}>
+            {orphanVariations.length + emptyVariables.length}
+          </p>
+          <p className="text-xs text-muted-foreground">Problemas</p>
+        </CardContent></Card>
       </div>
 
       {/* Problems Section */}
@@ -184,9 +229,7 @@ const VariationsPage = () => {
                       <span className="truncate">{p.original_title}</span>
                     </div>
                   ))}
-                  {orphanVariations.length > 10 && (
-                    <p className="text-xs text-muted-foreground">...e mais {orphanVariations.length - 10}</p>
-                  )}
+                  {orphanVariations.length > 10 && <p className="text-xs text-muted-foreground">...e mais {orphanVariations.length - 10}</p>}
                 </div>
               </div>
             )}
@@ -201,9 +244,7 @@ const VariationsPage = () => {
                       <span className="truncate">{p.original_title}</span>
                     </div>
                   ))}
-                  {emptyVariables.length > 10 && (
-                    <p className="text-xs text-muted-foreground">...e mais {emptyVariables.length - 10}</p>
-                  )}
+                  {emptyVariables.length > 10 && <p className="text-xs text-muted-foreground">...e mais {emptyVariables.length - 10}</p>}
                 </div>
               </div>
             )}
@@ -251,16 +292,14 @@ const VariationsPage = () => {
             Análise IA do Catálogo
           </CardTitle>
           <CardDescription className="text-xs">
-            Corre uma análise com IA a todos os {simpleProducts.length} produtos simples para detetar potenciais variações não agrupadas.
+            Analisa {simpleProducts.length} produtos simples para detetar novos grupos de variações
+            {variableProducts.length > 0 && ` e verificar se algum deve ser adicionado aos ${variableProducts.length} grupos existentes`}.
+            {" "}Utiliza dados de crosssell/upsell e o catálogo PDF como contexto.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {analysisState === "idle" && (
-            <Button
-              onClick={handleFullAnalysis}
-              disabled={simpleProducts.length < 2 || detectVariations.isPending}
-              className="w-full sm:w-auto"
-            >
+            <Button onClick={handleFullAnalysis} disabled={simpleProducts.length < 1 || detectVariations.isPending} className="w-full sm:w-auto">
               <Sparkles className="w-4 h-4 mr-2" />
               Analisar {simpleProducts.length} Produtos Simples
             </Button>
@@ -270,20 +309,16 @@ const VariationsPage = () => {
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm">A analisar produtos com IA...</span>
+                <span className="text-sm">A analisar produtos com IA (catálogo + crosssell + grupos existentes)...</span>
               </div>
-              {analysisProgress.total > 1 && (
-                <Progress value={(analysisProgress.current / analysisProgress.total) * 100} />
-              )}
-              <p className="text-xs text-muted-foreground">
-                Lote {analysisProgress.current}/{analysisProgress.total}
-              </p>
+              {analysisProgress.total > 1 && <Progress value={(analysisProgress.current / analysisProgress.total) * 100} />}
+              <p className="text-xs text-muted-foreground">Lote {analysisProgress.current}/{analysisProgress.total}</p>
             </div>
           )}
 
           {analysisState === "results" && (
             <div className="space-y-4">
-              {detectedGroups.length === 0 ? (
+              {totalResults === 0 ? (
                 <Alert>
                   <Check className="h-4 w-4" />
                   <AlertDescription>
@@ -293,87 +328,126 @@ const VariationsPage = () => {
               ) : (
                 <>
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <p className="text-sm font-medium">
-                      {detectedGroups.length} grupo(s) sugerido(s) — {selectedGroups.size} selecionado(s)
-                    </p>
+                    <p className="text-sm font-medium">{totalResults} sugestão(ões) — {totalSelected} selecionada(s)</p>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => {
                         setAnalysisState("idle");
                         setDetectedGroups([]);
+                        setDetectedAdditions([]);
                       }}>
                         <X className="w-3.5 h-3.5 mr-1" /> Descartar
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => {
-                        if (selectedGroups.size === detectedGroups.length) {
-                          setSelectedGroups(new Set());
-                        } else {
-                          setSelectedGroups(new Set(detectedGroups.map((_, i) => i)));
-                        }
-                      }}>
-                        {selectedGroups.size === detectedGroups.length ? "Desselecionar Tudo" : "Selecionar Tudo"}
-                      </Button>
-                      <Button size="sm" onClick={handleApplySelected} disabled={applyVariations.isPending || selectedGroups.size === 0}>
+                      <Button size="sm" onClick={handleApplySelected} disabled={applyVariations.isPending || totalSelected === 0}>
                         {applyVariations.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Check className="w-3.5 h-3.5 mr-1" />}
-                        Aplicar ({selectedGroups.size})
+                        Aplicar ({totalSelected})
                       </Button>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    {detectedGroups.map((group, idx) => (
-                      <div key={idx} className={cn("border rounded-lg transition-colors", selectedGroups.has(idx) ? "border-primary/40 bg-primary/5" : "")}>
-                        <div className="flex items-center gap-3 p-3">
-                          <Checkbox
-                            checked={selectedGroups.has(idx)}
-                            onCheckedChange={() => toggleGroup(idx)}
-                          />
-                          <button
-                            className="flex items-center gap-1 text-muted-foreground"
-                            onClick={() => toggleExpand(idx)}
-                          >
-                            {expandedGroups.has(idx) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{group.parent_title}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <Badge variant="secondary" className="text-[10px]">{group.variations.length} variações</Badge>
-                              <Badge variant="outline" className="text-[10px]">{group.attribute_name}</Badge>
+                  {/* New Groups */}
+                  {detectedGroups.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" /> Novos Grupos ({detectedGroups.length})
+                      </p>
+                      {detectedGroups.map((group, idx) => (
+                        <div key={`new-${idx}`} className={cn("border rounded-lg transition-colors", selectedGroups.has(idx) ? "border-primary/40 bg-primary/5" : "")}>
+                          <div className="flex items-center gap-3 p-3">
+                            <Checkbox checked={selectedGroups.has(idx)} onCheckedChange={() => toggleGroup(idx)} />
+                            <button className="flex items-center gap-1 text-muted-foreground" onClick={() => toggleExpand(idx)}>
+                              {expandedGroups.has(idx) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{group.parent_title}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <Badge variant="secondary" className="text-[10px]">{group.variations.length} variações</Badge>
+                                <Badge variant="outline" className="text-[10px]">{group.attribute_name}</Badge>
+                              </div>
                             </div>
                           </div>
-                        </div>
-
-                        {expandedGroups.has(idx) && (
-                          <div className="px-3 pb-3 pl-12">
-                            <div className="border rounded-lg overflow-hidden">
-                              <table className="w-full text-xs">
-                                <thead className="bg-muted/50">
-                                  <tr>
+                          {expandedGroups.has(idx) && (
+                            <div className="px-3 pb-3 pl-12">
+                              <div className="border rounded-lg overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-muted/50"><tr>
                                     <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
                                     <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
                                     <th className="text-left p-2 font-medium text-muted-foreground">{group.attribute_name}</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {group.variations.map((v, vi) => {
-                                    const p = productMap.get(v.product_id);
-                                    return (
-                                      <tr key={vi} className="border-t">
-                                        <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
-                                        <td className="p-2 truncate max-w-[200px]">{p?.original_title ?? "—"}</td>
-                                        <td className="p-2">
-                                          <Badge variant="outline" className="text-[10px]">{v.attribute_value}</Badge>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
+                                  </tr></thead>
+                                  <tbody>
+                                    {group.variations.map((v, vi) => {
+                                      const p = productMap.get(v.product_id);
+                                      return (
+                                        <tr key={vi} className="border-t">
+                                          <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
+                                          <td className="p-2 truncate max-w-[200px]">{p?.original_title ?? "—"}</td>
+                                          <td className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_value}</Badge></td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Additions to Existing Groups */}
+                  {detectedAdditions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Plus className="w-3.5 h-3.5" /> Adicionar a Grupos Existentes ({detectedAdditions.length})
+                      </p>
+                      {detectedAdditions.map((addition, idx) => (
+                        <div key={`add-${idx}`} className={cn("border rounded-lg transition-colors", selectedAdditions.has(idx) ? "border-primary/40 bg-primary/5" : "")}>
+                          <div className="flex items-center gap-3 p-3">
+                            <Checkbox checked={selectedAdditions.has(idx)} onCheckedChange={() => toggleAddition(idx)} />
+                            <button className="flex items-center gap-1 text-muted-foreground" onClick={() => toggleExpandAddition(idx)}>
+                              {expandedAdditions.has(idx) ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                <span className="text-muted-foreground">→</span> {addition.existing_parent_title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <Badge className="text-[10px] bg-primary/20 text-primary border-0">+{addition.products_to_add.length} novo(s)</Badge>
+                                <Badge variant="outline" className="text-[10px]">{addition.attribute_name}</Badge>
+                                {addition.reason && <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{addition.reason}</span>}
+                              </div>
                             </div>
                           </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                          {expandedAdditions.has(idx) && (
+                            <div className="px-3 pb-3 pl-12">
+                              <div className="border rounded-lg overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-muted/50"><tr>
+                                    <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
+                                    <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
+                                    <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                  </tr></thead>
+                                  <tbody>
+                                    {addition.products_to_add.map((v, vi) => {
+                                      const p = productMap.get(v.product_id);
+                                      return (
+                                        <tr key={vi} className="border-t">
+                                          <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
+                                          <td className="p-2 truncate max-w-[200px]">{p?.original_title ?? "—"}</td>
+                                          <td className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_value}</Badge></td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
