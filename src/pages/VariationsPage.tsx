@@ -420,7 +420,7 @@ const VariationsPage = () => {
                               </p>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <Badge className="text-[10px] bg-primary/20 text-primary border-0">+{addition.products_to_add.length} novo(s)</Badge>
-                                <Badge variant="outline" className="text-[10px]">{addition.attribute_name}</Badge>
+                                {addition.attribute_names.map(n => <Badge key={n} variant="outline" className="text-[10px]">{n}</Badge>)}
                                 {addition.reason && <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{addition.reason}</span>}
                               </div>
                             </div>
