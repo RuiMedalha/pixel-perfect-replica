@@ -537,6 +537,12 @@ const ProductsPage = () => {
             {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
             {statusLabels[product.status]}
           </Badge>
+          {product.woocommerce_id && (
+            <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/20 gap-0.5" title={`Publicado no WooCommerce (ID: ${product.woocommerce_id})`}>
+              <Send className="w-2.5 h-2.5" />
+              WC
+            </Badge>
+          )}
         </div>
       </td>
       <td className="p-3 text-center">
