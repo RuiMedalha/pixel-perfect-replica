@@ -376,7 +376,7 @@ const VariationsPage = () => {
                                   <thead className="bg-muted/50"><tr>
                                     <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
                                     <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
-                                    <th className="text-left p-2 font-medium text-muted-foreground">{group.attribute_name}</th>
+                                    {group.attribute_names.map(n => <th key={n} className="text-left p-2 font-medium text-muted-foreground">{n}</th>)}
                                   </tr></thead>
                                   <tbody>
                                     {group.variations.map((v, vi) => {
@@ -385,7 +385,9 @@ const VariationsPage = () => {
                                         <tr key={vi} className="border-t">
                                           <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
                                           <td className="p-2 truncate max-w-[200px]">{p?.original_title ?? "—"}</td>
-                                          <td className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_value}</Badge></td>
+                                          {group.attribute_names.map(n => (
+                                            <td key={n} className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_values[n] || "—"}</Badge></td>
+                                          ))}
                                         </tr>
                                       );
                                     })}
