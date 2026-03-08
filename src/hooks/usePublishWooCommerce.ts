@@ -3,32 +3,33 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { PricingOptions } from "@/components/WooPublishModal";
 
+export interface PublishResult {
+  id: string;
+  status: string;
+  woocommerce_id?: number;
+  error?: string;
+}
+
+export interface PublishResponse {
+  results: PublishResult[];
+}
+
 export function usePublishWooCommerce() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ productIds, publishFields, pricing }: { productIds: string[]; publishFields?: string[]; pricing?: PricingOptions }) => {
+    mutationFn: async ({ productIds, publishFields, pricing }: { productIds: string[]; publishFields?: string[]; pricing?: PricingOptions }): Promise<PublishResponse> => {
       const { data, error } = await supabase.functions.invoke("publish-woocommerce", {
         body: { productIds, publishFields, pricing },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    onMutate: () => {
-      toast.info("A publicar produtos no WooCommerce...");
+      return data as PublishResponse;
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["product-stats"] });
       qc.invalidateQueries({ queryKey: ["recent-activity"] });
-      const ok = data.results?.filter((r: any) => r.status === "published").length ?? 0;
-      const fail = data.results?.filter((r: any) => r.status === "error").length ?? 0;
-      if (fail > 0) {
-        toast.warning(`${ok} publicado(s), ${fail} com erro.`);
-      } else {
-        toast.success(`${ok} produto(s) publicado(s) no WooCommerce!`);
-      }
     },
     onError: (err: Error) => toast.error(err.message),
   });

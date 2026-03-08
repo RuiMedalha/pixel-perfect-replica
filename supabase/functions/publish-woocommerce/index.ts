@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
     };
 
     // Build base product payload (shared between simple/variable/variation)
-    const buildBasePayload = (product: any, isVariation = false): Record<string, unknown> => {
+    const buildBasePayload = async (product: any, isVariation = false): Promise<Record<string, unknown>> => {
       const wooProduct: Record<string, unknown> = {};
 
       // Content
@@ -290,7 +290,7 @@ Deno.serve(async (req) => {
     // ──────────────────────────────────────────────
     for (const product of simpleProducts) {
       try {
-        const wooProduct = buildBasePayload(product);
+        const wooProduct = await buildBasePayload(product);
 
         // Upsells / Cross-sells
         if (has("upsells")) {
@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
         const children = allChildVariations.filter((c: any) => c.parent_product_id === parent.id);
 
         // Build parent payload
-        const parentPayload = buildBasePayload(parent);
+        const parentPayload = await buildBasePayload(parent);
         parentPayload.type = "variable";
 
         // Build attributes from children
@@ -372,7 +372,7 @@ Deno.serve(async (req) => {
         // Now publish each variation
         for (const child of children) {
           try {
-            const variationPayload = buildBasePayload(child, true);
+            const variationPayload = await buildBasePayload(child, true);
 
             // Set the variation attributes (e.g. Color: Red, Size: M)
             const variationAttrs = buildVariationAttributes(child);
@@ -418,7 +418,7 @@ Deno.serve(async (req) => {
 
         if (parentWooId) {
           // Publish as variation under parent
-          const variationPayload = buildBasePayload(variation, true);
+          const variationPayload = await buildBasePayload(variation, true);
           const variationAttrs = buildVariationAttributes(variation);
           if (variationAttrs.length > 0) {
             variationPayload.attributes = variationAttrs;
@@ -446,6 +446,29 @@ Deno.serve(async (req) => {
         results.push({ id: variation.id, status: "error", error: (e as Error).message });
       }
     }
+
+    // Log publish activity
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const published = results.filter((r: WooResult) => r.status === "published").length;
+    const errors = results.filter((r: WooResult) => r.status === "error").length;
+    await adminClient.from("activity_log").insert({
+      user_id: user.id,
+      action: "publish" as any,
+      details: {
+        total: results.length,
+        published,
+        errors,
+        results: results.map((r: WooResult) => ({
+          id: r.id,
+          status: r.status,
+          woocommerce_id: r.woocommerce_id,
+          error: r.error,
+        })),
+      },
+    });
 
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

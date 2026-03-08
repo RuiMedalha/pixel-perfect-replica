@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { useOptimizationJob } from "@/hooks/useOptimizationJob";
-import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
+import { usePublishWooCommerce, type PublishResult } from "@/hooks/usePublishWooCommerce";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
@@ -86,6 +86,8 @@ const ProductsPage = () => {
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [publishResults, setPublishResults] = useState<PublishResult[] | null>(null);
+  const [publishTotal, setPublishTotal] = useState(0);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -770,6 +772,67 @@ const ProductsPage = () => {
             <Button size="sm" variant="ghost" onClick={dismissJob} className="h-7 px-2 text-xs">
               <XCircle className="w-3 h-3 mr-1" /> Fechar
             </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* WooCommerce Publish Progress */}
+      {(publishWoo.isPending || publishResults) && (
+        <Card className={cn(
+          "border-l-4",
+          publishWoo.isPending ? "border-l-primary" : 
+          publishResults?.some(r => r.status === "error") ? "border-l-warning" : "border-l-primary"
+        )}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {publishWoo.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                  <Check className="w-4 h-4 text-primary" />
+                )}
+                <span className="text-sm font-medium">
+                  {publishWoo.isPending
+                    ? `A publicar ${publishTotal} produto(s) no WooCommerce...`
+                    : "Publicação concluída"}
+                </span>
+              </div>
+              {!publishWoo.isPending && (
+                <Button size="sm" variant="ghost" onClick={() => setPublishResults(null)} className="h-7 px-2 text-xs">
+                  <XCircle className="w-3 h-3 mr-1" /> Fechar
+                </Button>
+              )}
+            </div>
+            {publishWoo.isPending && (
+              <Progress className="h-2 mb-2" />
+            )}
+            {publishResults && (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {publishResults.map((r, i) => {
+                  const product = (products ?? []).find(p => p.id === r.id);
+                  const label = product?.optimized_title || product?.original_title || product?.sku || r.id.slice(0, 8);
+                  return (
+                    <div key={i} className={cn(
+                      "flex items-center gap-2 text-xs px-2 py-1 rounded",
+                      r.status === "published" ? "bg-primary/5 text-primary" :
+                      r.status === "error" ? "bg-destructive/5 text-destructive" :
+                      "bg-muted text-muted-foreground"
+                    )}>
+                      {r.status === "published" ? <Check className="w-3 h-3 shrink-0" /> : 
+                       r.status === "error" ? <X className="w-3 h-3 shrink-0" /> :
+                       <Ban className="w-3 h-3 shrink-0" />}
+                      <span className="truncate flex-1">{label}</span>
+                      {r.woocommerce_id && (
+                        <Badge variant="secondary" className="text-[9px]">WC #{r.woocommerce_id}</Badge>
+                      )}
+                      {r.error && (
+                        <span className="text-[10px] text-destructive truncate max-w-[200px]" title={r.error}>{r.error}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1472,7 +1535,23 @@ const ProductsPage = () => {
             autoIncludedVariationsCount={variationCount}
             isPending={publishWoo.isPending}
             onConfirm={(fields, pricing) => {
-              publishWoo.mutate({ productIds: allPublishIds, publishFields: fields, pricing });
+              setPublishTotal(allPublishIds.length);
+              setPublishResults(null);
+              publishWoo.mutate(
+                { productIds: allPublishIds, publishFields: fields, pricing },
+                {
+                  onSuccess: (data) => {
+                    setPublishResults(data.results);
+                    const ok = data.results.filter(r => r.status === "published").length;
+                    const fail = data.results.filter(r => r.status === "error").length;
+                    if (fail > 0) {
+                      toast.warning(`${ok} publicado(s), ${fail} com erro.`);
+                    } else {
+                      toast.success(`${ok} produto(s) publicado(s) no WooCommerce!`);
+                    }
+                  },
+                }
+              );
               setSelected(new Set());
               setShowPublishModal(false);
             }}
