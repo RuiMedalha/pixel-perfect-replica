@@ -943,24 +943,16 @@ REGRAS GLOBAIS:
         if (fields.includes("upsells")) {
           toolProperties.upsell_skus = {
             type: "array",
-            description: "Produtos superiores sugeridos como upsell, com SKU e título reais do catálogo",
-            items: {
-              type: "object",
-              properties: { sku: { type: "string" }, title: { type: "string" } },
-              required: ["sku", "title"],
-            },
+            description: "SKUs reais de produtos superiores sugeridos como upsell (apenas os SKUs, sem títulos)",
+            items: { type: "string" },
           };
           requiredFields.push("upsell_skus");
         }
         if (fields.includes("crosssells")) {
           toolProperties.crosssell_skus = {
             type: "array",
-            description: "Produtos complementares sugeridos como cross-sell, com SKU e título reais do catálogo",
-            items: {
-              type: "object",
-              properties: { sku: { type: "string" }, title: { type: "string" } },
-              required: ["sku", "title"],
-            },
+            description: "SKUs reais de produtos complementares sugeridos como cross-sell (apenas os SKUs, sem títulos)",
+            items: { type: "string" },
           };
           requiredFields.push("crosssell_skus");
         }
@@ -1055,40 +1047,31 @@ REGRAS GLOBAIS:
 
         const optimized = JSON.parse(toolCall.function.arguments);
 
-        // === VALIDATE upsell/crosssell SKUs against real DB ===
+        // === VALIDATE upsell/crosssell SKUs against real DB (SKU-only format) ===
         if (optimized.upsell_skus && Array.isArray(optimized.upsell_skus) && optimized.upsell_skus.length > 0) {
-          const skusToCheck = optimized.upsell_skus.map((u: any) => u.sku).filter(Boolean);
-          if (skusToCheck.length > 0) {
+          // Normalize: handle both string[] and {sku}[] formats for backward compat
+          const rawSkus = optimized.upsell_skus.map((u: any) => typeof u === "string" ? u : u.sku).filter(Boolean);
+          if (rawSkus.length > 0) {
             const { data: validProducts } = await supabase
               .from("products")
-              .select("sku, optimized_title, original_title")
-              .in("sku", skusToCheck);
-            const validMap = new Map((validProducts || []).map((p: any) => [p.sku, p]));
-            const before = optimized.upsell_skus.length;
-            optimized.upsell_skus = optimized.upsell_skus
-              .filter((u: any) => validMap.has(u.sku) && u.sku !== product.sku)
-              .map((u: any) => {
-                const real = validMap.get(u.sku);
-                return { sku: u.sku, title: real?.optimized_title || real?.original_title || u.title };
-              });
+              .select("sku")
+              .in("sku", rawSkus);
+            const validSet = new Set((validProducts || []).map((p: any) => p.sku));
+            const before = rawSkus.length;
+            optimized.upsell_skus = rawSkus.filter((s: string) => validSet.has(s) && s !== product.sku);
             console.log(`Upsells validated: ${optimized.upsell_skus.length}/${before} SKUs are real`);
           }
         }
         if (optimized.crosssell_skus && Array.isArray(optimized.crosssell_skus) && optimized.crosssell_skus.length > 0) {
-          const skusToCheck = optimized.crosssell_skus.map((u: any) => u.sku).filter(Boolean);
-          if (skusToCheck.length > 0) {
+          const rawSkus = optimized.crosssell_skus.map((u: any) => typeof u === "string" ? u : u.sku).filter(Boolean);
+          if (rawSkus.length > 0) {
             const { data: validProducts } = await supabase
               .from("products")
-              .select("sku, optimized_title, original_title")
-              .in("sku", skusToCheck);
-            const validMap = new Map((validProducts || []).map((p: any) => [p.sku, p]));
-            const before = optimized.crosssell_skus.length;
-            optimized.crosssell_skus = optimized.crosssell_skus
-              .filter((u: any) => validMap.has(u.sku) && u.sku !== product.sku)
-              .map((u: any) => {
-                const real = validMap.get(u.sku);
-                return { sku: u.sku, title: real?.optimized_title || real?.original_title || u.title };
-              });
+              .select("sku")
+              .in("sku", rawSkus);
+            const validSet = new Set((validProducts || []).map((p: any) => p.sku));
+            const before = rawSkus.length;
+            optimized.crosssell_skus = rawSkus.filter((s: string) => validSet.has(s) && s !== product.sku);
             console.log(`Cross-sells validated: ${optimized.crosssell_skus.length}/${before} SKUs are real`);
           }
         }

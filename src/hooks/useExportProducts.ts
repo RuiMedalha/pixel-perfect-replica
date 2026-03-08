@@ -42,7 +42,8 @@ export function exportProductsToExcel(products: Product[], fileName = "produtos-
       if (col.key === "faq" && Array.isArray(val)) {
         row[col.header] = val.map((f: any) => `Q: ${f.question} A: ${f.answer}`).join(" | ");
       } else if ((col.key === "upsell_skus" || col.key === "crosssell_skus") && Array.isArray(val)) {
-        row[col.header] = val.map((item: any) => `${item.sku}: ${item.title}`).join(" | ");
+        // Handle both SKU-only (string[]) and legacy {sku,title} formats
+        row[col.header] = val.map((item: any) => typeof item === "string" ? item : item.sku).filter(Boolean).join(",");
       } else if (col.key === "image_alt_texts" && Array.isArray(val)) {
         row[col.header] = val.map((a: any) => a.alt_text).join(" | ");
       } else if (col.key === "attributes" && Array.isArray(val)) {
