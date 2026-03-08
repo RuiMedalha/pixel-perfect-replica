@@ -56,10 +56,10 @@ const VariationsPage = () => {
       setAnalysisProgress({ current: 0, total });
 
       for (let i = 0; i < simpleProducts.length; i += batchSize) {
-        const batch = simpleProducts.slice(i, i + batchSize).map(p => p.id);
+        const batch = simpleProducts.slice(i, i + batchSize);
         const result = await detectVariations.mutateAsync({
           workspaceId: activeWorkspace.id,
-          productIds: batch,
+          products: batch.map(p => ({ id: p.id, sku: p.sku, original_title: p.original_title, optimized_title: p.optimized_title, category: p.category, original_price: p.original_price, original_description: p.original_description, short_description: p.short_description, product_type: p.product_type, attributes: p.attributes })),
         });
         allGroups.push(...result.groups);
         setAnalysisProgress({ current: Math.floor(i / batchSize) + 1, total });

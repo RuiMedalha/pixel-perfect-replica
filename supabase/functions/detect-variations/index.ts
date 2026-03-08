@@ -27,17 +27,15 @@ serve(async (req) => {
       { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claimsData.claims.sub as string;
 
-    const { workspaceId, productIds } = await req.json();
+    const { workspaceId, products: clientProducts } = await req.json();
     if (!workspaceId) {
       return new Response(JSON.stringify({ error: "workspaceId é obrigatório" }), {
         status: 400,
@@ -45,19 +43,21 @@ serve(async (req) => {
       });
     }
 
-    // Fetch products to analyze — either specific ones or all simple products in workspace
-    let query = supabase
-      .from("products")
-      .select("id, sku, original_title, optimized_title, category, original_price, original_description, short_description, product_type, attributes")
-      .eq("workspace_id", workspaceId)
-      .eq("product_type", "simple");
-
-    if (productIds && Array.isArray(productIds) && productIds.length > 0) {
-      query = query.in("id", productIds);
+    // Use products sent from client (avoids long URL queries)
+    let products = clientProducts;
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      // Fallback: fetch from DB (limited to 500)
+      const { data, error: fetchError } = await supabase
+        .from("products")
+        .select("id, sku, original_title, optimized_title, category, original_price, original_description, short_description, product_type, attributes")
+        .eq("workspace_id", workspaceId)
+        .eq("product_type", "simple")
+        .order("original_title")
+        .limit(500);
+      if (fetchError) throw fetchError;
+      products = data;
     }
 
-    const { data: products, error: fetchError } = await query.order("original_title").limit(500);
-    if (fetchError) throw fetchError;
     if (!products || products.length < 2) {
       return new Response(
         JSON.stringify({ groups: [], message: "Insuficientes produtos simples para detetar variações." }),
@@ -65,11 +65,10 @@ serve(async (req) => {
       );
     }
 
-    // Use AI to detect product groups
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const productList = products.map((p) => ({
+    const productList = products.map((p: any) => ({
       id: p.id,
       sku: p.sku,
       title: p.optimized_title || p.original_title,
@@ -169,8 +168,8 @@ Responde APENAS com a tool call.`,
     const parsed = JSON.parse(toolCall.function.arguments);
     const groups = parsed.groups || [];
 
-    // Validate that all product IDs exist
-    const allProductIds = new Set(products.map((p) => p.id));
+    // Validate that all product IDs exist in the sent products
+    const allProductIds = new Set(products.map((p: any) => p.id));
     const validGroups = groups
       .map((g: any) => ({
         ...g,
