@@ -6,6 +6,39 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SELF_INVOKE_RETRIES = 5;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function selfInvokeWithRetry(authHeader: string, jobId: string, startIndex: number) {
+  const payload = JSON.stringify({ jobId, startIndex });
+  for (let attempt = 1; attempt <= SELF_INVOKE_RETRIES; attempt++) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/publish-woocommerce`, {
+        method: "POST",
+        headers: { Authorization: authHeader, "Content-Type": "application/json" },
+        body: payload,
+      });
+      if (response.ok) return true;
+      const isRetryable = response.status === 429 || response.status >= 500;
+      if (!isRetryable) {
+        const body = await response.text();
+        console.error(`Self-invoke non-retryable error: ${response.status} ${body}`);
+        return false;
+      }
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`Self-invoke retry ${attempt}/${SELF_INVOKE_RETRIES} in ${delayMs}ms`);
+      await sleep(delayMs);
+    } catch (err) {
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      console.warn(`Self-invoke exception retry ${attempt}/${SELF_INVOKE_RETRIES} in ${delayMs}ms`, err);
+      await sleep(delayMs);
+    }
+  }
+  console.error("Self-invoke failed after all retries");
+  return false;
+}
+
 interface WooResult {
   id: string;
   status: string;
