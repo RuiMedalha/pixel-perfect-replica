@@ -418,7 +418,7 @@ Deno.serve(async (req) => {
 
         if (parentWooId) {
           // Publish as variation under parent
-          const variationPayload = buildBasePayload(variation, true);
+          const variationPayload = await buildBasePayload(variation, true);
           const variationAttrs = buildVariationAttributes(variation);
           if (variationAttrs.length > 0) {
             variationPayload.attributes = variationAttrs;
