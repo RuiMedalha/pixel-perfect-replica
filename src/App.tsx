@@ -48,6 +48,7 @@ function ProtectedRoutes() {
           <Route path="/" element={<Index />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/produtos" element={<ProductsPage />} />
+          <Route path="/variacoes" element={<VariationsPage />} />
           <Route path="/categorias" element={<CategoriesPage />} />
           {profile?.isAdmin && (
             <>

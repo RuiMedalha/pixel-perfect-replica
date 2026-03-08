@@ -14,6 +14,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/upload", icon: Upload, label: "Upload" },
   { to: "/produtos", icon: Package, label: "Produtos" },
+  { to: "/variacoes", icon: GitBranch, label: "Variações" },
   { to: "/categorias", icon: FolderTree, label: "Categorias" },
 ];
 
