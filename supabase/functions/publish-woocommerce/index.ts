@@ -447,6 +447,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Log publish activity
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const published = results.filter((r: WooResult) => r.status === "published").length;
+    const errors = results.filter((r: WooResult) => r.status === "error").length;
+    await adminClient.from("activity_log").insert({
+      user_id: user.id,
+      action: "publish" as any,
+      details: {
+        total: results.length,
+        published,
+        errors,
+        results: results.map((r: WooResult) => ({
+          id: r.id,
+          status: r.status,
+          woocommerce_id: r.woocommerce_id,
+          error: r.error,
+        })),
+      },
+    });
+
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
