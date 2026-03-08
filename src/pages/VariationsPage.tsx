@@ -546,6 +546,43 @@ const VariationsPage = () => {
                       ))}
                     </div>
                   )}
+
+                  {/* Reclassify Suggestions */}
+                  {reclassifySuggestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Wrench className="w-3.5 h-3.5" /> Correções Sugeridas ({reclassifySuggestions.length})
+                      </p>
+                      {reclassifySuggestions.map((suggestion, idx) => (
+                        <div key={`fix-${idx}`} className="border rounded-lg p-3 bg-amber-500/5 border-amber-500/30">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-700">
+                              {suggestion.action === "move_variation" ? "Mover" :
+                               suggestion.action === "merge_groups" ? "Fundir" :
+                               suggestion.action === "split_group" ? "Dividir" :
+                               suggestion.action === "fix_parent_title" ? "Corrigir Título" : suggestion.action}
+                            </Badge>
+                            {suggestion.suggested_title && (
+                              <span className="text-xs font-medium">→ {suggestion.suggested_title}</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">{suggestion.description}</p>
+                          {suggestion.product_ids && suggestion.product_ids.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {suggestion.product_ids.map((pid: string) => {
+                                const p = productMap.get(pid);
+                                return (
+                                  <Badge key={pid} variant="secondary" className="text-[10px]">
+                                    {p?.sku || pid.substring(0, 8)}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
