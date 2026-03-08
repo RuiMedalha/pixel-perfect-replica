@@ -27,6 +27,7 @@ interface Props {
 }
 
 export function ProductDetailModal({ product, onClose }: Props) {
+  const { data: allProducts } = useProducts();
   const updateProduct = useUpdateProduct();
   const updateStatus = useUpdateProductStatus();
   const publishWoo = usePublishWooCommerce();
