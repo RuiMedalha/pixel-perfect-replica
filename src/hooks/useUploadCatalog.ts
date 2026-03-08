@@ -83,7 +83,7 @@ function autoMapColumns(headers: string[]): ColumnMapping {
     price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price|regular[\s_-]?price)$/i,
     sale_price: /^(sale[\s_-]?price|pre[cç]o[\s_-]?promocional)$/i,
     sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
-    category: /^(category|categoria|cat|categories|categorias[\s_-]?de[\s_-]?produto|grupo|group|fam[ií]lia)$/i,
+    category: /^(category|categoria|cat|categories|categorias[\s_-]?de[\s_-]?produto|product[\s_-]?cat|grupo|group|fam[ií]lia)$/i,
     supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
     image_urls: /^(image|imagem|images|imagens|image[\s_-]?url|foto|photo|thumbnail)$/i,
     product_type: /^(type|tipo)$/i,
