@@ -1600,30 +1600,15 @@ const ProductsPage = () => {
             productCount={allPublishIds.length}
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
-            isPending={publishWoo.isPending}
-            onConfirm={(fields, pricing) => {
-              setPublishTotal(allPublishIds.length);
-              setPublishResults(null);
-              publishWoo.mutate(
-                { productIds: allPublishIds, publishFields: fields, pricing },
-                {
-                  onSuccess: (data) => {
-                    setPublishResults(data.results);
-                    const created = data.results.filter(r => r.status === "created").length;
-                    const updated = data.results.filter(r => r.status === "updated").length;
-                    const fail = data.results.filter(r => r.status === "error").length;
-                    const parts: string[] = [];
-                    if (created > 0) parts.push(`${created} criado(s)`);
-                    if (updated > 0) parts.push(`${updated} atualizado(s)`);
-                    if (fail > 0) {
-                      parts.push(`${fail} com erro`);
-                      toast.warning(parts.join(", "));
-                    } else {
-                      toast.success(parts.join(", ") + " no WooCommerce!");
-                    }
-                  },
-                }
-              );
+            isPending={isCreatingPublish}
+            onConfirm={(fields, pricing, scheduledFor) => {
+              createPublishJob({
+                productIds: allPublishIds,
+                publishFields: fields,
+                pricing,
+                scheduledFor,
+                workspaceId: activeWorkspace?.id,
+              });
               setSelected(new Set());
               setShowPublishModal(false);
             }}
