@@ -143,11 +143,21 @@ Deno.serve(async (req) => {
         wooProduct.short_description = product.optimized_short_description || product.short_description || "";
       }
 
-      // Price
+      // Price (with optional markup/discount adjustments)
       if (has("price")) {
-        wooProduct.regular_price = String(product.optimized_price || product.original_price || "0");
+        let basePrice = parseFloat(product.optimized_price || product.original_price || "0") || 0;
+        if (markupPercent > 0) {
+          basePrice = basePrice * (1 + markupPercent / 100);
+        }
+        wooProduct.regular_price = basePrice.toFixed(2);
+
+        // If discount is set, auto-calculate sale_price from the adjusted regular price
+        if (has("sale_price") && discountPercent > 0) {
+          wooProduct.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
+        }
       }
-      if (has("sale_price")) {
+      // Sale price without markup scenario (use stored sale_price)
+      if (has("sale_price") && !wooProduct.sale_price) {
         const sp = product.optimized_sale_price ?? product.sale_price;
         if (sp != null) {
           wooProduct.sale_price = String(sp);
