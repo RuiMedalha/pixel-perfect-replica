@@ -20,6 +20,7 @@ const actionLabels: Record<string, string> = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { activeWorkspace } = useWorkspaceContext();
   const { data: stats, isLoading: statsLoading } = useProductStats();
   const { data: activity, isLoading: activityLoading } = useRecentActivity();
   const { data: tokenSummary, isLoading: tokenLoading } = useTokenUsageSummary();
