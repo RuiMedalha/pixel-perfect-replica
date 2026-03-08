@@ -987,6 +987,20 @@ const ProductsPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* WooCommerce */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">WooCommerce</Label>
+                  <Select value={wooFilter} onValueChange={setWooFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="published">🟢 Publicados no WC</SelectItem>
+                      <SelectItem value="not_published">⚪ Não publicados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex justify-end mt-3">
                 <Button
