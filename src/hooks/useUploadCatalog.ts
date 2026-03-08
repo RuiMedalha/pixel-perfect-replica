@@ -39,10 +39,20 @@ export const DEFAULT_PRODUCT_FIELDS: ProductField[] = [
   { key: "short_description", label: "Descrição Curta", required: false },
   { key: "technical_specs", label: "Características Técnicas", required: false },
   { key: "price", label: "Preço", required: false },
+  { key: "sale_price", label: "Preço Promocional", required: false },
   { key: "sku", label: "SKU / Referência", required: false },
   { key: "category", label: "Categoria", required: false },
   { key: "supplier_ref", label: "Ref. Fornecedor", required: false },
   { key: "image_urls", label: "URLs de Imagens", required: false },
+  { key: "product_type", label: "Tipo (simple/variable/variation)", required: false },
+  { key: "parent_sku", label: "SKU Pai (Parent)", required: false },
+  { key: "upsell_skus", label: "Up-Sells (SKUs)", required: false },
+  { key: "crosssell_skus", label: "Cross-Sells (SKUs)", required: false },
+  { key: "meta_title", label: "Meta Title SEO", required: false },
+  { key: "meta_description", label: "Meta Description SEO", required: false },
+  { key: "focus_keyword", label: "Focus Keyword", required: false },
+  { key: "seo_slug", label: "SEO Slug", required: false },
+  { key: "weight", label: "Peso (kg)", required: false },
 ];
 
 // Keep PRODUCT_FIELDS for backward compat
