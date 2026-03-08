@@ -279,7 +279,61 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
-      {/* Amazon S3 */}
+      {/* WooCommerce Publish Fields */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">📋 Campos a Publicar no WooCommerce</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Defina os campos enviados por defeito ao publicar no WooCommerce. Pode ajustar caso a caso no momento da publicação.
+          </p>
+          {WOO_PUBLISH_GROUPS.map(group => {
+            const groupFieldKeys = group.fields.map(f => f.key);
+            const selectedCount = groupFieldKeys.filter(k => wooPublishFields.has(k)).length;
+            const allSelected = selectedCount === groupFieldKeys.length;
+            const someSelected = selectedCount > 0 && !allSelected;
+
+            return (
+              <div key={group.key} className="space-y-1">
+                <label className="flex items-center gap-2 cursor-pointer font-medium text-sm">
+                  <Checkbox
+                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                    onCheckedChange={() => {
+                      setWooPublishFields(prev => {
+                        const next = new Set(prev);
+                        groupFieldKeys.forEach(k => {
+                          if (allSelected) next.delete(k); else next.add(k);
+                        });
+                        return next;
+                      });
+                    }}
+                  />
+                  {group.icon} {group.label}
+                </label>
+                <div className="ml-6 flex flex-wrap gap-x-4 gap-y-1">
+                  {group.fields.map(field => (
+                    <label key={field.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <Checkbox
+                        checked={wooPublishFields.has(field.key)}
+                        onCheckedChange={() => {
+                          setWooPublishFields(prev => {
+                            const next = new Set(prev);
+                            if (next.has(field.key)) next.delete(field.key); else next.add(field.key);
+                            return next;
+                          });
+                        }}
+                      />
+                      {field.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">☁️ Amazon S3</CardTitle>
