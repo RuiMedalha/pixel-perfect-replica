@@ -20,6 +20,7 @@ import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { exportProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
+import { WooPublishModal } from "@/components/WooPublishModal";
 import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/hooks/useVariableProducts";
 import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
