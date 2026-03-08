@@ -306,6 +306,14 @@ async function getWooConfig(supabase: any) {
   return { baseUrl, auth };
 }
 
+class WooSkuConflictError extends Error {
+  resourceId: number;
+  constructor(resourceId: number, message: string) {
+    super(message);
+    this.resourceId = resourceId;
+  }
+}
+
 async function wooFetch(baseUrl: string, auth: string, endpoint: string, method: string, body?: Record<string, unknown>) {
   const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
     method,
@@ -314,6 +322,15 @@ async function wooFetch(baseUrl: string, auth: string, endpoint: string, method:
   });
   if (!resp.ok) {
     const errBody = await resp.text();
+    // Detect SKU conflict and extract existing resource_id for retry
+    try {
+      const parsed = JSON.parse(errBody);
+      if (parsed.code === "product_invalid_sku" && parsed.data?.resource_id) {
+        throw new WooSkuConflictError(parsed.data.resource_id, `SKU conflict: existing ID ${parsed.data.resource_id}`);
+      }
+    } catch (e) {
+      if (e instanceof WooSkuConflictError) throw e;
+    }
     throw new Error(`WooCommerce ${resp.status}: ${errBody.substring(0, 300)}`);
   }
   return resp.json();
