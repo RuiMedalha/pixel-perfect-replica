@@ -189,6 +189,7 @@ const VariationsPage = () => {
     setAnalysisState("idle");
     setDetectedGroups([]);
     setDetectedAdditions([]);
+    setReclassifySuggestions([]);
     setSelectedGroups(new Set());
     setSelectedAdditions(new Set());
   };
