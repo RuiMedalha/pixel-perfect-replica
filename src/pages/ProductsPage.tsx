@@ -772,202 +772,150 @@ const ProductsPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((product) => (
-                    <tr
-                      key={product.id}
-                      className={cn(
-                        "border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer",
-                        product.status === "processing" && "bg-primary/5"
-                      )}
-                      onClick={() => setDetailProduct(product)}
-                    >
-                      <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox
-                          checked={selected.has(product.id)}
-                          onCheckedChange={() => toggleSelect(product.id)}
-                        />
-                      </td>
-                      <td className="p-3 font-mono text-xs">{product.sku ?? "—"}</td>
-                      <td className="p-3 max-w-[180px] truncate">{product.original_title ?? "—"}</td>
-
-                      {/* Inline editable: optimized_title */}
-                      <td className="p-3 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
-                        {editingCell?.id === product.id && editingCell.field === "optimized_title" ? (
-                          <div className="flex gap-1">
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="text-xs h-7"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") saveInlineEdit();
-                                if (e.key === "Escape") cancelInlineEdit();
-                              }}
-                            />
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
-                              <Save className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span
-                            className="truncate block text-primary font-medium cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
-                            onDoubleClick={() => startInlineEdit(product.id, "optimized_title", product.optimized_title ?? "")}
-                            title="Duplo-clique para editar"
+                  {viewMode === "list" ? (
+                    filtered.map((product) => (
+                      <ProductRow key={product.id} product={product} />
+                    ))
+                  ) : (
+                    (groupedView ?? []).map((item) => {
+                      if (item.type === "standalone") {
+                        return <ProductRow key={item.product.id} product={item.product} />;
+                      }
+                      // Parent with children
+                      const isExpanded = expandedGroups.has(item.product.id);
+                      return (
+                        <React.Fragment key={item.product.id}>
+                          <tr
+                            className={cn(
+                              "border-b hover:bg-muted/30 transition-colors cursor-pointer bg-accent/30",
+                              item.product.status === "processing" && "bg-primary/5"
+                            )}
+                            onClick={() => setDetailProduct(item.product)}
                           >
-                            {product.optimized_title ?? "—"}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Category column */}
-                      <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
-                        {editingCell?.id === product.id && editingCell.field === "category" ? (
-                          <div className="flex gap-1">
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="text-xs h-7"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") saveInlineEdit();
-                                if (e.key === "Escape") cancelInlineEdit();
-                              }}
-                            />
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
-                              <Save className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span
-                            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
-                            onDoubleClick={() => startInlineEdit(product.id, "category", product.category ?? "")}
-                            title="Duplo-clique para editar"
-                          >
-                            {product.category ?? "—"}
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
-                        {editingCell?.id === product.id && editingCell.field === "optimized_short_description" ? (
-                          <div className="flex gap-1">
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="text-xs h-7"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") saveInlineEdit();
-                                if (e.key === "Escape") cancelInlineEdit();
-                              }}
-                            />
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
-                              <Save className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span
-                            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
-                            onDoubleClick={() => startInlineEdit(product.id, "optimized_short_description", product.optimized_short_description ?? "")}
-                            title="Duplo-clique para editar"
-                          >
-                            {product.optimized_short_description ?? "—"}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Inline editable: seo_slug */}
-                      <td className="p-3 max-w-[120px]" onClick={(e) => e.stopPropagation()}>
-                        {editingCell?.id === product.id && editingCell.field === "seo_slug" ? (
-                          <div className="flex gap-1">
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="text-xs h-7 font-mono"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") saveInlineEdit();
-                                if (e.key === "Escape") cancelInlineEdit();
-                              }}
-                            />
-                            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
-                              <Save className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <span
-                            className="truncate block text-xs font-mono text-muted-foreground cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
-                            onDoubleClick={() => startInlineEdit(product.id, "seo_slug", product.seo_slug ?? "")}
-                            title="Duplo-clique para editar"
-                          >
-                            {product.seo_slug ?? "—"}
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="p-3">
-                        <div className="flex items-center gap-1.5">
-                          {(product as any).product_type && (product as any).product_type !== "simple" && (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {(product as any).product_type === "variable" ? "Variável" : "Variação"}
-                            </Badge>
-                          )}
-                          <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
-                            {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
-                            {statusLabels[product.status]}
-                          </Badge>
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        <div className="flex items-center justify-center gap-0.5">
-                          {(() => {
-                            const p1 = !!(product.optimized_title || product.optimized_description || product.optimized_short_description);
-                            const p2 = !!(product.meta_title || product.meta_description || product.seo_slug || product.faq);
-                            const p3 = !!(product.optimized_price || (product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
-                            return [
-                              { done: p1, label: "1" },
-                              { done: p2, label: "2" },
-                              { done: p3, label: "3" },
-                            ].map(ph => (
-                              <span
-                                key={ph.label}
-                                className={cn(
-                                  "inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold",
-                                  ph.done
-                                    ? "bg-primary/15 text-primary"
-                                    : "bg-muted text-muted-foreground/50"
-                                )}
-                                title={`Fase ${ph.label}: ${ph.done ? "Concluída" : "Pendente"}`}
-                              >
-                                {ph.label}
-                              </span>
-                            ));
-                          })()}
-                        </div>
-                      </td>
-                      <td className="p-3 text-center">
-                        {(() => {
-                          const { score } = calculateSeoScore(product);
-                          return (
-                            <span className={cn("text-xs font-bold", getSeoScoreColor(score))}>{score}</span>
-                          );
-                        })()}
-                      </td>
-                      <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => setDetailProduct(product)}>
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => handleOptimizeClick([product.id])} disabled={optimizeProducts.isPending}>
-                            <Sparkles className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => updateStatus.mutate({ ids: [product.id], status: "optimized" })}>
-                            <Check className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center gap-1.5">
+                                <Checkbox
+                                  checked={selected.has(item.product.id)}
+                                  onCheckedChange={() => toggleSelect(item.product.id)}
+                                />
+                                <button
+                                  onClick={() => toggleGroupExpand(item.product.id)}
+                                  className="p-0.5 rounded hover:bg-muted"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="p-3 font-mono text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <GitBranch className="w-3 h-3 text-primary shrink-0" />
+                                {item.product.sku ?? "—"}
+                              </div>
+                            </td>
+                            <td className="p-3 max-w-[180px] truncate font-medium">{item.product.original_title ?? "—"}</td>
+                            <td className="p-3 max-w-[180px] truncate text-primary font-medium">{item.product.optimized_title ?? "—"}</td>
+                            <td className="p-3 max-w-[140px] truncate text-xs">{item.product.category ?? "—"}</td>
+                            <td className="p-3 max-w-[140px] truncate text-xs">{item.product.optimized_short_description ?? "—"}</td>
+                            <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground">{item.product.seo_slug ?? "—"}</td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant="secondary" className="text-[10px]">Variável</Badge>
+                                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                                  {item.children.length} var.
+                                </Badge>
+                                <Badge variant="outline" className={cn("text-xs", statusColors[item.product.status])}>
+                                  {statusLabels[item.product.status]}
+                                </Badge>
+                              </div>
+                            </td>
+                            <td className="p-3 text-center">
+                              <PhaseIndicator product={item.product} />
+                            </td>
+                            <td className="p-3 text-center">
+                              {(() => {
+                                const { score } = calculateSeoScore(item.product);
+                                return <span className={cn("text-xs font-bold", getSeoScoreColor(score))}>{score}</span>;
+                              })()}
+                            </td>
+                            <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex justify-end gap-1">
+                                <Button size="sm" variant="ghost" onClick={() => setDetailProduct(item.product)}>
+                                  <Edit className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button size="sm" variant="ghost" onClick={() => handleOptimizeClick([item.product.id])} disabled={optimizeProducts.isPending}>
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                          {isExpanded && item.children.map((child) => (
+                            <tr
+                              key={child.id}
+                              className={cn(
+                                "border-b last:border-0 hover:bg-muted/20 transition-colors cursor-pointer bg-muted/10",
+                                child.status === "processing" && "bg-primary/5"
+                              )}
+                              onClick={() => setDetailProduct(child)}
+                            >
+                              <td className="p-3 pl-10" onClick={(e) => e.stopPropagation()}>
+                                <Checkbox
+                                  checked={selected.has(child.id)}
+                                  onCheckedChange={() => toggleSelect(child.id)}
+                                />
+                              </td>
+                              <td className="p-3 font-mono text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-muted-foreground/40">└</span>
+                                  {child.sku ?? "—"}
+                                </div>
+                              </td>
+                              <td className="p-3 max-w-[180px] truncate text-muted-foreground text-xs">{child.original_title ?? "—"}</td>
+                              <td className="p-3 max-w-[180px] truncate text-primary/70 text-xs">{child.optimized_title ?? "—"}</td>
+                              <td className="p-3 max-w-[140px] truncate text-xs text-muted-foreground">
+                                {/* Show attribute values instead of category for variations */}
+                                {Array.isArray(child.attributes) && (child.attributes as any[]).length > 0
+                                  ? (child.attributes as any[]).map((a: any) => 
+                                      Array.isArray(a.values) ? a.values.join("/") : (a.value || "")
+                                    ).filter(Boolean).join(", ")
+                                  : child.category ?? "—"
+                                }
+                              </td>
+                              <td className="p-3 max-w-[140px] truncate text-xs text-muted-foreground">{child.optimized_short_description ?? "—"}</td>
+                              <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground/60">{child.seo_slug ?? "—"}</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1.5">
+                                  <Badge variant="outline" className="text-[10px] text-muted-foreground border-dashed">Variação</Badge>
+                                  <Badge variant="outline" className={cn("text-xs", statusColors[child.status])}>
+                                    {statusLabels[child.status]}
+                                  </Badge>
+                                </div>
+                              </td>
+                              <td className="p-3 text-center">
+                                <PhaseIndicator product={child} />
+                              </td>
+                              <td className="p-3 text-center">
+                                {(() => {
+                                  const { score } = calculateSeoScore(child);
+                                  return <span className={cn("text-xs font-bold", getSeoScoreColor(score))}>{score}</span>;
+                                })()}
+                              </td>
+                              <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex justify-end gap-1">
+                                  <Button size="sm" variant="ghost" onClick={() => setDetailProduct(child)}>
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
