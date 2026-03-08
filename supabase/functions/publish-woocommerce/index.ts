@@ -390,8 +390,17 @@ Deno.serve(async (req) => {
         delete parentPayload.sale_price;
 
         // Create or update parent
-        const parentWooData = parent.woocommerce_id
-          ? await wooFetch(`/products/${parent.woocommerce_id}`, "PUT", parentPayload)
+        let existingParentWooId = parent.woocommerce_id;
+        let parentAction: "created" | "updated" = "created";
+
+        if (!existingParentWooId && parent.sku) {
+          const foundId = await findWooProductBySku(parent.sku);
+          if (foundId) existingParentWooId = foundId;
+        }
+        if (existingParentWooId) parentAction = "updated";
+
+        const parentWooData = existingParentWooId
+          ? await wooFetch(`/products/${existingParentWooId}`, "PUT", parentPayload)
           : await wooFetch(`/products`, "POST", parentPayload);
 
         const parentWooId = parentWooData.id;
@@ -401,7 +410,7 @@ Deno.serve(async (req) => {
           .update({ woocommerce_id: parentWooId, status: "published" as any })
           .eq("id", parent.id);
 
-        results.push({ id: parent.id, status: "published", woocommerce_id: parentWooId });
+        results.push({ id: parent.id, status: parentAction, woocommerce_id: parentWooId });
 
         // Now publish each variation
         for (const child of children) {
