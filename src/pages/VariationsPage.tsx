@@ -464,10 +464,10 @@ const VariationsPage = () => {
                                     </p>
                                     <div className="border border-primary/30 rounded-lg overflow-hidden bg-primary/5">
                                       <table className="w-full text-xs">
-                                        <thead className="bg-primary/10"><tr>
+                                         <thead className="bg-primary/10"><tr>
                                           <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
                                           <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
-                                          <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                          {addition.attribute_names.map(n => <th key={n} className="text-left p-2 font-medium text-muted-foreground">{n}</th>)}
                                         </tr></thead>
                                         <tbody>
                                           {addition.products_to_add.map((v, vi) => {
@@ -476,8 +476,9 @@ const VariationsPage = () => {
                                               <tr key={vi} className="border-t border-primary/10">
                                                 <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
                                                 <td className="p-2 truncate max-w-[150px]">{p?.original_title ?? "—"}</td>
-                                                <td className="p-2"><Badge className="text-[10px] bg-primary/20 text-primary border-0">{v.attribute_value}</Badge></td>
-                                              </tr>
+                                                {addition.attribute_names.map(n => (
+                                                  <td key={n} className="p-2"><Badge className="text-[10px] bg-primary/20 text-primary border-0">{v.attribute_values[n] || "—"}</Badge></td>
+                                                ))}
                                             );
                                           })}
                                         </tbody>

@@ -1561,11 +1561,11 @@ const ProductsPage = () => {
             variant="outline"
             size="sm"
             onClick={() => {
-              setDetectedGroups(prev => [...prev, {
-                parent_title: "Novo Grupo",
-                attribute_name: "Tamanho",
-                variations: [],
-              }]);
+               setDetectedGroups(prev => [...prev, {
+                 parent_title: "Novo Grupo",
+                 attribute_names: ["Tamanho"],
+                 variations: [],
+               }]);
             }}
           >
             <Plus className="w-4 h-4 mr-1" /> Novo Grupo
