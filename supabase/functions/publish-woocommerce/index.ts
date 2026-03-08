@@ -650,7 +650,7 @@ async function publishVariableProduct(
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
 
-  const attributes = buildAttributesForParent(children || []);
+  const attributes = buildAttributesForParent(parent, children || []);
   if (attributes.length > 0) parentPayload.attributes = attributes;
 
   if (has("upsells")) {
