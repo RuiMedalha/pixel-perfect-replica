@@ -18,7 +18,7 @@ interface Props {
   isPending: boolean;
 }
 
-export function WooPublishModal({ open, onClose, onConfirm, productCount, isPending }: Props) {
+export function WooPublishModal({ open, onClose, onConfirm, productCount, variableParentCount = 0, autoIncludedVariationsCount = 0, isPending }: Props) {
   const { data: settings } = useSettings();
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
