@@ -115,6 +115,25 @@ Deno.serve(async (req) => {
       return resp.json();
     };
 
+    // Helper: find existing WooCommerce product by SKU
+    const findWooProductBySku = async (sku: string | null): Promise<number | null> => {
+      if (!sku) return null;
+      try {
+        const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products?sku=${encodeURIComponent(sku)}&per_page=1`, {
+          method: "GET",
+          headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+        });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        if (Array.isArray(data) && data.length > 0 && data[0].id) {
+          return data[0].id;
+        }
+      } catch {
+        // SKU lookup failed, will create new
+      }
+      return null;
+    };
+
     // Helper: resolve SKUs to WooCommerce IDs
     const resolveSkusToWooIds = async (skus: any[]): Promise<number[]> => {
       if (!skus || skus.length === 0) return [];
