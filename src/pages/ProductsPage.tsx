@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
+import { useRepairAttributes } from "@/hooks/useRepairAttributes";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
