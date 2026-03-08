@@ -339,17 +339,22 @@ const VariationsPage = () => {
             Análise IA do Catálogo
           </CardTitle>
           <CardDescription className="text-xs">
-            Analisa {simpleProducts.length} produtos simples para detetar novos grupos de variações
-            {variableProducts.length > 0 && ` e verificar se algum deve ser adicionado aos ${variableProducts.length} grupos existentes`}.
-            {" "}Utiliza dados de crosssell/upsell e o catálogo PDF como contexto.
+            Analisa o catálogo completo ({(products ?? []).length} produtos) para detetar novos agrupamentos, verificar existentes e corrigir inconsistências.
+            {" "}Utiliza dados de crosssell/upsell, catálogo PDF e tradução como contexto.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {analysisState === "idle" && (
-            <Button onClick={handleFullAnalysis} disabled={simpleProducts.length < 1 || detectVariations.isPending} className="w-full sm:w-auto">
-              <Sparkles className="w-4 h-4 mr-2" />
-              Analisar {simpleProducts.length} Produtos Simples
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => handleAnalysis("simple")} disabled={(products ?? []).length < 1 || detectVariations.isPending} className="sm:w-auto">
+                <Sparkles className="w-4 h-4 mr-2" />
+                Analisar {simpleProducts.length} Simples
+              </Button>
+              <Button onClick={() => handleAnalysis("full")} disabled={(products ?? []).length < 1 || detectVariations.isPending} variant="outline" className="sm:w-auto">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Análise Completa ({(products ?? []).length} produtos)
+              </Button>
+            </div>
           )}
 
           {analysisState === "analyzing" && (
