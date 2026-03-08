@@ -29,6 +29,7 @@ const VariationsPage = () => {
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const [expandedAdditions, setExpandedAdditions] = useState<Set<number>>(new Set());
   const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0 });
+  const [reclassifySuggestions, setReclassifySuggestions] = useState<any[]>([]);
 
   const variableProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "variable"), [products]);
   const variationProducts = useMemo(() => (products ?? []).filter(p => p.product_type === "variation"), [products]);
