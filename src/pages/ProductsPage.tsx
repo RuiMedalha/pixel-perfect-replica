@@ -67,6 +67,7 @@ const ProductsPage = () => {
   const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all");
   const [productTypeFilter, setProductTypeFilter] = useState<string>("all");
   const [phaseFilter, setPhaseFilter] = useState<string>("all");
+  const [wooFilter, setWooFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -158,7 +159,12 @@ const ProductsPage = () => {
       else if (phaseFilter === "none") matchesPhase = !phases.p1 && !phases.p2 && !phases.p3;
     }
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase;
+    // WooCommerce filter
+    let matchesWoo = true;
+    if (wooFilter === "published") matchesWoo = !!p.woocommerce_id;
+    else if (wooFilter === "not_published") matchesWoo = !p.woocommerce_id;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase && matchesWoo;
   });
 
   // Build grouped view structure
@@ -531,6 +537,12 @@ const ProductsPage = () => {
             {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
             {statusLabels[product.status]}
           </Badge>
+          {product.woocommerce_id && (
+            <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/20 gap-0.5" title={`Publicado no WooCommerce (ID: ${product.woocommerce_id})`}>
+              <Send className="w-2.5 h-2.5" />
+              WC
+            </Badge>
+          )}
         </div>
       </td>
       <td className="p-3 text-center">
@@ -898,7 +910,7 @@ const ProductsPage = () => {
         {showAdvancedFilters && (
           <Card>
             <CardContent className="p-4">
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                 {/* SEO Score */}
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Score SEO</Label>
@@ -975,6 +987,20 @@ const ProductsPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                {/* WooCommerce */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">WooCommerce</Label>
+                  <Select value={wooFilter} onValueChange={setWooFilter}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="published">🟢 Publicados no WC</SelectItem>
+                      <SelectItem value="not_published">⚪ Não publicados</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex justify-end mt-3">
                 <Button
@@ -986,6 +1012,7 @@ const ProductsPage = () => {
                     setSourceFileFilter("all");
                     setProductTypeFilter("all");
                     setPhaseFilter("all");
+                    setWooFilter("all");
                   }}
                 >
                   Limpar filtros
