@@ -145,53 +145,56 @@ export function usePublishJob() {
       const MAX_RETRIES = 3;
       let lastError: Error | null = null;
 
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const { data, error } = await supabase.functions.invoke("publish-woocommerce", {
-            body: {
-              productIds,
-              publishFields,
-              pricing,
-              scheduledFor,
-              workspaceId,
-            },
-          });
+      try {
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            const { data, error } = await supabase.functions.invoke("publish-woocommerce", {
+              body: {
+                productIds,
+                publishFields,
+                pricing,
+                scheduledFor,
+                workspaceId,
+              },
+            });
 
-          if (error) throw error;
-          if (data?.error) throw new Error(data.error);
+            if (error) throw error;
+            if (data?.error) throw new Error(data.error);
 
-          if (data?.jobId) {
-            const { data: jobData } = await supabase
-              .from("publish_jobs")
-              .select("*")
-              .eq("id", data.jobId)
-              .single();
+            if (data?.jobId) {
+              const { data: jobData } = await supabase
+                .from("publish_jobs")
+                .select("*")
+                .eq("id", data.jobId)
+                .single();
 
-            if (jobData) {
-              setActivePublishJob(jobData as any);
+              if (jobData) {
+                setActivePublishJob(jobData as any);
+              }
+
+              if (scheduledFor) {
+                toast.success(`Publicação agendada para ${new Date(scheduledFor).toLocaleString("pt-PT")} ⏰`);
+              } else {
+                toast.success(`Publicação iniciada: ${productIds.length} produtos em background 🚀`);
+              }
             }
 
-            if (scheduledFor) {
-              toast.success(`Publicação agendada para ${new Date(scheduledFor).toLocaleString("pt-PT")} ⏰`);
-            } else {
-              toast.success(`Publicação iniciada: ${productIds.length} produtos em background 🚀`);
+            return data;
+          } catch (err: any) {
+            lastError = err;
+            if (attempt < MAX_RETRIES) {
+              const delay = Math.min(1000 * 2 ** (attempt - 1), 4000);
+              console.warn(`createPublishJob attempt ${attempt} failed, retrying in ${delay}ms...`, err?.message);
+              await new Promise((r) => setTimeout(r, delay));
             }
-          }
-
-          return data;
-        } catch (err: any) {
-          lastError = err;
-          if (attempt < MAX_RETRIES) {
-            const delay = Math.min(1000 * 2 ** (attempt - 1), 4000);
-            console.warn(`createPublishJob attempt ${attempt} failed, retrying in ${delay}ms...`, err?.message);
-            await new Promise((r) => setTimeout(r, delay));
           }
         }
-      }
 
-      toast.error(`Erro ao criar publicação: ${lastError?.message}`);
-      setIsCreating(false);
-      throw lastError;
+        toast.error(`Erro ao criar publicação: ${lastError?.message}`);
+        throw lastError;
+      } finally {
+        setIsCreating(false);
+      }
     },
     []
   );

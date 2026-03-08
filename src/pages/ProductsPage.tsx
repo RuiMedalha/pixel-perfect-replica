@@ -1619,16 +1619,21 @@ const ProductsPage = () => {
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={isCreatingPublish}
-            onConfirm={(fields, pricing, scheduledFor) => {
-              createPublishJob({
-                productIds: allPublishIds,
-                publishFields: fields,
-                pricing,
-                scheduledFor,
-                workspaceId: activeWorkspace?.id,
-              });
-              setSelected(new Set());
-              setShowPublishModal(false);
+            onConfirm={async (fields, pricing, scheduledFor) => {
+              try {
+                await createPublishJob({
+                  productIds: allPublishIds,
+                  publishFields: fields,
+                  pricing,
+                  scheduledFor,
+                  workspaceId: activeWorkspace?.id,
+                });
+                setSelected(new Set());
+                setShowPublishModal(false);
+              } catch (err) {
+                // Modal permanece aberto e seleção mantida em caso de erro
+                // Feedback já é mostrado via toast no hook
+              }
             }}
           />
         );
