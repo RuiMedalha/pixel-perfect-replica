@@ -661,10 +661,21 @@ async function publishSingleProduct(
     existingWooId = await findWooProductBySku(baseUrl, auth, product.sku);
   }
 
-  const action: "created" | "updated" = existingWooId ? "updated" : "created";
-  const wooData = existingWooId
-    ? await wooFetch(baseUrl, auth, `/products/${existingWooId}`, "PUT", wooProduct)
-    : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
+  let action: "created" | "updated" = existingWooId ? "updated" : "created";
+  let wooData;
+  try {
+    wooData = existingWooId
+      ? await wooFetch(baseUrl, auth, `/products/${existingWooId}`, "PUT", wooProduct)
+      : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
+  } catch (skuErr) {
+    if (skuErr instanceof WooSkuConflictError) {
+      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
+      wooData = await wooFetch(baseUrl, auth, `/products/${skuErr.resourceId}`, "PUT", wooProduct);
+      action = "updated";
+    } else {
+      throw skuErr;
+    }
+  }
 
   await supabase
     .from("products")
