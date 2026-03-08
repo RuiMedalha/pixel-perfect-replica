@@ -756,7 +756,7 @@ async function publishVariation(
 ): Promise<WooResult> {
   const { data: parentRow } = await supabase
     .from("products")
-    .select("woocommerce_id")
+    .select("woocommerce_id, attributes")
     .eq("id", variation.parent_product_id)
     .single();
 
@@ -764,7 +764,7 @@ async function publishVariation(
 
   if (parentWooId) {
     const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
-    const variationAttrs = buildVariationAttributes(variation);
+    const variationAttrs = buildVariationAttributes(variation, parentRow);
     if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
 
     let existingVarWooId = variation.woocommerce_id;
