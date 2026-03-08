@@ -265,11 +265,51 @@ Deno.serve(async (req) => {
                 parentId = parentCat?.parent_id || null;
               }
               wooProduct.categories = catIds;
+              console.log(`[categories] Resolved category_id → WC IDs: ${JSON.stringify(catIds)}`);
             } else if (catRow) {
               wooProduct.categories = [{ name: catRow.name }];
+              console.log(`[categories] category_id found but no woocommerce_id, using name: ${catRow.name}`);
             }
           } else if (product.category) {
-            wooProduct.categories = [{ name: product.category }];
+            // Parse hierarchical string like "CONFEÇÃO>Linha 900>Eletricos>Marmitas"
+            const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
+            const leafName = parts[parts.length - 1] || product.category;
+            
+            // Try to find matching category in local DB by name (leaf)
+            const { data: localCats } = await supabase
+              .from("categories")
+              .select("woocommerce_id, name")
+              .ilike("name", leafName)
+              .limit(1);
+            
+            if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
+              wooProduct.categories = [{ id: localCats[0].woocommerce_id }];
+              console.log(`[categories] Resolved leaf "${leafName}" → WC ID ${localCats[0].woocommerce_id}`);
+            } else {
+              // Try WooCommerce API search for the leaf category
+              try {
+                const searchResp = await fetch(
+                  `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(leafName)}&per_page=10`,
+                  { headers: { Authorization: `Basic ${auth}` } }
+                );
+                if (searchResp.ok) {
+                  const wooCats = await searchResp.json();
+                  // Find exact match (case-insensitive)
+                  const exactMatch = wooCats.find((c: any) => 
+                    c.name.toLowerCase() === leafName.toLowerCase()
+                  );
+                  if (exactMatch) {
+                    wooProduct.categories = [{ id: exactMatch.id }];
+                    console.log(`[categories] Resolved leaf "${leafName}" → WC ID ${exactMatch.id} via API`);
+                  } else {
+                    // Don't send categories at all if we can't resolve — preserve existing on WooCommerce
+                    console.log(`[categories] Could not resolve "${leafName}" in WooCommerce — skipping to preserve existing categories`);
+                  }
+                }
+              } catch (e) {
+                console.log(`[categories] WC API search failed for "${leafName}": ${(e as Error).message} — skipping`);
+              }
+            }
           }
         }
         if (has("tags")) {
