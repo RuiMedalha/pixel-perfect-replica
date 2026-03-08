@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Search, Check, X, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Network, Plus } from "lucide-react";
+import { Loader2, Search, Check, X, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Network, Plus, RefreshCw, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, type Product } from "@/hooks/useProducts";
