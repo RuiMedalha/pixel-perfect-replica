@@ -21,6 +21,7 @@ export type Database = {
           details: Json | null
           id: string
           user_id: string
+          workspace_id: string | null
         }
         Insert: {
           action: Database["public"]["Enums"]["activity_action"]
@@ -28,6 +29,7 @@ export type Database = {
           details?: Json | null
           id?: string
           user_id: string
+          workspace_id?: string | null
         }
         Update: {
           action?: Database["public"]["Enums"]["activity_action"]
@@ -35,8 +37,17 @@ export type Database = {
           details?: Json | null
           id?: string
           user_id?: string
+          workspace_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "activity_log_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       categories: {
         Row: {
