@@ -788,6 +788,42 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
           }
         }
 
+        // Fetch parent product context for variations
+        let parentContext = "";
+        let parentProduct: any = null;
+        if (product.product_type === "variation" && product.parent_product_id) {
+          const { data: parent } = await supabase
+            .from("products")
+            .select("*")
+            .eq("id", product.parent_product_id)
+            .maybeSingle();
+          if (parent) {
+            parentProduct = parent;
+            parentContext = `\n\nPRODUTO PAI (variable):
+- Título: ${parent.optimized_title || parent.original_title || "N/A"}
+- Descrição: ${(parent.optimized_description || parent.original_description || "").substring(0, 1000) || "N/A"}
+- Descrição Curta: ${parent.optimized_short_description || parent.short_description || "N/A"}
+- Categoria: ${parent.category || "N/A"}
+- Atributos do pai: ${JSON.stringify(parent.attributes || [])}
+IMPORTANTE: Esta é uma VARIAÇÃO. Mantém consistência com o produto pai. Adapta o título e descrição com o sufixo do atributo específico desta variação.`;
+          }
+        }
+
+        // For variable products, add info about variations
+        let variationsContext = "";
+        if (product.product_type === "variable") {
+          const { data: variations } = await supabase
+            .from("products")
+            .select("sku, original_title, attributes")
+            .eq("parent_product_id", product.id)
+            .limit(50);
+          if (variations && variations.length > 0) {
+            variationsContext = `\n\nEste é um produto VARIÁVEL com ${variations.length} variações:
+${variations.map((v: any) => `- SKU: ${v.sku} | ${v.original_title} | Attrs: ${JSON.stringify(v.attributes || [])}`).join("\n")}
+IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variações. Não incluas atributos específicos (cor, tamanho) no título/descrição do pai.`;
+          }
+        }
+
         const productInfo = `Produto original:
 - Título: ${product.original_title || "N/A"}
 - Descrição: ${product.original_description || "N/A"}
@@ -796,7 +832,9 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 - Categoria: ${product.category || "N/A"}
 - Preço: ${product.original_price || "N/A"}€
 - SKU: ${product.sku || "N/A"}
-- Ref. Fornecedor: ${product.supplier_ref || "N/A"}${
+- Ref. Fornecedor: ${product.supplier_ref || "N/A"}
+- Tipo: ${product.product_type || "simple"}
+- Atributos: ${JSON.stringify(product.attributes || [])}${parentContext}${variationsContext}${
   (phase === 2 || phase === 3) ? `\n\nDADOS JÁ OTIMIZADOS (Fase anterior):
 - Título Otimizado: ${product.optimized_title || "N/A"}
 - Descrição Otimizada: ${(product.optimized_description || "").substring(0, 500) || "N/A"}
@@ -1102,6 +1140,66 @@ REGRAS GLOBAIS:
         if (updateError) {
           console.error("Update error:", updateError);
           return { id: product.id, status: "error" as const, error: updateError.message };
+        }
+
+        // === PROPAGATE TO VARIATIONS if this is a variable product ===
+        if (product.product_type === "variable") {
+          const { data: variations } = await supabase
+            .from("products")
+            .select("id, sku, attributes, original_title")
+            .eq("parent_product_id", product.id);
+
+          if (variations && variations.length > 0) {
+            let propagated = 0;
+            for (const variation of variations) {
+              // Build attribute suffix (e.g., "- Vermelho, 16 cm")
+              const attrParts: string[] = [];
+              if (Array.isArray(variation.attributes)) {
+                for (const attr of variation.attributes as any[]) {
+                  const vals = Array.isArray(attr.values) ? attr.values.join("/") : (attr.value || "");
+                  if (vals) attrParts.push(vals);
+                }
+              }
+              const suffix = attrParts.length > 0 ? ` - ${attrParts.join(", ")}` : "";
+
+              const variationUpdate: Record<string, any> = {
+                status: "optimized",
+                category: updateData.category || product.category,
+              };
+
+              // Propagate title with attribute suffix
+              if (updateData.optimized_title) {
+                variationUpdate.optimized_title = `${updateData.optimized_title}${suffix}`;
+              }
+              // Propagate description (same base for all variations)
+              if (updateData.optimized_description) {
+                variationUpdate.optimized_description = updateData.optimized_description;
+              }
+              if (updateData.optimized_short_description) {
+                variationUpdate.optimized_short_description = updateData.optimized_short_description;
+              }
+              // Propagate SEO with variation suffix
+              if (updateData.meta_title) {
+                variationUpdate.meta_title = `${updateData.meta_title}${suffix}`.substring(0, 60);
+              }
+              if (updateData.meta_description) {
+                variationUpdate.meta_description = updateData.meta_description;
+              }
+              if (updateData.seo_slug) {
+                const slugSuffix = attrParts.join("-").toLowerCase()
+                  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                  .replace(/[^a-z0-9\-]/g, "-").replace(/-+/g, "-");
+                variationUpdate.seo_slug = slugSuffix ? `${updateData.seo_slug}-${slugSuffix}` : updateData.seo_slug;
+              }
+              if (updateData.tags) variationUpdate.tags = updateData.tags;
+              if (updateData.faq) variationUpdate.faq = updateData.faq;
+              if (updateData.focus_keyword) variationUpdate.focus_keyword = updateData.focus_keyword;
+
+              await supabase.from("products").update(variationUpdate).eq("id", variation.id);
+              propagated++;
+            }
+            console.log(`📦 Propagated optimization to ${propagated} variations of variable product ${product.sku}`);
+          }
         }
 
         // Will return success after logging below
