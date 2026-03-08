@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
+import { useRepairAttributes } from "@/hooks/useRepairAttributes";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
@@ -52,6 +53,7 @@ const ALL_PHASES = OPTIMIZATION_PHASES.map(p => p.phase);
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
+  useRepairAttributes();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
