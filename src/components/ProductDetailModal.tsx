@@ -11,6 +11,7 @@ import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
+import { useProducts } from "@/hooks/useProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
