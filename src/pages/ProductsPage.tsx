@@ -52,6 +52,7 @@ const ALL_PHASES = OPTIMIZATION_PHASES.map(p => p.phase);
 const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
+  useRepairAttributes();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
