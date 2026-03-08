@@ -267,23 +267,9 @@ Deno.serve(async (req) => {
 
     if (insertErr) throw insertErr;
 
-    // If not scheduled, start processing immediately via self-invoke
+    // If not scheduled, start processing immediately via self-invoke with retry
     if (!isScheduled) {
-      try {
-        await fetch(
-          `${Deno.env.get("SUPABASE_URL")}/functions/v1/publish-woocommerce`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: authHeader!,
-            },
-            body: JSON.stringify({ jobId: newJob.id, startIndex: 0 }),
-          }
-        );
-      } catch (e) {
-        console.error("Initial self-invoke failed:", e);
-      }
+      await selfInvokeWithRetry(authHeader!, newJob.id, 0);
     }
 
     return new Response(JSON.stringify({ jobId: newJob.id }), {
