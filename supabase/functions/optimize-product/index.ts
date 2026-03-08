@@ -1142,6 +1142,66 @@ REGRAS GLOBAIS:
           return { id: product.id, status: "error" as const, error: updateError.message };
         }
 
+        // === PROPAGATE TO VARIATIONS if this is a variable product ===
+        if (product.product_type === "variable") {
+          const { data: variations } = await supabase
+            .from("products")
+            .select("id, sku, attributes, original_title")
+            .eq("parent_product_id", product.id);
+
+          if (variations && variations.length > 0) {
+            let propagated = 0;
+            for (const variation of variations) {
+              // Build attribute suffix (e.g., "- Vermelho, 16 cm")
+              const attrParts: string[] = [];
+              if (Array.isArray(variation.attributes)) {
+                for (const attr of variation.attributes as any[]) {
+                  const vals = Array.isArray(attr.values) ? attr.values.join("/") : (attr.value || "");
+                  if (vals) attrParts.push(vals);
+                }
+              }
+              const suffix = attrParts.length > 0 ? ` - ${attrParts.join(", ")}` : "";
+
+              const variationUpdate: Record<string, any> = {
+                status: "optimized",
+                category: updateData.category || product.category,
+              };
+
+              // Propagate title with attribute suffix
+              if (updateData.optimized_title) {
+                variationUpdate.optimized_title = `${updateData.optimized_title}${suffix}`;
+              }
+              // Propagate description (same base for all variations)
+              if (updateData.optimized_description) {
+                variationUpdate.optimized_description = updateData.optimized_description;
+              }
+              if (updateData.optimized_short_description) {
+                variationUpdate.optimized_short_description = updateData.optimized_short_description;
+              }
+              // Propagate SEO with variation suffix
+              if (updateData.meta_title) {
+                variationUpdate.meta_title = `${updateData.meta_title}${suffix}`.substring(0, 60);
+              }
+              if (updateData.meta_description) {
+                variationUpdate.meta_description = updateData.meta_description;
+              }
+              if (updateData.seo_slug) {
+                const slugSuffix = attrParts.join("-").toLowerCase()
+                  .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                  .replace(/[^a-z0-9\-]/g, "-").replace(/-+/g, "-");
+                variationUpdate.seo_slug = slugSuffix ? `${updateData.seo_slug}-${slugSuffix}` : updateData.seo_slug;
+              }
+              if (updateData.tags) variationUpdate.tags = updateData.tags;
+              if (updateData.faq) variationUpdate.faq = updateData.faq;
+              if (updateData.focus_keyword) variationUpdate.focus_keyword = updateData.focus_keyword;
+
+              await supabase.from("products").update(variationUpdate).eq("id", variation.id);
+              propagated++;
+            }
+            console.log(`📦 Propagated optimization to ${propagated} variations of variable product ${product.sku}`);
+          }
+        }
+
         // Will return success after logging below
 
         // Log activity
