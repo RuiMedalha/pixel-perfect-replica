@@ -788,6 +788,42 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
           }
         }
 
+        // Fetch parent product context for variations
+        let parentContext = "";
+        let parentProduct: any = null;
+        if (product.product_type === "variation" && product.parent_product_id) {
+          const { data: parent } = await supabase
+            .from("products")
+            .select("*")
+            .eq("id", product.parent_product_id)
+            .maybeSingle();
+          if (parent) {
+            parentProduct = parent;
+            parentContext = `\n\nPRODUTO PAI (variable):
+- Título: ${parent.optimized_title || parent.original_title || "N/A"}
+- Descrição: ${(parent.optimized_description || parent.original_description || "").substring(0, 1000) || "N/A"}
+- Descrição Curta: ${parent.optimized_short_description || parent.short_description || "N/A"}
+- Categoria: ${parent.category || "N/A"}
+- Atributos do pai: ${JSON.stringify(parent.attributes || [])}
+IMPORTANTE: Esta é uma VARIAÇÃO. Mantém consistência com o produto pai. Adapta o título e descrição com o sufixo do atributo específico desta variação.`;
+          }
+        }
+
+        // For variable products, add info about variations
+        let variationsContext = "";
+        if (product.product_type === "variable") {
+          const { data: variations } = await supabase
+            .from("products")
+            .select("sku, original_title, attributes")
+            .eq("parent_product_id", product.id)
+            .limit(50);
+          if (variations && variations.length > 0) {
+            variationsContext = `\n\nEste é um produto VARIÁVEL com ${variations.length} variações:
+${variations.map((v: any) => `- SKU: ${v.sku} | ${v.original_title} | Attrs: ${JSON.stringify(v.attributes || [])}`).join("\n")}
+IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variações. Não incluas atributos específicos (cor, tamanho) no título/descrição do pai.`;
+          }
+        }
+
         const productInfo = `Produto original:
 - Título: ${product.original_title || "N/A"}
 - Descrição: ${product.original_description || "N/A"}
@@ -796,7 +832,9 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 - Categoria: ${product.category || "N/A"}
 - Preço: ${product.original_price || "N/A"}€
 - SKU: ${product.sku || "N/A"}
-- Ref. Fornecedor: ${product.supplier_ref || "N/A"}${
+- Ref. Fornecedor: ${product.supplier_ref || "N/A"}
+- Tipo: ${product.product_type || "simple"}
+- Atributos: ${JSON.stringify(product.attributes || [])}${parentContext}${variationsContext}${
   (phase === 2 || phase === 3) ? `\n\nDADOS JÁ OTIMIZADOS (Fase anterior):
 - Título Otimizado: ${product.optimized_title || "N/A"}
 - Descrição Otimizada: ${(product.optimized_description || "").substring(0, 500) || "N/A"}
