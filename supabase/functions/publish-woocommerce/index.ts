@@ -796,10 +796,8 @@ async function publishVariableProduct(
           : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
       } catch (skuErr) {
         if (skuErr instanceof WooSkuConflictError) {
-          // SKU already exists as a different variation — update it instead
-          console.log(`SKU conflict for variation ${child.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
-          varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${skuErr.resourceId}`, "PUT", variationPayload);
-          await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", child.id);
+          console.log(`SKU conflict for variation ${child.id}, handling properly`);
+          varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, child.id, child.sku || "", variationPayload, skuErr, supabase);
         } else {
           throw skuErr;
         }
