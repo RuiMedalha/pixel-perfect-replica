@@ -77,6 +77,16 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
 
         <p className="text-xs text-muted-foreground">Escolha os campos a enviar. Apenas os campos selecionados serão atualizados no WooCommerce.</p>
 
+        {variableParentCount > 0 && (
+          <div className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
+            <p className="font-medium">🔗 {variableParentCount} produto(s) variável(eis) detetado(s)</p>
+            {autoIncludedVariationsCount > 0 && (
+              <p>+ {autoIncludedVariationsCount} variação(ões) incluída(s) automaticamente</p>
+            )}
+            <p className="text-muted-foreground">O produto pai será criado como "variable" e as variações como children na API do WooCommerce.</p>
+          </div>
+        )}
+
         <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
           {WOO_PUBLISH_GROUPS.map(group => {
             const groupFieldKeys = group.fields.map(f => f.key);
