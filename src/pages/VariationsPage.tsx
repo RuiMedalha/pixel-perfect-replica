@@ -440,15 +440,17 @@ const VariationsPage = () => {
                                       <table className="w-full text-xs">
                                         <thead className="bg-muted/50"><tr>
                                           <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
-                                          <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                          {addition.attribute_names.map(n => <th key={n} className="text-left p-2 font-medium text-muted-foreground">{n}</th>)}
                                         </tr></thead>
                                         <tbody>
                                           {existingVariations.length === 0 ? (
-                                            <tr><td colSpan={2} className="p-2 text-muted-foreground italic">Sem variações</td></tr>
+                                            <tr><td colSpan={1 + addition.attribute_names.length} className="p-2 text-muted-foreground italic">Sem variações</td></tr>
                                           ) : existingVariations.map((ev, evi) => (
                                             <tr key={evi} className="border-t">
                                               <td className="p-2 font-mono">{ev.sku ?? "—"}</td>
-                                              <td className="p-2"><Badge variant="outline" className="text-[10px]">{ev.attribute_value}</Badge></td>
+                                              {addition.attribute_names.map(n => (
+                                                <td key={n} className="p-2"><Badge variant="outline" className="text-[10px]">{ev.attribute_values[n] || "—"}</Badge></td>
+                                              ))}
                                             </tr>
                                           ))}
                                         </tbody>
