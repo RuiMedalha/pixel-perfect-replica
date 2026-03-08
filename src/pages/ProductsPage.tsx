@@ -157,7 +157,47 @@ const ProductsPage = () => {
     return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase;
   });
 
-  const toggleSelect = (id: string) => {
+  // Build grouped view structure
+  const groupedView = useMemo(() => {
+    if (viewMode !== "grouped") return null;
+
+    type GroupedItem = 
+      | { type: "parent"; product: Product; children: Product[] }
+      | { type: "standalone"; product: Product };
+
+    const items: GroupedItem[] = [];
+    const variationIds = new Set<string>();
+
+    // Find all variable products and their children
+    const variableProducts = filtered.filter(p => p.product_type === "variable");
+    const allProducts = products ?? [];
+
+    for (const parent of variableProducts) {
+      // Find children in filtered AND in all products (show all children of matching parents)
+      const children = allProducts.filter(p => p.parent_product_id === parent.id);
+      children.forEach(c => variationIds.add(c.id));
+      items.push({ type: "parent", product: parent, children });
+    }
+
+    // Add standalone products (simple or orphan variations not already shown)
+    for (const p of filtered) {
+      if (p.product_type !== "variable" && !variationIds.has(p.id)) {
+        items.push({ type: "standalone", product: p });
+      }
+    }
+
+    return items;
+  }, [filtered, products, viewMode]);
+
+  const toggleGroupExpand = (id: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
