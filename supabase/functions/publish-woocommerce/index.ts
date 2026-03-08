@@ -573,10 +573,19 @@ async function buildBasePayload(
   return wooProduct;
 }
 
+// Extract the unique suffix from a child title compared to the parent title
+function extractTitleSuffix(parentTitle: string, childTitle: string): string {
+  const p = parentTitle.toLowerCase().trim();
+  const c = childTitle.toLowerCase().trim();
+  let i = 0;
+  while (i < p.length && i < c.length && p[i] === c[i]) i++;
+  const suffix = childTitle.trim().substring(i).trim();
+  return suffix || childTitle.trim();
+}
+
 function buildAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
   const attrMap = new Map<string, Set<string>>();
 
-  // First, try to collect from children's individual attributes ({name, value})
   for (const v of variations) {
     const attrs = v.attributes || [];
     if (Array.isArray(attrs)) {
@@ -589,25 +598,42 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
     }
   }
 
-  // Fallback: if no attributes found from children, use parent's attributes ({name, values[]})
   if (attrMap.size === 0) {
     const parentAttrs = parent.attributes || [];
     if (Array.isArray(parentAttrs)) {
       for (const attr of parentAttrs) {
         if (attr.name && Array.isArray(attr.values) && attr.values.length > 0) {
           if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          for (const val of attr.values) {
-            if (val) attrMap.get(attr.name)!.add(val);
-          }
+          for (const val of attr.values) { if (val) attrMap.get(attr.name)!.add(val); }
         }
-        // Also handle {name, options[]} format from previous WooCommerce syncs
         if (attr.name && Array.isArray(attr.options) && attr.options.length > 0) {
           if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          for (const val of attr.options) {
-            if (val) attrMap.get(attr.name)!.add(val);
-          }
+          for (const val of attr.options) { if (val) attrMap.get(attr.name)!.add(val); }
         }
       }
+    }
+  }
+
+  // Ultimate fallback: extract attribute values from title differences
+  if (attrMap.size === 0 && variations.length > 0) {
+    const knownAttrNames = new Set<string>();
+    for (const v of variations) {
+      const attrs = v.attributes || [];
+      if (Array.isArray(attrs)) {
+        for (const attr of attrs) { if (attr.name) knownAttrNames.add(attr.name); }
+      }
+    }
+    const parentTitle = parent.optimized_title || parent.original_title || "";
+    const suffixes: string[] = [];
+    for (const v of variations) {
+      const childTitle = v.optimized_title || v.original_title || "";
+      const suffix = extractTitleSuffix(parentTitle, childTitle);
+      if (suffix) suffixes.push(suffix);
+    }
+    if (suffixes.length > 0) {
+      const attrName = knownAttrNames.size > 0 ? Array.from(knownAttrNames)[0] : "Variação";
+      attrMap.set(attrName, new Set(suffixes));
+      console.log(`Built attributes from title diffs: ${attrName} => [${suffixes.join(", ")}]`);
     }
   }
 
@@ -626,10 +652,9 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     if (mapped.length > 0) return mapped;
   }
 
-  // Fallback: infer from parent's attributes by matching child title
   if (parent) {
     const parentAttrs = parent.attributes || [];
-    if (Array.isArray(parentAttrs)) {
+    if (Array.isArray(parentAttrs) && parentAttrs.length > 0) {
       const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
       if (childTitle) {
         const result: Array<{ name: string; option: string }> = [];
@@ -645,6 +670,21 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
         }
         if (result.length > 0) return result;
       }
+    }
+  }
+
+  // Ultimate fallback: use title difference as attribute value
+  if (parent) {
+    const parentTitle = parent.optimized_title || parent.original_title || "";
+    const childTitle = product.optimized_title || product.original_title || "";
+    const suffix = extractTitleSuffix(parentTitle, childTitle);
+    if (suffix) {
+      const childAttrs = product.attributes || [];
+      const attrName = (Array.isArray(childAttrs) && childAttrs.length > 0 && childAttrs[0].name)
+        ? childAttrs[0].name
+        : "Variação";
+      console.log(`Variation ${product.id}: inferred ${attrName}=${suffix} from title diff`);
+      return [{ name: attrName, option: suffix }];
     }
   }
 
