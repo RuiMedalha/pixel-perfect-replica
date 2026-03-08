@@ -13,9 +13,9 @@ export interface VariationGroup {
 
 export function useDetectVariations() {
   return useMutation({
-    mutationFn: async ({ workspaceId, productIds }: { workspaceId: string; productIds?: string[] }) => {
+    mutationFn: async ({ workspaceId, products }: { workspaceId: string; products: Array<{ id: string; sku: string | null; original_title: string | null; optimized_title: string | null; category: string | null; original_price: number | null; original_description: string | null; short_description: string | null; product_type: string; attributes: any }> }) => {
       const { data, error } = await supabase.functions.invoke("detect-variations", {
-        body: { workspaceId, productIds },
+        body: { workspaceId, products },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
