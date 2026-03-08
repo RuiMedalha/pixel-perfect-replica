@@ -198,7 +198,7 @@ Deno.serve(async (req) => {
         results: existingResults,
       }).eq("id", jobId);
 
-      // If more products to process, self-invoke
+      // If more products to process, self-invoke with retry
       if (endIndex < productIds.length) {
         const { data: checkJob } = await adminClient
           .from("publish_jobs")
@@ -206,22 +206,7 @@ Deno.serve(async (req) => {
           .eq("id", jobId)
           .single();
         if (checkJob?.status !== "cancelled") {
-          // Self-invoke
-          try {
-            await fetch(
-              `${Deno.env.get("SUPABASE_URL")}/functions/v1/publish-woocommerce`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: authHeader!,
-                },
-                body: JSON.stringify({ jobId, startIndex: endIndex }),
-              }
-            );
-          } catch (e) {
-            console.error("Self-invoke failed:", e);
-          }
+          await selfInvokeWithRetry(authHeader!, jobId, endIndex);
         }
       } else {
         // Job complete
