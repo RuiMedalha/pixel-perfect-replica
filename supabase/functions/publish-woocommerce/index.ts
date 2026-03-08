@@ -523,8 +523,10 @@ async function buildBasePayload(
   return wooProduct;
 }
 
-function buildAttributesForParent(variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+function buildAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
   const attrMap = new Map<string, Set<string>>();
+
+  // First, try to collect from children's individual attributes ({name, value})
   for (const v of variations) {
     const attrs = v.attributes || [];
     if (Array.isArray(attrs)) {
@@ -536,6 +538,29 @@ function buildAttributesForParent(variations: any[]): Array<{ name: string; opti
       }
     }
   }
+
+  // Fallback: if no attributes found from children, use parent's attributes ({name, values[]})
+  if (attrMap.size === 0) {
+    const parentAttrs = parent.attributes || [];
+    if (Array.isArray(parentAttrs)) {
+      for (const attr of parentAttrs) {
+        if (attr.name && Array.isArray(attr.values) && attr.values.length > 0) {
+          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
+          for (const val of attr.values) {
+            if (val) attrMap.get(attr.name)!.add(val);
+          }
+        }
+        // Also handle {name, options[]} format from previous WooCommerce syncs
+        if (attr.name && Array.isArray(attr.options) && attr.options.length > 0) {
+          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
+          for (const val of attr.options) {
+            if (val) attrMap.get(attr.name)!.add(val);
+          }
+        }
+      }
+    }
+  }
+
   return Array.from(attrMap.entries()).map(([name, values]) => ({
     name,
     options: Array.from(values),
