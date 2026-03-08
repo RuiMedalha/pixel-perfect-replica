@@ -85,6 +85,7 @@ const ProductsPage = () => {
   const [selectedGroups, setSelectedGroups] = useState<Set<number>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [showPublishModal, setShowPublishModal] = useState(false);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
