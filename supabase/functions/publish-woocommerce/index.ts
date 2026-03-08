@@ -328,8 +328,23 @@ Deno.serve(async (req) => {
 
         wooProduct.type = "simple";
 
-        const wooData = product.woocommerce_id
-          ? await wooFetch(`/products/${product.woocommerce_id}`, "PUT", wooProduct)
+        let existingWooId = product.woocommerce_id;
+        let action: "created" | "updated" = "created";
+
+        // If no local woocommerce_id, try to find by SKU in WooCommerce
+        if (!existingWooId && product.sku) {
+          const foundId = await findWooProductBySku(product.sku);
+          if (foundId) {
+            existingWooId = foundId;
+          }
+        }
+
+        if (existingWooId) {
+          action = "updated";
+        }
+
+        const wooData = existingWooId
+          ? await wooFetch(`/products/${existingWooId}`, "PUT", wooProduct)
           : await wooFetch(`/products`, "POST", wooProduct);
 
         await supabase
@@ -337,7 +352,7 @@ Deno.serve(async (req) => {
           .update({ woocommerce_id: wooData.id, status: "published" as any })
           .eq("id", product.id);
 
-        results.push({ id: product.id, status: "published", woocommerce_id: wooData.id });
+        results.push({ id: product.id, status: action, woocommerce_id: wooData.id });
       } catch (e) {
         results.push({ id: product.id, status: "error", error: (e as Error).message });
       }
