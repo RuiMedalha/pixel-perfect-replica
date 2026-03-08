@@ -468,6 +468,7 @@ Deno.serve(async (req) => {
             variationPayload.attributes = variationAttrs;
           }
 
+          const standaloneAction: "created" | "updated" = variation.woocommerce_id ? "updated" : "created";
           const varWooData = variation.woocommerce_id
             ? await wooFetch(`/products/${parentWooId}/variations/${variation.woocommerce_id}`, "PUT", variationPayload)
             : await wooFetch(`/products/${parentWooId}/variations`, "POST", variationPayload);
@@ -477,7 +478,7 @@ Deno.serve(async (req) => {
             .update({ woocommerce_id: varWooData.id, status: "published" as any })
             .eq("id", variation.id);
 
-          results.push({ id: variation.id, status: "published", woocommerce_id: varWooData.id });
+          results.push({ id: variation.id, status: standaloneAction, woocommerce_id: varWooData.id });
         } else {
           // Parent not published yet — skip with warning
           results.push({
