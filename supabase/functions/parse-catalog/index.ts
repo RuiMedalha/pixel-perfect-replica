@@ -428,8 +428,10 @@ serve(async (req) => {
 });
 
 function toStr(value: unknown, maxLen: number): string | null {
-  if (value == null || value === "") return null;
-  return String(value).substring(0, maxLen) || null;
+  if (value == null) return null;
+  const normalized = String(value).replace(/\u00A0/g, " ").trim();
+  if (!normalized) return null;
+  return normalized.substring(0, maxLen) || null;
 }
 
 function parsePrice(value: unknown): number | null {
