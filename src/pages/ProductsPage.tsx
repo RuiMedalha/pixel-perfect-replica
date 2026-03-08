@@ -67,6 +67,7 @@ const ProductsPage = () => {
   const [hasKeywordFilter, setHasKeywordFilter] = useState<string>("all");
   const [productTypeFilter, setProductTypeFilter] = useState<string>("all");
   const [phaseFilter, setPhaseFilter] = useState<string>("all");
+  const [wooFilter, setWooFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
