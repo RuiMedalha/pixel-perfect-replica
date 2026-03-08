@@ -386,14 +386,18 @@ export function useUploadCatalog() {
       if (data?.error && data?.count === undefined) throw new Error(data.error);
 
       const count = data?.count || 0;
-      await registerUpload(uploadedFile, user.id, filePath, count, workspaceId);
+      const updatedCount = data?.updated || 0;
+      await registerUpload(uploadedFile, user.id, filePath, count + updatedCount, workspaceId);
 
       updateFile(uploadedFile.id, {
         status: "concluido",
         progress: 100,
-        productsCount: count,
+        productsCount: count + updatedCount,
       });
-      toast.success(`${count} produto(s) importado(s) de "${uploadedFile.name}"`);
+      const parts: string[] = [];
+      if (count > 0) parts.push(`${count} novo(s)`);
+      if (updatedCount > 0) parts.push(`${updatedCount} atualizado(s)`);
+      toast.success(`${parts.join(", ")} de "${uploadedFile.name}"`);
 
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["product-stats"] });
