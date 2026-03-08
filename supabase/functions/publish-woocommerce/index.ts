@@ -424,6 +424,7 @@ Deno.serve(async (req) => {
             }
 
             // Create or update variation
+            const childAction: "created" | "updated" = child.woocommerce_id ? "updated" : "created";
             const varWooData = child.woocommerce_id
               ? await wooFetch(`/products/${parentWooId}/variations/${child.woocommerce_id}`, "PUT", variationPayload)
               : await wooFetch(`/products/${parentWooId}/variations`, "POST", variationPayload);
@@ -433,7 +434,7 @@ Deno.serve(async (req) => {
               .update({ woocommerce_id: varWooData.id, status: "published" as any })
               .eq("id", child.id);
 
-            results.push({ id: child.id, status: "published", woocommerce_id: varWooData.id });
+            results.push({ id: child.id, status: childAction, woocommerce_id: varWooData.id });
           } catch (e) {
             results.push({ id: child.id, status: "error", error: (e as Error).message });
           }
