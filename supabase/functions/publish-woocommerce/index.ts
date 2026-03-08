@@ -26,6 +26,11 @@ Deno.serve(async (req) => {
       { global: { headers: { Authorization: authHeader! } } }
     );
 
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Não autenticado" }), {
@@ -34,7 +39,169 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { productIds, publishFields, pricing } = await req.json();
+    const body = await req.json();
+
+    // ── MODE: Continue an existing job ──
+    if (body.jobId && body.startIndex !== undefined) {
+      const { jobId, startIndex } = body;
+
+      const { data: job, error: jobErr } = await adminClient
+        .from("publish_jobs")
+        .select("*")
+        .eq("id", jobId)
+        .single();
+
+      if (jobErr || !job) {
+        return new Response(JSON.stringify({ error: "Job não encontrado" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (job.status === "cancelled") {
+        return new Response(JSON.stringify({ status: "cancelled" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get WooCommerce settings (use user's supabase client for RLS)
+      const userClient = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: `Bearer ${authHeader?.replace("Bearer ", "")}` } } }
+      );
+
+      const wooConfig = await getWooConfig(supabase);
+      if (!wooConfig) {
+        await adminClient.from("publish_jobs").update({
+          status: "failed",
+          error_message: "Credenciais WooCommerce não configuradas.",
+          completed_at: new Date().toISOString(),
+        }).eq("id", jobId);
+        return new Response(JSON.stringify({ error: "Credenciais WooCommerce não configuradas." }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { baseUrl, auth } = wooConfig;
+      const fields = job.publish_fields && Array.isArray(job.publish_fields) ? new Set(job.publish_fields) : null;
+      const has = (key: string) => !fields || fields.has(key);
+      const pricing = job.pricing || {};
+      const markupPercent = pricing?.markupPercent ?? 0;
+      const discountPercent = pricing?.discountPercent ?? 0;
+
+      const productIds = job.product_ids as string[];
+      const BATCH_SIZE = 3;
+      const endIndex = Math.min(startIndex + BATCH_SIZE, productIds.length);
+      const batchIds = productIds.slice(startIndex, endIndex);
+
+      // Fetch products for this batch
+      const { data: batchProducts } = await supabase
+        .from("products")
+        .select("*")
+        .in("id", batchIds);
+
+      if (!batchProducts || batchProducts.length === 0) {
+        // Skip this batch
+        if (endIndex >= productIds.length) {
+          await finalizeJob(adminClient, jobId, job, user.id);
+          return new Response(JSON.stringify({ status: "completed" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      const existingResults = (job.results || []) as WooResult[];
+
+      // Process each product in the batch
+      for (const product of (batchProducts || [])) {
+        // Re-check cancellation
+        const { data: freshJob } = await adminClient
+          .from("publish_jobs")
+          .select("status")
+          .eq("id", jobId)
+          .single();
+        if (freshJob?.status === "cancelled") break;
+
+        const productName = product.optimized_title || product.original_title || product.sku || product.id.slice(0, 8);
+
+        await adminClient.from("publish_jobs").update({
+          current_product_name: productName,
+          status: "processing",
+          started_at: job.started_at || new Date().toISOString(),
+        }).eq("id", jobId);
+
+        try {
+          const result = await publishSingleProduct(
+            product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent
+          );
+          existingResults.push(result);
+
+          const failed = result.status === "error" ? 1 : 0;
+          await adminClient.from("publish_jobs").update({
+            processed_products: startIndex + existingResults.length - (job.results as any[])?.length + (job.processed_products || 0),
+            failed_products: (job.failed_products || 0) + failed,
+            results: existingResults,
+          }).eq("id", jobId);
+        } catch (e) {
+          existingResults.push({
+            id: product.id,
+            status: "error",
+            error: (e as Error).message,
+          });
+          await adminClient.from("publish_jobs").update({
+            processed_products: startIndex + existingResults.length - (job.results as any[])?.length + (job.processed_products || 0),
+            failed_products: (job.failed_products || 0) + 1,
+            results: existingResults,
+          }).eq("id", jobId);
+        }
+      }
+
+      // Update total processed
+      const totalProcessedNow = endIndex;
+      await adminClient.from("publish_jobs").update({
+        processed_products: totalProcessedNow,
+        results: existingResults,
+      }).eq("id", jobId);
+
+      // If more products to process, self-invoke
+      if (endIndex < productIds.length) {
+        const { data: checkJob } = await adminClient
+          .from("publish_jobs")
+          .select("status")
+          .eq("id", jobId)
+          .single();
+        if (checkJob?.status !== "cancelled") {
+          // Self-invoke
+          try {
+            await fetch(
+              `${Deno.env.get("SUPABASE_URL")}/functions/v1/publish-woocommerce`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: authHeader!,
+                },
+                body: JSON.stringify({ jobId, startIndex: endIndex }),
+              }
+            );
+          } catch (e) {
+            console.error("Self-invoke failed:", e);
+          }
+        }
+      } else {
+        // Job complete
+        await finalizeJob(adminClient, jobId, { ...job, results: existingResults }, user.id);
+      }
+
+      return new Response(JSON.stringify({ status: "processing", jobId }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── MODE: Create a new job ──
+    const { productIds, publishFields, pricing, scheduledFor, workspaceId } = body;
     if (!Array.isArray(productIds) || productIds.length === 0) {
       return new Response(JSON.stringify({ error: "Nenhum produto selecionado" }), {
         status: 400,
@@ -42,562 +209,66 @@ Deno.serve(async (req) => {
       });
     }
 
-    const fields = publishFields && Array.isArray(publishFields) ? new Set(publishFields) : null;
-    const has = (key: string) => !fields || fields.has(key);
-
-    // Pricing adjustments
-    const markupPercent = pricing?.markupPercent ?? 0;
-    const discountPercent = pricing?.discountPercent ?? 0;
-
-    // Get WooCommerce settings
-    const { data: settings } = await supabase
-      .from("settings")
-      .select("key, value")
-      .in("key", ["woocommerce_url", "woocommerce_consumer_key", "woocommerce_consumer_secret"]);
-
-    const settingsMap: Record<string, string> = {};
-    settings?.forEach((s: any) => { settingsMap[s.key] = s.value; });
-
-    const wooUrl = settingsMap["woocommerce_url"];
-    const wooKey = settingsMap["woocommerce_consumer_key"];
-    const wooSecret = settingsMap["woocommerce_consumer_secret"];
-
-    if (!wooUrl || !wooKey || !wooSecret) {
-      return new Response(
-        JSON.stringify({ error: "Credenciais WooCommerce não configuradas. Vá às Configurações." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Get all requested products
-    const { data: products, error: prodErr } = await supabase
+    // Expand variable products to include children
+    const { data: selectedProducts } = await supabase
       .from("products")
-      .select("*")
+      .select("id, product_type")
       .in("id", productIds);
 
-    if (prodErr) throw prodErr;
-    if (!products || products.length === 0) {
-      return new Response(JSON.stringify({ error: "Produtos não encontrados" }), {
-        status: 404,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Also fetch child variations for any variable parents in the selection
-    const variableParentIds = products
+    const variableParentIds = (selectedProducts || [])
       .filter((p: any) => p.product_type === "variable")
       .map((p: any) => p.id);
 
-    let allChildVariations: any[] = [];
+    let allIds = [...productIds];
     if (variableParentIds.length > 0) {
       const { data: children } = await supabase
         .from("products")
-        .select("*")
+        .select("id")
         .in("parent_product_id", variableParentIds);
-      allChildVariations = children || [];
+      const childIds = (children || []).map((c: any) => c.id);
+      allIds = [...new Set([...allIds, ...childIds])];
     }
 
-    const results: WooResult[] = [];
-    const baseUrl = wooUrl.replace(/\/+$/, "");
-    const auth = btoa(`${wooKey}:${wooSecret}`);
+    const isScheduled = scheduledFor && new Date(scheduledFor) > new Date();
+    const status = isScheduled ? "scheduled" : "queued";
 
-    // Helper: WooCommerce API call
-    const wooFetch = async (endpoint: string, method: string, body?: Record<string, unknown>) => {
-      const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
-        method,
-        headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      if (!resp.ok) {
-        const errBody = await resp.text();
-        throw new Error(`WooCommerce ${resp.status}: ${errBody.substring(0, 300)}`);
-      }
-      return resp.json();
-    };
+    const { data: newJob, error: insertErr } = await adminClient
+      .from("publish_jobs")
+      .insert({
+        user_id: user.id,
+        workspace_id: workspaceId || null,
+        status,
+        total_products: allIds.length,
+        product_ids: allIds,
+        publish_fields: publishFields || [],
+        pricing: pricing || null,
+        scheduled_for: scheduledFor || null,
+      })
+      .select("id")
+      .single();
 
-    // Helper: find existing WooCommerce product by SKU
-    const findWooProductBySku = async (sku: string | null): Promise<number | null> => {
-      if (!sku) return null;
+    if (insertErr) throw insertErr;
+
+    // If not scheduled, start processing immediately via self-invoke
+    if (!isScheduled) {
       try {
-        const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products?sku=${encodeURIComponent(sku)}&per_page=1`, {
-          method: "GET",
-          headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
-        });
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        if (Array.isArray(data) && data.length > 0 && data[0].id) {
-          return data[0].id;
-        }
-      } catch {
-        // SKU lookup failed, will create new
-      }
-      return null;
-    };
-
-    // Helper: resolve SKUs to WooCommerce IDs (local DB + WooCommerce API fallback)
-    const resolveSkusToWooIds = async (skus: any[]): Promise<number[]> => {
-      if (!skus || skus.length === 0) return [];
-      const skuList = skus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
-      if (skuList.length === 0) return [];
-
-      // Step 1: Try local DB
-      const { data: found } = await supabase
-        .from("products")
-        .select("sku, woocommerce_id")
-        .in("sku", skuList)
-        .not("woocommerce_id", "is", null);
-
-      const resolvedIds: number[] = [];
-      const resolvedSkus = new Set<string>();
-
-      for (const p of (found || [])) {
-        if (p.woocommerce_id) {
-          resolvedIds.push(p.woocommerce_id);
-          resolvedSkus.add(p.sku);
-        }
-      }
-
-      // Step 2: For unresolved SKUs, fallback to WooCommerce API
-      const unresolvedSkus = skuList.filter((s: string) => !resolvedSkus.has(s));
-      for (const sku of unresolvedSkus) {
-        const wooId = await findWooProductBySku(sku);
-        if (wooId) {
-          resolvedIds.push(wooId);
-          // Save woocommerce_id locally for future lookups
-          await supabase
-            .from("products")
-            .update({ woocommerce_id: wooId })
-            .eq("sku", sku)
-            .is("woocommerce_id", null);
-          console.log(`Resolved SKU ${sku} → WC #${wooId} via API`);
-        } else {
-          console.log(`Could not resolve SKU ${sku} in WooCommerce`);
-        }
-      }
-
-      return resolvedIds;
-    };
-
-    // Build base product payload (shared between simple/variable/variation)
-    const buildBasePayload = async (product: any, isVariation = false): Promise<Record<string, unknown>> => {
-      const wooProduct: Record<string, unknown> = {};
-
-      // Content
-      if (has("title")) {
-        wooProduct.name = product.optimized_title || product.original_title || "Sem título";
-      }
-      if (has("description")) {
-        wooProduct.description = product.optimized_description || product.original_description || "";
-      }
-      if (has("short_description") && !isVariation) {
-        wooProduct.short_description = product.optimized_short_description || product.short_description || "";
-      }
-
-      // Price (with optional markup/discount adjustments)
-      if (has("price")) {
-        let basePrice = parseFloat(product.optimized_price || product.original_price || "0") || 0;
-        if (markupPercent > 0) {
-          basePrice = basePrice * (1 + markupPercent / 100);
-        }
-        wooProduct.regular_price = basePrice.toFixed(2);
-
-        // If discount is set, auto-calculate sale_price from the adjusted regular price
-        if (has("sale_price") && discountPercent > 0) {
-          wooProduct.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
-        }
-      }
-      // Sale price without markup scenario (use stored sale_price)
-      if (has("sale_price") && !wooProduct.sale_price) {
-        const sp = product.optimized_sale_price ?? product.sale_price;
-        if (sp != null) {
-          wooProduct.sale_price = String(sp);
-        }
-      }
-
-      // SKU
-      if (has("sku")) {
-        wooProduct.sku = product.sku || undefined;
-      }
-
-      // Slug (not for variations)
-      if (has("slug") && !isVariation) {
-        wooProduct.slug = product.seo_slug || undefined;
-      }
-
-      // Images
-      if (has("images")) {
-        if (product.image_urls && product.image_urls.length > 0) {
-          const altTexts = product.image_alt_texts || [];
-          wooProduct.images = product.image_urls.map((url: string, i: number) => {
-            const img: Record<string, unknown> = { src: url, position: i };
-            if (has("image_alt_text") && altTexts[i]) {
-              img.alt = typeof altTexts[i] === "string" ? altTexts[i] : (altTexts[i] as any)?.alt || "";
-            }
-            return img;
-          });
-        }
-      }
-
-      // Only for non-variations
-      if (!isVariation) {
-        // Taxonomies
-        if (has("categories")) {
-          // Resolve category_id to woocommerce_id if available
-          if (product.category_id) {
-            const { data: catRow } = await supabase
-              .from("categories")
-              .select("woocommerce_id, name, parent_id")
-              .eq("id", product.category_id)
-              .single();
-            if (catRow?.woocommerce_id) {
-              // Build full category chain (child + parents)
-              const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
-              let parentId = catRow.parent_id;
-              while (parentId) {
-                const { data: parentCat } = await supabase
-                  .from("categories")
-                  .select("woocommerce_id, parent_id")
-                  .eq("id", parentId)
-                  .single();
-                if (parentCat?.woocommerce_id) {
-                  catIds.push({ id: parentCat.woocommerce_id });
-                }
-                parentId = parentCat?.parent_id || null;
-              }
-              wooProduct.categories = catIds;
-              console.log(`[categories] Resolved category_id → WC IDs: ${JSON.stringify(catIds)}`);
-            } else if (catRow) {
-              wooProduct.categories = [{ name: catRow.name }];
-              console.log(`[categories] category_id found but no woocommerce_id, using name: ${catRow.name}`);
-            }
-          } else if (product.category) {
-            // Parse hierarchical string like "CONFEÇÃO>Linha 900>Eletricos>Marmitas"
-            const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
-            
-            // Helper: resolve a single category name via local DB or WC API
-            const resolveCatName = async (name: string): Promise<number | null> => {
-              // Local DB first
-              const { data: localCats } = await supabase
-                .from("categories")
-                .select("woocommerce_id")
-                .ilike("name", name)
-                .not("woocommerce_id", "is", null)
-                .limit(1);
-              if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
-                return localCats[0].woocommerce_id;
-              }
-              // WC API fallback
-              try {
-                const searchResp = await fetch(
-                  `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
-                  { headers: { Authorization: `Basic ${auth}` } }
-                );
-                if (searchResp.ok) {
-                  const wooCats = await searchResp.json();
-                  const exactMatch = wooCats.find((c: any) =>
-                    c.name.toLowerCase() === name.toLowerCase()
-                  );
-                  if (exactMatch) return exactMatch.id;
-                }
-              } catch { /* skip */ }
-              return null;
-            };
-
-            // Resolve every level of the hierarchy
-            const resolvedCatIds: Array<{ id: number }> = [];
-            for (const part of parts) {
-              const wcId = await resolveCatName(part);
-              if (wcId) {
-                resolvedCatIds.push({ id: wcId });
-                console.log(`[categories] Resolved "${part}" → WC ID ${wcId}`);
-              } else {
-                console.log(`[categories] Could not resolve "${part}" — skipped`);
-              }
-            }
-
-            if (resolvedCatIds.length > 0) {
-              wooProduct.categories = resolvedCatIds;
-              console.log(`[categories] Full hierarchy resolved: ${JSON.stringify(resolvedCatIds)}`);
-            } else {
-              console.log(`[categories] No categories resolved from "${product.category}" — skipping to preserve existing`);
-            }
+        await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/publish-woocommerce`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader!,
+            },
+            body: JSON.stringify({ jobId: newJob.id, startIndex: 0 }),
           }
-        }
-        if (has("tags")) {
-          wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));
-        }
-
-        // SEO meta
-        if (has("meta_title") || has("meta_description")) {
-          const meta_data: Array<{ key: string; value: string }> = [];
-          if (has("meta_title")) {
-            meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
-          }
-          if (has("meta_description")) {
-            meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
-          }
-          wooProduct.meta_data = meta_data;
-        }
-      }
-
-      return wooProduct;
-    };
-
-    // Extract unique attribute names/values from variations
-    const buildAttributesForParent = (variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> => {
-      const attrMap = new Map<string, Set<string>>();
-
-      for (const v of variations) {
-        const attrs = v.attributes || [];
-        if (Array.isArray(attrs)) {
-          for (const attr of attrs) {
-            if (attr.name && attr.value) {
-              if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-              attrMap.get(attr.name)!.add(attr.value);
-            }
-          }
-        }
-      }
-
-      return Array.from(attrMap.entries()).map(([name, values]) => ({
-        name,
-        options: Array.from(values),
-        variation: true,
-        visible: true,
-      }));
-    };
-
-    // Build variation attribute selection for WooCommerce
-    const buildVariationAttributes = (product: any): Array<{ name: string; option: string }> => {
-      const attrs = product.attributes || [];
-      if (!Array.isArray(attrs)) return [];
-      return attrs
-        .filter((a: any) => a.name && a.value)
-        .map((a: any) => ({ name: a.name, option: a.value }));
-    };
-
-    // Separate products into categories
-    const variableParents = products.filter((p: any) => p.product_type === "variable");
-    const simpleProducts = products.filter((p: any) =>
-      p.product_type !== "variable" && !p.parent_product_id
-    );
-    // Standalone variations selected without their parent
-    const standaloneVariations = products.filter((p: any) =>
-      p.parent_product_id && !variableParentIds.includes(p.parent_product_id)
-    );
-
-    // ──────────────────────────────────────────────
-    // 1) Publish SIMPLE products (unchanged logic)
-    // ──────────────────────────────────────────────
-    for (const product of simpleProducts) {
-      try {
-        const wooProduct = await buildBasePayload(product);
-
-        // Upsells / Cross-sells
-        if (has("upsells")) {
-          const upsellIds = await resolveSkusToWooIds(product.upsell_skus || []);
-          if (upsellIds.length > 0) wooProduct.upsell_ids = upsellIds;
-        }
-        if (has("crosssells")) {
-          const crosssellIds = await resolveSkusToWooIds(product.crosssell_skus || []);
-          if (crosssellIds.length > 0) wooProduct.cross_sell_ids = crosssellIds;
-        }
-
-        if (Object.keys(wooProduct).length === 0) {
-          results.push({ id: product.id, status: "skipped" });
-          continue;
-        }
-
-        wooProduct.type = "simple";
-
-        let existingWooId = product.woocommerce_id;
-        let action: "created" | "updated" = "created";
-
-        // If no local woocommerce_id, try to find by SKU in WooCommerce
-        if (!existingWooId && product.sku) {
-          const foundId = await findWooProductBySku(product.sku);
-          if (foundId) {
-            existingWooId = foundId;
-          }
-        }
-
-        if (existingWooId) {
-          action = "updated";
-        }
-
-        const wooData = existingWooId
-          ? await wooFetch(`/products/${existingWooId}`, "PUT", wooProduct)
-          : await wooFetch(`/products`, "POST", wooProduct);
-
-        await supabase
-          .from("products")
-          .update({ woocommerce_id: wooData.id, status: "published" as any })
-          .eq("id", product.id);
-
-        results.push({ id: product.id, status: action, woocommerce_id: wooData.id });
+        );
       } catch (e) {
-        results.push({ id: product.id, status: "error", error: (e as Error).message });
+        console.error("Initial self-invoke failed:", e);
       }
     }
 
-    // ──────────────────────────────────────────────
-    // 2) Publish VARIABLE parents + their variations
-    // ──────────────────────────────────────────────
-    for (const parent of variableParents) {
-      try {
-        const children = allChildVariations.filter((c: any) => c.parent_product_id === parent.id);
-
-        // Build parent payload
-        const parentPayload = await buildBasePayload(parent);
-        parentPayload.type = "variable";
-
-        // Build attributes from children
-        const attributes = buildAttributesForParent(children);
-        if (attributes.length > 0) {
-          parentPayload.attributes = attributes;
-        }
-
-        // Upsells / Cross-sells on parent
-        if (has("upsells")) {
-          const upsellIds = await resolveSkusToWooIds(parent.upsell_skus || []);
-          if (upsellIds.length > 0) parentPayload.upsell_ids = upsellIds;
-        }
-        if (has("crosssells")) {
-          const crosssellIds = await resolveSkusToWooIds(parent.crosssell_skus || []);
-          if (crosssellIds.length > 0) parentPayload.cross_sell_ids = crosssellIds;
-        }
-
-        // Remove price from parent (WooCommerce calculates from variations)
-        delete parentPayload.regular_price;
-        delete parentPayload.sale_price;
-
-        // Create or update parent
-        let existingParentWooId = parent.woocommerce_id;
-        let parentAction: "created" | "updated" = "created";
-
-        if (!existingParentWooId && parent.sku) {
-          const foundId = await findWooProductBySku(parent.sku);
-          if (foundId) existingParentWooId = foundId;
-        }
-        if (existingParentWooId) parentAction = "updated";
-
-        const parentWooData = existingParentWooId
-          ? await wooFetch(`/products/${existingParentWooId}`, "PUT", parentPayload)
-          : await wooFetch(`/products`, "POST", parentPayload);
-
-        const parentWooId = parentWooData.id;
-
-        await supabase
-          .from("products")
-          .update({ woocommerce_id: parentWooId, status: "published" as any })
-          .eq("id", parent.id);
-
-        results.push({ id: parent.id, status: parentAction, woocommerce_id: parentWooId });
-
-        // Now publish each variation
-        for (const child of children) {
-          try {
-            const variationPayload = await buildBasePayload(child, true);
-
-            // Set the variation attributes (e.g. Color: Red, Size: M)
-            const variationAttrs = buildVariationAttributes(child);
-            if (variationAttrs.length > 0) {
-              variationPayload.attributes = variationAttrs;
-            }
-
-            // Create or update variation
-            const childAction: "created" | "updated" = child.woocommerce_id ? "updated" : "created";
-            const varWooData = child.woocommerce_id
-              ? await wooFetch(`/products/${parentWooId}/variations/${child.woocommerce_id}`, "PUT", variationPayload)
-              : await wooFetch(`/products/${parentWooId}/variations`, "POST", variationPayload);
-
-            await supabase
-              .from("products")
-              .update({ woocommerce_id: varWooData.id, status: "published" as any })
-              .eq("id", child.id);
-
-            results.push({ id: child.id, status: childAction, woocommerce_id: varWooData.id });
-          } catch (e) {
-            results.push({ id: child.id, status: "error", error: (e as Error).message });
-          }
-        }
-      } catch (e) {
-        results.push({ id: parent.id, status: "error", error: (e as Error).message });
-      }
-    }
-
-    // ──────────────────────────────────────────────
-    // 3) Standalone variations (parent not in selection)
-    //    Treat as simple products if parent has no woo ID,
-    //    or update as variation if parent has woo ID
-    // ──────────────────────────────────────────────
-    for (const variation of standaloneVariations) {
-      try {
-        // Lookup parent's woocommerce_id
-        const { data: parentRow } = await supabase
-          .from("products")
-          .select("woocommerce_id")
-          .eq("id", variation.parent_product_id)
-          .single();
-
-        const parentWooId = parentRow?.woocommerce_id;
-
-        if (parentWooId) {
-          // Publish as variation under parent
-          const variationPayload = await buildBasePayload(variation, true);
-          const variationAttrs = buildVariationAttributes(variation);
-          if (variationAttrs.length > 0) {
-            variationPayload.attributes = variationAttrs;
-          }
-
-          const standaloneAction: "created" | "updated" = variation.woocommerce_id ? "updated" : "created";
-          const varWooData = variation.woocommerce_id
-            ? await wooFetch(`/products/${parentWooId}/variations/${variation.woocommerce_id}`, "PUT", variationPayload)
-            : await wooFetch(`/products/${parentWooId}/variations`, "POST", variationPayload);
-
-          await supabase
-            .from("products")
-            .update({ woocommerce_id: varWooData.id, status: "published" as any })
-            .eq("id", variation.id);
-
-          results.push({ id: variation.id, status: standaloneAction, woocommerce_id: varWooData.id });
-        } else {
-          // Parent not published yet — skip with warning
-          results.push({
-            id: variation.id,
-            status: "error",
-            error: "O produto pai ainda não foi publicado no WooCommerce. Publique o produto variável primeiro.",
-          });
-        }
-      } catch (e) {
-        results.push({ id: variation.id, status: "error", error: (e as Error).message });
-      }
-    }
-
-    // Log publish activity
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-    const published = results.filter((r: WooResult) => r.status === "created" || r.status === "updated").length;
-    const errors = results.filter((r: WooResult) => r.status === "error").length;
-    await adminClient.from("activity_log").insert({
-      user_id: user.id,
-      action: "publish" as any,
-      details: {
-        total: results.length,
-        published,
-        errors,
-        results: results.map((r: WooResult) => ({
-          id: r.id,
-          status: r.status,
-          woocommerce_id: r.woocommerce_id,
-          error: r.error,
-        })),
-      },
-    });
-
-    return new Response(JSON.stringify({ results }), {
+    return new Response(JSON.stringify({ jobId: newJob.id }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
@@ -608,3 +279,451 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+// ─── Helpers ───
+
+async function getWooConfig(supabase: any) {
+  const { data: settings } = await supabase
+    .from("settings")
+    .select("key, value")
+    .in("key", ["woocommerce_url", "woocommerce_consumer_key", "woocommerce_consumer_secret"]);
+
+  const settingsMap: Record<string, string> = {};
+  settings?.forEach((s: any) => { settingsMap[s.key] = s.value; });
+
+  const wooUrl = settingsMap["woocommerce_url"];
+  const wooKey = settingsMap["woocommerce_consumer_key"];
+  const wooSecret = settingsMap["woocommerce_consumer_secret"];
+
+  if (!wooUrl || !wooKey || !wooSecret) return null;
+
+  const baseUrl = wooUrl.replace(/\/+$/, "");
+  const auth = btoa(`${wooKey}:${wooSecret}`);
+  return { baseUrl, auth };
+}
+
+async function wooFetch(baseUrl: string, auth: string, endpoint: string, method: string, body?: Record<string, unknown>) {
+  const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
+    method,
+    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!resp.ok) {
+    const errBody = await resp.text();
+    throw new Error(`WooCommerce ${resp.status}: ${errBody.substring(0, 300)}`);
+  }
+  return resp.json();
+}
+
+async function findWooProductBySku(baseUrl: string, auth: string, sku: string | null): Promise<number | null> {
+  if (!sku) return null;
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products?sku=${encodeURIComponent(sku)}&per_page=1`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (Array.isArray(data) && data.length > 0 && data[0].id) {
+      return data[0].id;
+    }
+  } catch { /* skip */ }
+  return null;
+}
+
+async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: string, auth: string, skus: any[]): Promise<number[]> {
+  if (!skus || skus.length === 0) return [];
+  const skuList = skus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
+  if (skuList.length === 0) return [];
+
+  const { data: found } = await supabase
+    .from("products")
+    .select("sku, woocommerce_id")
+    .in("sku", skuList)
+    .not("woocommerce_id", "is", null);
+
+  const resolvedIds: number[] = [];
+  const resolvedSkus = new Set<string>();
+
+  for (const p of (found || [])) {
+    if (p.woocommerce_id) {
+      resolvedIds.push(p.woocommerce_id);
+      resolvedSkus.add(p.sku);
+    }
+  }
+
+  const unresolvedSkus = skuList.filter((s: string) => !resolvedSkus.has(s));
+  for (const sku of unresolvedSkus) {
+    const wooId = await findWooProductBySku(baseUrl, auth, sku);
+    if (wooId) {
+      resolvedIds.push(wooId);
+      await supabase
+        .from("products")
+        .update({ woocommerce_id: wooId })
+        .eq("sku", sku)
+        .is("woocommerce_id", null);
+    }
+  }
+
+  return resolvedIds;
+}
+
+async function buildBasePayload(
+  product: any, supabase: any, baseUrl: string, auth: string,
+  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false
+): Promise<Record<string, unknown>> {
+  const wooProduct: Record<string, unknown> = {};
+
+  if (has("title")) {
+    wooProduct.name = product.optimized_title || product.original_title || "Sem título";
+  }
+  if (has("description")) {
+    wooProduct.description = product.optimized_description || product.original_description || "";
+  }
+  if (has("short_description") && !isVariation) {
+    wooProduct.short_description = product.optimized_short_description || product.short_description || "";
+  }
+
+  if (has("price")) {
+    let basePrice = parseFloat(product.optimized_price || product.original_price || "0") || 0;
+    if (markupPercent > 0) {
+      basePrice = basePrice * (1 + markupPercent / 100);
+    }
+    wooProduct.regular_price = basePrice.toFixed(2);
+
+    if (has("sale_price") && discountPercent > 0) {
+      wooProduct.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
+    }
+  }
+  if (has("sale_price") && !wooProduct.sale_price) {
+    const sp = product.optimized_sale_price ?? product.sale_price;
+    if (sp != null) {
+      wooProduct.sale_price = String(sp);
+    }
+  }
+
+  if (has("sku")) {
+    wooProduct.sku = product.sku || undefined;
+  }
+
+  if (has("slug") && !isVariation) {
+    wooProduct.slug = product.seo_slug || undefined;
+  }
+
+  if (has("images")) {
+    if (product.image_urls && product.image_urls.length > 0) {
+      const altTexts = product.image_alt_texts || [];
+      wooProduct.images = product.image_urls.map((url: string, i: number) => {
+        const img: Record<string, unknown> = { src: url, position: i };
+        if (has("image_alt_text") && altTexts[i]) {
+          img.alt = typeof altTexts[i] === "string" ? altTexts[i] : (altTexts[i] as any)?.alt || "";
+        }
+        return img;
+      });
+    }
+  }
+
+  if (!isVariation) {
+    if (has("categories")) {
+      if (product.category_id) {
+        const { data: catRow } = await supabase
+          .from("categories")
+          .select("woocommerce_id, name, parent_id")
+          .eq("id", product.category_id)
+          .single();
+        if (catRow?.woocommerce_id) {
+          const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
+          let parentId = catRow.parent_id;
+          while (parentId) {
+            const { data: parentCat } = await supabase
+              .from("categories")
+              .select("woocommerce_id, parent_id")
+              .eq("id", parentId)
+              .single();
+            if (parentCat?.woocommerce_id) {
+              catIds.push({ id: parentCat.woocommerce_id });
+            }
+            parentId = parentCat?.parent_id || null;
+          }
+          wooProduct.categories = catIds;
+        } else if (catRow) {
+          wooProduct.categories = [{ name: catRow.name }];
+        }
+      } else if (product.category) {
+        const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
+        const resolveCatName = async (name: string): Promise<number | null> => {
+          const { data: localCats } = await supabase
+            .from("categories")
+            .select("woocommerce_id")
+            .ilike("name", name)
+            .not("woocommerce_id", "is", null)
+            .limit(1);
+          if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
+            return localCats[0].woocommerce_id;
+          }
+          try {
+            const searchResp = await fetch(
+              `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
+              { headers: { Authorization: `Basic ${auth}` } }
+            );
+            if (searchResp.ok) {
+              const wooCats = await searchResp.json();
+              const exactMatch = wooCats.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
+              if (exactMatch) return exactMatch.id;
+            }
+          } catch { /* skip */ }
+          return null;
+        };
+
+        const resolvedCatIds: Array<{ id: number }> = [];
+        for (const part of parts) {
+          const wcId = await resolveCatName(part);
+          if (wcId) resolvedCatIds.push({ id: wcId });
+        }
+        if (resolvedCatIds.length > 0) {
+          wooProduct.categories = resolvedCatIds;
+        }
+      }
+    }
+    if (has("tags")) {
+      wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));
+    }
+
+    if (has("meta_title") || has("meta_description")) {
+      const meta_data: Array<{ key: string; value: string }> = [];
+      if (has("meta_title")) {
+        meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
+      }
+      if (has("meta_description")) {
+        meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
+      }
+      wooProduct.meta_data = meta_data;
+    }
+  }
+
+  return wooProduct;
+}
+
+function buildAttributesForParent(variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+  const attrMap = new Map<string, Set<string>>();
+  for (const v of variations) {
+    const attrs = v.attributes || [];
+    if (Array.isArray(attrs)) {
+      for (const attr of attrs) {
+        if (attr.name && attr.value) {
+          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
+          attrMap.get(attr.name)!.add(attr.value);
+        }
+      }
+    }
+  }
+  return Array.from(attrMap.entries()).map(([name, values]) => ({
+    name,
+    options: Array.from(values),
+    variation: true,
+    visible: true,
+  }));
+}
+
+function buildVariationAttributes(product: any): Array<{ name: string; option: string }> {
+  const attrs = product.attributes || [];
+  if (!Array.isArray(attrs)) return [];
+  return attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
+}
+
+async function publishSingleProduct(
+  product: any,
+  supabase: any,
+  adminClient: any,
+  baseUrl: string,
+  auth: string,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
+): Promise<WooResult> {
+  // Handle variable products
+  if (product.product_type === "variable") {
+    return await publishVariableProduct(product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
+  }
+
+  // Handle standalone variations
+  if (product.parent_product_id) {
+    return await publishVariation(product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
+  }
+
+  // Simple product
+  const wooProduct = await buildBasePayload(product, supabase, baseUrl, auth, has, markupPercent, discountPercent);
+
+  if (has("upsells")) {
+    const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.upsell_skus || []);
+    if (upsellIds.length > 0) wooProduct.upsell_ids = upsellIds;
+  }
+  if (has("crosssells")) {
+    const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.crosssell_skus || []);
+    if (crosssellIds.length > 0) wooProduct.cross_sell_ids = crosssellIds;
+  }
+
+  if (Object.keys(wooProduct).length === 0) {
+    return { id: product.id, status: "skipped" };
+  }
+
+  wooProduct.type = "simple";
+
+  let existingWooId = product.woocommerce_id;
+  if (!existingWooId && product.sku) {
+    existingWooId = await findWooProductBySku(baseUrl, auth, product.sku);
+  }
+
+  const action: "created" | "updated" = existingWooId ? "updated" : "created";
+  const wooData = existingWooId
+    ? await wooFetch(baseUrl, auth, `/products/${existingWooId}`, "PUT", wooProduct)
+    : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
+
+  await supabase
+    .from("products")
+    .update({ woocommerce_id: wooData.id, status: "published" as any })
+    .eq("id", product.id);
+
+  return { id: product.id, status: action, woocommerce_id: wooData.id };
+}
+
+async function publishVariableProduct(
+  parent: any,
+  supabase: any,
+  adminClient: any,
+  baseUrl: string,
+  auth: string,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
+): Promise<WooResult> {
+  // Fetch children
+  const { data: children } = await supabase
+    .from("products")
+    .select("*")
+    .eq("parent_product_id", parent.id);
+
+  const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
+  parentPayload.type = "variable";
+
+  const attributes = buildAttributesForParent(children || []);
+  if (attributes.length > 0) parentPayload.attributes = attributes;
+
+  if (has("upsells")) {
+    const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, parent.upsell_skus || []);
+    if (upsellIds.length > 0) parentPayload.upsell_ids = upsellIds;
+  }
+  if (has("crosssells")) {
+    const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, parent.crosssell_skus || []);
+    if (crosssellIds.length > 0) parentPayload.cross_sell_ids = crosssellIds;
+  }
+
+  delete parentPayload.regular_price;
+  delete parentPayload.sale_price;
+
+  let existingParentWooId = parent.woocommerce_id;
+  if (!existingParentWooId && parent.sku) {
+    existingParentWooId = await findWooProductBySku(baseUrl, auth, parent.sku);
+  }
+
+  const parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
+  const parentWooData = existingParentWooId
+    ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
+    : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+
+  const parentWooId = parentWooData.id;
+
+  await supabase
+    .from("products")
+    .update({ woocommerce_id: parentWooId, status: "published" as any })
+    .eq("id", parent.id);
+
+  // Publish children
+  for (const child of (children || [])) {
+    try {
+      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
+      const variationAttrs = buildVariationAttributes(child);
+      if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
+
+      const varWooData = child.woocommerce_id
+        ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${child.woocommerce_id}`, "PUT", variationPayload)
+        : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+
+      await supabase
+        .from("products")
+        .update({ woocommerce_id: varWooData.id, status: "published" as any })
+        .eq("id", child.id);
+    } catch (e) {
+      console.error(`Error publishing variation ${child.id}:`, (e as Error).message);
+    }
+  }
+
+  return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
+}
+
+async function publishVariation(
+  variation: any,
+  supabase: any,
+  adminClient: any,
+  baseUrl: string,
+  auth: string,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
+): Promise<WooResult> {
+  const { data: parentRow } = await supabase
+    .from("products")
+    .select("woocommerce_id")
+    .eq("id", variation.parent_product_id)
+    .single();
+
+  const parentWooId = parentRow?.woocommerce_id;
+
+  if (parentWooId) {
+    const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
+    const variationAttrs = buildVariationAttributes(variation);
+    if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
+
+    const action: "created" | "updated" = variation.woocommerce_id ? "updated" : "created";
+    const varWooData = variation.woocommerce_id
+      ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${variation.woocommerce_id}`, "PUT", variationPayload)
+      : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+
+    await supabase
+      .from("products")
+      .update({ woocommerce_id: varWooData.id, status: "published" as any })
+      .eq("id", variation.id);
+
+    return { id: variation.id, status: action, woocommerce_id: varWooData.id };
+  } else {
+    return {
+      id: variation.id,
+      status: "error",
+      error: "O produto pai ainda não foi publicado no WooCommerce.",
+    };
+  }
+}
+
+async function finalizeJob(adminClient: any, jobId: string, job: any, userId: string) {
+  const results = (job.results || []) as WooResult[];
+  const published = results.filter((r: WooResult) => r.status === "created" || r.status === "updated").length;
+  const errors = results.filter((r: WooResult) => r.status === "error").length;
+
+  await adminClient.from("publish_jobs").update({
+    status: "completed",
+    completed_at: new Date().toISOString(),
+    current_product_name: null,
+  }).eq("id", jobId);
+
+  // Log activity
+  await adminClient.from("activity_log").insert({
+    user_id: userId,
+    action: "publish" as any,
+    details: {
+      total: results.length,
+      published,
+      errors,
+      job_id: jobId,
+    },
+  });
+}
