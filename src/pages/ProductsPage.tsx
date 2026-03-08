@@ -781,7 +781,7 @@ const ProductsPage = () => {
         <Card className={cn(
           "border-l-4",
           publishWoo.isPending ? "border-l-primary" : 
-          publishResults?.some(r => r.status === "error") ? "border-l-warning" : "border-l-primary"
+          publishResults?.some(r => r.status === "error") ? "border-l-warning" : "border-l-success"
         )}>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
