@@ -1546,12 +1546,17 @@ const ProductsPage = () => {
                 {
                   onSuccess: (data) => {
                     setPublishResults(data.results);
-                    const ok = data.results.filter(r => r.status === "published").length;
+                    const created = data.results.filter(r => r.status === "created").length;
+                    const updated = data.results.filter(r => r.status === "updated").length;
                     const fail = data.results.filter(r => r.status === "error").length;
+                    const parts: string[] = [];
+                    if (created > 0) parts.push(`${created} criado(s)`);
+                    if (updated > 0) parts.push(`${updated} atualizado(s)`);
                     if (fail > 0) {
-                      toast.warning(`${ok} publicado(s), ${fail} com erro.`);
+                      parts.push(`${fail} com erro`);
+                      toast.warning(parts.join(", "));
                     } else {
-                      toast.success(`${ok} produto(s) publicado(s) no WooCommerce!`);
+                      toast.success(parts.join(", ") + " no WooCommerce!");
                     }
                   },
                 }
