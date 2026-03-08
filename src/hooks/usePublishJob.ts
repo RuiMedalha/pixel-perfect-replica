@@ -82,7 +82,15 @@ export function usePublishJob() {
         .limit(1);
 
       if (data && data.length > 0) {
-        setActivePublishJob(data[0] as any);
+        const job = data[0] as any;
+        setActivePublishJob(job);
+
+        // Auto-trigger queued jobs that haven't started (e.g. from scheduled)
+        if (job.status === "queued" && !job.started_at) {
+          supabase.functions.invoke("publish-woocommerce", {
+            body: { jobId: job.id, startIndex: 0 },
+          }).catch(console.error);
+        }
       }
     };
     checkActiveJobs();
