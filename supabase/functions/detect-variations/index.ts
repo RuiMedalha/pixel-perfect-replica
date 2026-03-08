@@ -35,7 +35,7 @@ serve(async (req) => {
       });
     }
 
-    const { workspaceId, products: clientProducts } = await req.json();
+    const { workspaceId, products: clientProducts, existingGroups, knowledgeContext } = await req.json();
     if (!workspaceId) {
       return new Response(JSON.stringify({ error: "workspaceId é obrigatório" }), {
         status: 400,
@@ -43,13 +43,12 @@ serve(async (req) => {
       });
     }
 
-    // Use products sent from client (avoids long URL queries)
+    // Use products sent from client
     let products = clientProducts;
     if (!products || !Array.isArray(products) || products.length === 0) {
-      // Fallback: fetch from DB (limited to 500)
       const { data, error: fetchError } = await supabase
         .from("products")
-        .select("id, sku, original_title, optimized_title, category, original_price, original_description, short_description, product_type, attributes")
+        .select("id, sku, original_title, optimized_title, category, original_price, original_description, short_description, product_type, attributes, crosssell_skus, upsell_skus")
         .eq("workspace_id", workspaceId)
         .eq("product_type", "simple")
         .order("original_title")
@@ -58,9 +57,9 @@ serve(async (req) => {
       products = data;
     }
 
-    if (!products || products.length < 2) {
+    if (!products || products.length < 1) {
       return new Response(
-        JSON.stringify({ groups: [], message: "Insuficientes produtos simples para detetar variações." }),
+        JSON.stringify({ groups: [], addToExisting: [], message: "Sem produtos simples para analisar." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -68,14 +67,126 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const productList = products.map((p: any) => ({
-      id: p.id,
-      sku: p.sku,
-      title: p.optimized_title || p.original_title,
-      category: p.category,
-      price: p.original_price,
-      description: (p.original_description || "").substring(0, 200),
-    }));
+    // Build compact product list with crosssell/upsell hints
+    const productList = products.map((p: any) => {
+      const item: any = {
+        id: p.id,
+        sku: p.sku,
+        title: p.optimized_title || p.original_title,
+        category: p.category,
+        price: p.original_price,
+        desc: (p.original_description || "").substring(0, 150),
+      };
+      // Add cross/upsell SKU hints (they often indicate related products)
+      const crossSkus = Array.isArray(p.crosssell_skus) ? p.crosssell_skus : [];
+      const upSkus = Array.isArray(p.upsell_skus) ? p.upsell_skus : [];
+      if (crossSkus.length > 0) item.cross = crossSkus.slice(0, 5);
+      if (upSkus.length > 0) item.up = upSkus.slice(0, 5);
+      return item;
+    });
+
+    // Build existing groups context
+    let existingGroupsContext = "";
+    if (existingGroups && Array.isArray(existingGroups) && existingGroups.length > 0) {
+      existingGroupsContext = `\n\n=== GRUPOS VARIÁVEIS JÁ EXISTENTES ===
+Estes produtos variáveis já existem no catálogo. Verifica se algum produto simples deveria ser adicionado a estes grupos como nova variação.
+${JSON.stringify(existingGroups.map((g: any) => ({
+        parent_id: g.parent_id,
+        parent_title: g.parent_title,
+        attribute_name: g.attribute_name,
+        existing_variations: g.existing_variations?.map((v: any) => v.sku + ": " + v.attribute_value).join(", "),
+      })), null, 1).substring(0, 8000)}`;
+    }
+
+    // Build knowledge context from PDF catalog
+    let knowledgeSection = "";
+    if (knowledgeContext && typeof knowledgeContext === "string" && knowledgeContext.length > 0) {
+      knowledgeSection = `\n\n=== CONTEXTO DO CATÁLOGO PDF ===
+Informação extraída do catálogo do fornecedor que pode ajudar a identificar famílias/grupos de produtos:
+${knowledgeContext.substring(0, 6000)}`;
+    }
+
+    const hasExistingGroups = existingGroups && existingGroups.length > 0;
+
+    const systemPrompt = `És um especialista em catálogos de produtos para e-commerce (equipamentos profissionais, hotelaria, restauração). Analisa a lista de produtos e:
+
+1. **Identifica NOVOS grupos** de produtos simples que são variações do mesmo produto base
+2. ${hasExistingGroups ? "**Identifica produtos simples que devem ser ADICIONADOS a grupos variáveis já existentes**" : ""}
+
+Critérios de agrupamento:
+- Mesmo produto mas com diferentes tamanhos, dimensões, capacidades, voltagens, cores ou configurações
+- SKUs com base similar mas sufixos diferentes (ex: P-123-60, P-123-80 são variações)
+- Títulos muito semelhantes diferindo apenas num atributo
+- Mesmo modelo/referência em diferentes versões
+- Produtos que partilham crosssell/upsell SKUs frequentemente pertencem à mesma família
+- Informação do catálogo PDF indica que são variantes do mesmo produto
+
+NÃO agrupa:
+- Produtos genuinamente diferentes (uma panela e um forno não são variações)
+- Acessórios com o equipamento principal (isso é crosssell, não variação)
+- Produtos da mesma categoria mas de séries/modelos completamente diferentes
+
+Responde APENAS com a tool call.`;
+
+    const userContent = `Analisa estes ${productList.length} produtos simples e identifica variações:
+
+${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsContext}${knowledgeSection}`;
+
+    const toolParameters: any = {
+      type: "object",
+      properties: {
+        new_groups: {
+          type: "array",
+          description: "Novos grupos de variações detetados entre produtos simples",
+          items: {
+            type: "object",
+            properties: {
+              parent_title: { type: "string", description: "Título genérico do produto pai" },
+              attribute_name: { type: "string", description: "Nome do atributo que varia" },
+              variations: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    product_id: { type: "string" },
+                    attribute_value: { type: "string" },
+                  },
+                  required: ["product_id", "attribute_value"],
+                },
+              },
+            },
+            required: ["parent_title", "attribute_name", "variations"],
+          },
+        },
+        add_to_existing: {
+          type: "array",
+          description: "Produtos simples que devem ser adicionados a grupos variáveis já existentes",
+          items: {
+            type: "object",
+            properties: {
+              existing_parent_id: { type: "string", description: "ID do produto variável existente" },
+              existing_parent_title: { type: "string", description: "Título do produto variável existente" },
+              attribute_name: { type: "string" },
+              products_to_add: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    product_id: { type: "string" },
+                    attribute_value: { type: "string" },
+                  },
+                  required: ["product_id", "attribute_value"],
+                },
+              },
+              reason: { type: "string", description: "Justificação breve de porque este produto pertence a este grupo" },
+            },
+            required: ["existing_parent_id", "existing_parent_title", "attribute_name", "products_to_add"],
+          },
+        },
+      },
+      required: ["new_groups", "add_to_existing"],
+      additionalProperties: false,
+    };
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -86,64 +197,16 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          {
-            role: "system",
-            content: `És um especialista em catálogos de produtos para e-commerce. Analisa a lista de produtos e identifica quais são variações do mesmo produto base.
-
-Critérios de agrupamento:
-- Mesmo produto mas com diferentes tamanhos, dimensões, capacidades, voltagens, cores ou configurações
-- SKUs com base similar mas sufixos diferentes
-- Títulos muito semelhantes diferindo apenas num atributo (ex: "Mesa Inox 1200mm" e "Mesa Inox 1500mm")
-- Mesmo modelo/referência em diferentes versões
-
-Para cada grupo, identifica:
-- O nome do produto pai (genérico)
-- Os atributos que variam (nome do atributo e valor para cada variação)
-- Quais produtos pertencem ao grupo (por ID)
-
-NÃO agrupa produtos que são genuinamente diferentes. Só agrupa quando claramente são variações do mesmo produto base.
-Responde APENAS com a tool call.`,
-          },
-          {
-            role: "user",
-            content: `Analisa estes ${productList.length} produtos e identifica grupos de variações:\n\n${JSON.stringify(productList, null, 1).substring(0, 30000)}`,
-          },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
         ],
         tools: [
           {
             type: "function",
             function: {
               name: "detect_variations",
-              description: "Devolve os grupos de produtos variáveis detetados",
-              parameters: {
-                type: "object",
-                properties: {
-                  groups: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        parent_title: { type: "string", description: "Título genérico do produto pai" },
-                        attribute_name: { type: "string", description: "Nome do atributo que varia (ex: Tamanho, Voltagem, Capacidade)" },
-                        variations: {
-                          type: "array",
-                          items: {
-                            type: "object",
-                            properties: {
-                              product_id: { type: "string" },
-                              attribute_value: { type: "string", description: "Valor do atributo para esta variação" },
-                            },
-                            required: ["product_id", "attribute_value"],
-                          },
-                        },
-                      },
-                      required: ["parent_title", "attribute_name", "variations"],
-                    },
-                  },
-                },
-                required: ["groups"],
-                additionalProperties: false,
-              },
+              description: "Devolve os grupos de variações detetados e sugestões de adição a grupos existentes",
+              parameters: toolParameters,
             },
           },
         ],
@@ -160,25 +223,38 @@ Responde APENAS com a tool call.`,
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
       return new Response(
-        JSON.stringify({ groups: [], message: "IA não detetou variações." }),
+        JSON.stringify({ groups: [], addToExisting: [], message: "IA não detetou variações." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const parsed = JSON.parse(toolCall.function.arguments);
-    const groups = parsed.groups || [];
+    const newGroups = parsed.new_groups || [];
+    const addToExisting = parsed.add_to_existing || [];
 
-    // Validate that all product IDs exist in the sent products
+    // Validate product IDs
     const allProductIds = new Set(products.map((p: any) => p.id));
-    const validGroups = groups
+    const validNewGroups = newGroups
       .map((g: any) => ({
         ...g,
         variations: (g.variations || []).filter((v: any) => allProductIds.has(v.product_id)),
       }))
       .filter((g: any) => g.variations.length >= 2);
 
+    const existingParentIds = new Set((existingGroups || []).map((g: any) => g.parent_id));
+    const validAddToExisting = addToExisting
+      .map((g: any) => ({
+        ...g,
+        products_to_add: (g.products_to_add || []).filter((v: any) => allProductIds.has(v.product_id)),
+      }))
+      .filter((g: any) => g.products_to_add.length >= 1 && existingParentIds.has(g.existing_parent_id));
+
     return new Response(
-      JSON.stringify({ groups: validGroups, total_products: products.length }),
+      JSON.stringify({
+        groups: validNewGroups,
+        addToExisting: validAddToExisting,
+        total_products: products.length,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
