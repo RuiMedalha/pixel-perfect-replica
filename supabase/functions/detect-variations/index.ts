@@ -35,7 +35,7 @@ serve(async (req) => {
       });
     }
 
-    const { workspaceId, products: clientProducts, existingGroups, knowledgeContext } = await req.json();
+    const { workspaceId, products: clientProducts, existingGroups, knowledgeContext, mode } = await req.json();
     if (!workspaceId) {
       return new Response(JSON.stringify({ error: "workspaceId é obrigatório" }), {
         status: 400,
@@ -47,9 +47,8 @@ serve(async (req) => {
     if (!products || !Array.isArray(products) || products.length === 0) {
       const { data, error: fetchError } = await supabase
         .from("products")
-        .select("id, sku, original_title, optimized_title, category, original_price, original_description, short_description, product_type, attributes, crosssell_skus, upsell_skus")
+        .select("id, sku, original_title, optimized_title, category, original_price, original_description, short_description, product_type, attributes, crosssell_skus, upsell_skus, parent_product_id")
         .eq("workspace_id", workspaceId)
-        .eq("product_type", "simple")
         .order("original_title")
         .limit(500);
       if (fetchError) throw fetchError;
@@ -58,7 +57,7 @@ serve(async (req) => {
 
     if (!products || products.length < 1) {
       return new Response(
-        JSON.stringify({ groups: [], addToExisting: [], message: "Sem produtos simples para analisar." }),
+        JSON.stringify({ groups: [], addToExisting: [], reclassify: [], message: "Sem produtos para analisar." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -66,15 +65,21 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
+    // Build compact product list with type and parent info
     const productList = products.map((p: any) => {
       const item: any = {
         id: p.id,
         sku: p.sku,
         title: p.optimized_title || p.original_title,
+        type: p.product_type,
         category: p.category,
         price: p.original_price,
-        desc: (p.original_description || "").substring(0, 150),
+        desc: (p.original_description || "").substring(0, 120),
       };
+      if (p.parent_product_id) item.parent_id = p.parent_product_id;
+      if (p.attributes && Array.isArray(p.attributes) && p.attributes.length > 0) {
+        item.attrs = p.attributes;
+      }
       const crossSkus = Array.isArray(p.crosssell_skus) ? p.crosssell_skus : [];
       const upSkus = Array.isArray(p.upsell_skus) ? p.upsell_skus : [];
       if (crossSkus.length > 0) item.cross = crossSkus.slice(0, 5);
@@ -82,15 +87,19 @@ serve(async (req) => {
       return item;
     });
 
+    // Separate by type for context
+    const simpleProducts = productList.filter((p: any) => p.type === "simple");
+    const variableProducts = productList.filter((p: any) => p.type === "variable");
+    const variationProducts = productList.filter((p: any) => p.type === "variation");
+
     let existingGroupsContext = "";
     if (existingGroups && Array.isArray(existingGroups) && existingGroups.length > 0) {
-      existingGroupsContext = `\n\n=== GRUPOS VARIÁVEIS JÁ EXISTENTES ===
-Estes produtos variáveis já existem. Verifica se algum produto simples deveria ser adicionado.
+      existingGroupsContext = `\n\n=== GRUPOS VARIÁVEIS JÁ EXISTENTES (para verificação e expansão) ===
 ${JSON.stringify(existingGroups.map((g: any) => ({
         parent_id: g.parent_id,
         parent_title: g.parent_title,
         attribute_names: g.attribute_names,
-        existing_variations: g.existing_variations?.slice(0, 10).map((v: any) => 
+        existing_variations: g.existing_variations?.slice(0, 15).map((v: any) => 
           v.sku + ": " + JSON.stringify(v.attribute_values)
         ).join(", "),
       })), null, 1).substring(0, 8000)}`;
@@ -98,38 +107,63 @@ ${JSON.stringify(existingGroups.map((g: any) => ({
 
     let knowledgeSection = "";
     if (knowledgeContext && typeof knowledgeContext === "string" && knowledgeContext.length > 0) {
-      knowledgeSection = `\n\n=== CONTEXTO DO CATÁLOGO PDF ===
+      knowledgeSection = `\n\n=== CONTEXTO DO CATÁLOGO PDF / WEBSITE FORNECEDOR ===
 ${knowledgeContext.substring(0, 6000)}`;
     }
 
-    const hasExistingGroups = existingGroups && existingGroups.length > 0;
+    const isFullMode = mode === "full";
 
-    const systemPrompt = `És um especialista em catálogos de produtos para e-commerce (equipamentos profissionais, hotelaria, restauração). Analisa a lista de produtos e:
+    const systemPrompt = `És um especialista em catálogos de produtos para e-commerce (equipamentos profissionais, hotelaria, restauração). 
 
-1. **Identifica NOVOS grupos** de produtos simples que são variações do mesmo produto base
-2. ${hasExistingGroups ? "**Identifica produtos simples que devem ser ADICIONADOS a grupos variáveis já existentes**" : ""}
+TAREFAS:
+1. **NOVOS GRUPOS**: Identifica produtos simples que devem ser agrupados como variações do mesmo produto base
+2. **ADICIONAR A EXISTENTES**: Identifica produtos simples que devem entrar em grupos variáveis já existentes
+${isFullMode ? `3. **VERIFICAR GRUPOS EXISTENTES**: Revê os grupos variáveis atuais e sugere correções:
+   - Variações que estão no grupo errado
+   - Grupos que deviam ser fundidos (mesmo produto base)
+   - Variações órfãs ou grupos vazios` : ""}
 
-IMPORTANTE - MÚLTIPLOS ATRIBUTOS:
-- Um grupo pode ter MAIS QUE UM atributo de variação. Exemplo: "Bandeja Antideslizante" pode variar em Cor E Tamanho simultaneamente.
-- Se o mesmo produto base existe em Preto 35cm, Preto 40cm, Castanho 35cm, Castanho 40cm — isto é UM ÚNICO grupo com attribute_names: ["Cor", "Tamanho"].
-- NÃO cries grupos separados para cada cor se o tamanho também varia. Agrupa TUDO num só grupo variável.
-- Cada variação deve ter um valor para CADA atributo no campo attribute_values.
+REGRAS CRÍTICAS PARA attribute_values:
+- **OBRIGATÓRIO**: Cada variação DEVE ter valores concretos extraídos do título/SKU/descrição para TODOS os atributos.
+- **NUNCA** deixes attribute_values vazio ou com "—". Extrai o valor do título do produto.
+- Exemplos de extração:
+  * "Pie Portacubos Dourado Vintage" → {"Material": "Dourado", "Cor": "Vintage"} 
+  * "Coqueteleira Inox 0.70 Lts" → {"Capacidade": "0.70 Lts"}
+  * "Band Cam Antidesliz.40 Castanho" → {"Tamanho": "40", "Cor": "Castanho"}
+  * "M.buffet Baixo+T.MAD 120 Cubic" → {"Tipo": "Baixo+T.MAD", "Dimensão": "120"}
+- Se não consegues determinar o valor, usa a parte diferenciadora do título.
+
+MÚLTIPLOS ATRIBUTOS:
+- Um grupo pode ter MAIS QUE UM atributo. Ex: "Bandeja Antideslizante" pode variar em Cor E Tamanho.
+- Se o mesmo produto base existe em Preto 35cm, Preto 40cm, Castanho 35cm, Castanho 40cm → UM grupo com attribute_names: ["Cor", "Tamanho"].
+- NÃO cries grupos separados para cada cor se o tamanho também varia.
+
+TRADUÇÃO / CONSISTÊNCIA:
+- O catálogo pode ter títulos misturados em Português, Espanhol ou abreviados. Nota inconsistências como "Castaño" vs "Castanho".
+- O parent_title deve ser em Português de Portugal, limpo e genérico (sem atributos específicos).
 
 Critérios de agrupamento:
-- Mesmo produto mas com diferentes tamanhos, dimensões, capacidades, voltagens, cores ou configurações
+- Mesmo produto com diferentes tamanhos, dimensões, capacidades, voltagens, cores, materiais ou configurações
 - SKUs com base similar mas sufixos diferentes
 - Títulos muito semelhantes diferindo em 1+ atributos
 - Produtos que partilham crosssell/upsell SKUs
-- Informação do catálogo PDF indica que são variantes
+- Informação do catálogo PDF/website indica que são variantes
 
 NÃO agrupa:
 - Produtos genuinamente diferentes
-- Acessórios com equipamento principal
+- Acessórios com equipamento principal (crosssell, não variação)
 - Produtos de séries/modelos completamente diferentes
 
 Responde APENAS com a tool call.`;
 
-    const userContent = `Analisa estes ${productList.length} produtos simples e identifica variações (lembra-te: múltiplos atributos por grupo quando aplicável):
+    const productsSummary = [];
+    if (simpleProducts.length > 0) productsSummary.push(`${simpleProducts.length} simples`);
+    if (variableProducts.length > 0) productsSummary.push(`${variableProducts.length} variáveis`);
+    if (variationProducts.length > 0) productsSummary.push(`${variationProducts.length} variações`);
+
+    const userContent = `Analisa estes ${productList.length} produtos (${productsSummary.join(", ")}).
+${isFullMode ? "MODO COMPLETO: Verifica TODOS os produtos incluindo os já classificados como variable/variation. Sugere correções se necessário." : "Foca nos produtos simples para novos agrupamentos."}
+Lembra-te: OBRIGATÓRIO preencher attribute_values com valores concretos extraídos dos títulos!
 
 ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsContext}${knowledgeSection}`;
 
@@ -139,53 +173,74 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
         product_id: { type: "string" },
         attribute_values: {
           type: "object",
-          description: "Mapa atributo→valor. Ex: {\"Cor\": \"Preto\", \"Tamanho\": \"35\"}",
+          description: "Mapa atributo→valor CONCRETO extraído do título. Ex: {\"Cor\": \"Preto\", \"Tamanho\": \"35cm\"}. NUNCA vazio.",
           additionalProperties: { type: "string" },
         },
       },
       required: ["product_id", "attribute_values"],
     };
 
-    const toolParameters = {
-      type: "object",
-      properties: {
-        new_groups: {
-          type: "array",
-          description: "Novos grupos de variações detetados entre produtos simples",
-          items: {
-            type: "object",
-            properties: {
-              parent_title: { type: "string", description: "Título genérico do produto pai (sem atributos específicos)" },
-              attribute_names: {
-                type: "array",
-                items: { type: "string" },
-                description: "Nomes dos atributos que variam. Ex: [\"Cor\", \"Tamanho\"]",
-              },
-              variations: { type: "array", items: variationItemSchema },
+    const toolProperties: any = {
+      new_groups: {
+        type: "array",
+        description: "Novos grupos de variações detetados entre produtos simples",
+        items: {
+          type: "object",
+          properties: {
+            parent_title: { type: "string", description: "Título genérico em PT-PT (sem atributos específicos)" },
+            attribute_names: {
+              type: "array",
+              items: { type: "string" },
+              description: "Nomes dos atributos. Ex: [\"Cor\", \"Tamanho\"]",
             },
-            required: ["parent_title", "attribute_names", "variations"],
+            variations: { type: "array", items: variationItemSchema },
           },
-        },
-        add_to_existing: {
-          type: "array",
-          description: "Produtos simples para adicionar a grupos variáveis existentes",
-          items: {
-            type: "object",
-            properties: {
-              existing_parent_id: { type: "string" },
-              existing_parent_title: { type: "string" },
-              attribute_names: {
-                type: "array",
-                items: { type: "string" },
-              },
-              products_to_add: { type: "array", items: variationItemSchema },
-              reason: { type: "string" },
-            },
-            required: ["existing_parent_id", "existing_parent_title", "attribute_names", "products_to_add"],
-          },
+          required: ["parent_title", "attribute_names", "variations"],
         },
       },
-      required: ["new_groups", "add_to_existing"],
+      add_to_existing: {
+        type: "array",
+        description: "Produtos simples para adicionar a grupos variáveis existentes",
+        items: {
+          type: "object",
+          properties: {
+            existing_parent_id: { type: "string" },
+            existing_parent_title: { type: "string" },
+            attribute_names: { type: "array", items: { type: "string" } },
+            products_to_add: { type: "array", items: variationItemSchema },
+            reason: { type: "string" },
+          },
+          required: ["existing_parent_id", "existing_parent_title", "attribute_names", "products_to_add"],
+        },
+      },
+    };
+
+    const requiredFields = ["new_groups", "add_to_existing"];
+
+    // In full mode, add reclassify suggestions
+    if (isFullMode) {
+      toolProperties.reclassify = {
+        type: "array",
+        description: "Sugestões de correção para grupos existentes: mover variações, fundir grupos, etc.",
+        items: {
+          type: "object",
+          properties: {
+            action: { type: "string", enum: ["move_variation", "merge_groups", "split_group", "fix_parent_title"] },
+            description: { type: "string", description: "Descrição da correção sugerida" },
+            product_ids: { type: "array", items: { type: "string" }, description: "IDs dos produtos afetados" },
+            target_parent_id: { type: "string", description: "ID do parent de destino (para move/merge)" },
+            suggested_title: { type: "string", description: "Título corrigido (para fix_parent_title)" },
+          },
+          required: ["action", "description"],
+        },
+      };
+      requiredFields.push("reclassify");
+    }
+
+    const toolParameters = {
+      type: "object",
+      properties: toolProperties,
+      required: requiredFields,
       additionalProperties: false,
     };
 
@@ -206,7 +261,7 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
             type: "function",
             function: {
               name: "detect_variations",
-              description: "Devolve os grupos de variações detetados com suporte a múltiplos atributos",
+              description: "Devolve grupos de variações com atributos concretos, sugestões de adição e correções",
               parameters: toolParameters,
             },
           },
@@ -217,6 +272,16 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
+      if (aiResponse.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit excedido. Tenta novamente em alguns segundos." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (aiResponse.status === 402) {
+        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adiciona créditos em Settings → Workspace → Usage." }), {
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       throw new Error("AI error: " + aiResponse.status + " " + errText);
     }
 
@@ -224,7 +289,7 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
     const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
     if (!toolCall) {
       return new Response(
-        JSON.stringify({ groups: [], addToExisting: [], message: "IA não detetou variações." }),
+        JSON.stringify({ groups: [], addToExisting: [], reclassify: [], message: "IA não detetou variações." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -232,6 +297,7 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
     const parsed = JSON.parse(toolCall.function.arguments);
     const newGroups = parsed.new_groups || [];
     const addToExisting = parsed.add_to_existing || [];
+    const reclassify = parsed.reclassify || [];
 
     const allProductIds = new Set(products.map((p: any) => p.id));
     const validNewGroups = newGroups
@@ -253,6 +319,7 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
       JSON.stringify({
         groups: validNewGroups,
         addToExisting: validAddToExisting,
+        reclassify,
         total_products: products.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
