@@ -384,18 +384,21 @@ serve(async (req) => {
     }
 
     if (skipped > 0) {
-      console.log(`⏭️ Skipped ${skipped} duplicate products (existing SKUs)`);
+      console.log(`⏭️ Skipped ${skipped} products (no mapped fields to update)`);
+    }
+    if (updated > 0) {
+      console.log(`✏️ Updated ${updated} existing products (mapped fields only)`);
     }
 
     // Log activity
     await supabase.from("activity_log").insert({
       user_id: userId,
       action: "upload",
-      details: { file: fileName, products_count: inserted, skipped, woo_mode: isWooMode },
+      details: { file: fileName, products_count: inserted, updated, skipped, woo_mode: isWooMode },
     });
 
     return new Response(
-      JSON.stringify({ count: inserted, total: products.length, skipped, errors }),
+      JSON.stringify({ count: inserted, updated, total: products.length, skipped, errors }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
