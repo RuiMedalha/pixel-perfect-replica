@@ -1454,17 +1454,31 @@ const ProductsPage = () => {
       />
 
       {/* WooCommerce Publish Modal */}
-      <WooPublishModal
-        open={showPublishModal}
-        onClose={() => setShowPublishModal(false)}
-        productCount={selected.size}
-        isPending={publishWoo.isPending}
-        onConfirm={(fields) => {
-          publishWoo.mutate({ productIds: Array.from(selected), publishFields: fields });
-          setSelected(new Set());
-          setShowPublishModal(false);
-        }}
-      />
+      {(() => {
+        // Compute publish info: auto-include child variations for selected variable parents
+        const selectedArr = Array.from(selected);
+        const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
+        const variableParentIds = selectedProducts.filter(p => p.product_type === "variable").map(p => p.id);
+        const childVariations = (products ?? []).filter(p => p.parent_product_id && variableParentIds.includes(p.parent_product_id) && !selected.has(p.id));
+        const allPublishIds = [...selectedArr, ...childVariations.map(c => c.id)];
+        const variationCount = childVariations.length;
+
+        return (
+          <WooPublishModal
+            open={showPublishModal}
+            onClose={() => setShowPublishModal(false)}
+            productCount={allPublishIds.length}
+            variableParentCount={variableParentIds.length}
+            autoIncludedVariationsCount={variationCount}
+            isPending={publishWoo.isPending}
+            onConfirm={(fields) => {
+              publishWoo.mutate({ productIds: allPublishIds, publishFields: fields });
+              setSelected(new Set());
+              setShowPublishModal(false);
+            }}
+          />
+        );
+      })()}
     </div>
   );
 };
