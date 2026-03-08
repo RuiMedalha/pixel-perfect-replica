@@ -7,6 +7,36 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Attempt to recover truncated JSON (e.g. from LLM token limit) */
+function parseWithRecovery(raw: string): any {
+  const openBraces = (raw.match(/{/g) || []).length;
+  const closeBraces = (raw.match(/}/g) || []).length;
+  const openBrackets = (raw.match(/\[/g) || []).length;
+  const closeBrackets = (raw.match(/\]/g) || []).length;
+
+  let trimmed = raw;
+  const lastBrace = raw.lastIndexOf("}");
+  const lastBracket = raw.lastIndexOf("]");
+  const lastComplete = Math.max(lastBrace, lastBracket);
+  if (lastComplete > 0) {
+    trimmed = raw.substring(0, lastComplete + 1);
+  }
+
+  const missingBrackets = openBrackets - (trimmed.match(/\]/g) || []).length;
+  const missingBraces = openBraces - (trimmed.match(/}/g) || []).length;
+  trimmed = trimmed.replace(/,\s*$/, "");
+  trimmed += "]".repeat(Math.max(0, missingBrackets)) + "}".repeat(Math.max(0, missingBraces));
+
+  try {
+    const result = JSON.parse(trimmed);
+    console.warn("Recovered truncated JSON successfully");
+    return result;
+  } catch (_e) {
+    console.error("JSON recovery failed, returning empty result");
+    return { new_groups: [], add_to_existing: [], reclassify: [] };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -293,7 +323,15 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
       );
     }
 
-    const parsed = JSON.parse(toolCall.function.arguments);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(toolCall.function.arguments);
+    } catch (_parseErr) {
+      // Attempt to recover truncated JSON from tool_calls arguments
+      const raw = toolCall.function.arguments || "";
+      console.warn("JSON parse failed, attempting recovery on", raw.length, "chars");
+      parsed = parseWithRecovery(raw);
+    }
     const newGroups = parsed.new_groups || [];
     const addToExisting = parsed.add_to_existing || [];
     const reclassify = parsed.reclassify || [];
