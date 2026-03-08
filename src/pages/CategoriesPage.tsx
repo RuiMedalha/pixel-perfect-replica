@@ -162,9 +162,15 @@ const CategoriesPage = () => {
           </h1>
           <p className="text-muted-foreground mt-1">{flat.length} categoria(s) no workspace</p>
         </div>
-        <Button onClick={() => openCreate()}>
-          <Plus className="w-4 h-4 mr-1" /> Nova Categoria
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => syncWooCategories.mutate()} disabled={syncWooCategories.isPending}>
+            {syncWooCategories.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+            Sincronizar WooCommerce
+          </Button>
+          <Button onClick={() => openCreate()}>
+            <Plus className="w-4 h-4 mr-1" /> Nova Categoria
+          </Button>
+        </div>
       </div>
 
       <Card>
