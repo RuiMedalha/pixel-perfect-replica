@@ -790,41 +790,76 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      {/* WooCommerce Publish Progress */}
-      {(publishWoo.isPending || publishResults) && (
-        <Card className={cn(
-          "border-l-4",
-          publishWoo.isPending ? "border-l-primary" : 
-          publishResults?.some(r => r.status === "error") ? "border-l-warning" : "border-l-success"
-        )}>
+      {/* WooCommerce Publish Job Progress */}
+      {activePublishJob && activePublishJob.status !== "completed" && activePublishJob.status !== "cancelled" && activePublishJob.status !== "failed" && (
+        <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {publishWoo.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                {activePublishJob.status === "scheduled" ? (
+                  <Send className="w-4 h-4 text-primary" />
                 ) : (
-                  <Check className="w-4 h-4 text-primary" />
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 )}
                 <span className="text-sm font-medium">
-                  {publishWoo.isPending
-                    ? `A publicar ${publishTotal} produto(s) no WooCommerce...`
-                    : "Publicação concluída"}
+                  {activePublishJob.status === "scheduled"
+                    ? `Agendado para ${activePublishJob.scheduled_for ? new Date(activePublishJob.scheduled_for).toLocaleString("pt-PT") : "..."}`
+                    : `A publicar no WC: ${activePublishJob.current_product_name || "A iniciar..."}`
+                  }
                 </span>
               </div>
-              {!publishWoo.isPending && (
-                <Button size="sm" variant="ghost" onClick={() => setPublishResults(null)} className="h-7 px-2 text-xs">
-                  <XCircle className="w-3 h-3 mr-1" /> Fechar
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-mono text-muted-foreground">
+                  {activePublishJob.processed_products}/{activePublishJob.total_products}
+                </span>
+                {activePublishJob.failed_products > 0 && (
+                  <Badge variant="destructive" className="text-[10px]">
+                    {activePublishJob.failed_products} erros
+                  </Badge>
+                )}
+                <Button size="sm" variant="destructive" onClick={cancelPublishJob} className="h-7 px-2 text-xs">
+                  <Ban className="w-3 h-3 mr-1" /> Cancelar
                 </Button>
-              )}
+              </div>
             </div>
-            {publishWoo.isPending && (
-              <Progress className="h-2 mb-2" />
-            )}
-            {publishResults && (
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                {publishResults.map((r, i) => {
+            <Progress value={activePublishJob.total_products > 0 ? (activePublishJob.processed_products / activePublishJob.total_products) * 100 : 0} className="h-2" />
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              Pode fechar o browser — a publicação continua em segundo plano.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* WooCommerce Publish Job Completed */}
+      {activePublishJob && (activePublishJob.status === "completed" || activePublishJob.status === "cancelled" || activePublishJob.status === "failed") && (
+        <Card className={cn(
+          "border-l-4",
+          activePublishJob.status === "completed" ? "border-l-success" : "border-l-warning"
+        )}>
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {activePublishJob.status === "completed" ? (
+                  <Check className="w-4 h-4 text-success" />
+                ) : (
+                  <Ban className="w-4 h-4 text-warning" />
+                )}
+                <span className="text-sm">
+                  {activePublishJob.status === "completed"
+                    ? `Publicação concluída: ${activePublishJob.processed_products - activePublishJob.failed_products} publicados, ${activePublishJob.failed_products} erros`
+                    : `Publicação cancelada: ${activePublishJob.processed_products} de ${activePublishJob.total_products} processados`
+                  }
+                </span>
+              </div>
+              <Button size="sm" variant="ghost" onClick={dismissPublishJob} className="h-7 px-2 text-xs">
+                <XCircle className="w-3 h-3 mr-1" /> Fechar
+              </Button>
+            </div>
+            {activePublishJob.status === "completed" && activePublishJob.results && (activePublishJob.results as any[]).length > 0 && (
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {(activePublishJob.results as any[]).map((r: any, i: number) => {
                   const product = (products ?? []).find(p => p.id === r.id);
-                  const label = product?.optimized_title || product?.original_title || product?.sku || r.id.slice(0, 8);
+                  const label = product?.optimized_title || product?.original_title || product?.sku || r.id?.slice(0, 8);
                   return (
                     <div key={i} className={cn(
                       "flex items-center gap-2 text-xs px-2 py-1 rounded",
@@ -854,7 +889,6 @@ const ProductsPage = () => {
           </CardContent>
         </Card>
       )}
-
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
           <div className="relative flex-1 min-w-[150px] sm:min-w-[200px] max-w-sm">
