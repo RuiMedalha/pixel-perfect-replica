@@ -712,7 +712,7 @@ async function publishVariableProduct(
   for (const child of (children || [])) {
     try {
       const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
-      const variationAttrs = buildVariationAttributes(child);
+      const variationAttrs = buildVariationAttributes(child, parent);
       if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
 
       let existingVarWooId = child.woocommerce_id;
