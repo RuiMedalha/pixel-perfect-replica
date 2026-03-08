@@ -569,10 +569,36 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
   }));
 }
 
-function buildVariationAttributes(product: any): Array<{ name: string; option: string }> {
+function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
   const attrs = product.attributes || [];
-  if (!Array.isArray(attrs)) return [];
-  return attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
+  if (Array.isArray(attrs)) {
+    const mapped = attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
+    if (mapped.length > 0) return mapped;
+  }
+
+  // Fallback: infer from parent's attributes by matching child title
+  if (parent) {
+    const parentAttrs = parent.attributes || [];
+    if (Array.isArray(parentAttrs)) {
+      const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
+      if (childTitle) {
+        const result: Array<{ name: string; option: string }> = [];
+        for (const attr of parentAttrs) {
+          const values: string[] = attr.values || attr.options || [];
+          const sorted = [...values].sort((a, b) => b.length - a.length);
+          for (const val of sorted) {
+            if (val && childTitle.includes(val.toLowerCase())) {
+              result.push({ name: attr.name, option: val });
+              break;
+            }
+          }
+        }
+        if (result.length > 0) return result;
+      }
+    }
+  }
+
+  return [];
 }
 
 async function publishSingleProduct(
