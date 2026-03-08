@@ -776,6 +776,67 @@ const ProductsPage = () => {
         </Card>
       )}
 
+      {/* WooCommerce Publish Progress */}
+      {(publishWoo.isPending || publishResults) && (
+        <Card className={cn(
+          "border-l-4",
+          publishWoo.isPending ? "border-l-primary" : 
+          publishResults?.some(r => r.status === "error") ? "border-l-warning" : "border-l-primary"
+        )}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {publishWoo.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                ) : (
+                  <Check className="w-4 h-4 text-primary" />
+                )}
+                <span className="text-sm font-medium">
+                  {publishWoo.isPending
+                    ? `A publicar ${publishTotal} produto(s) no WooCommerce...`
+                    : "Publicação concluída"}
+                </span>
+              </div>
+              {!publishWoo.isPending && (
+                <Button size="sm" variant="ghost" onClick={() => setPublishResults(null)} className="h-7 px-2 text-xs">
+                  <XCircle className="w-3 h-3 mr-1" /> Fechar
+                </Button>
+              )}
+            </div>
+            {publishWoo.isPending && (
+              <Progress className="h-2 mb-2" />
+            )}
+            {publishResults && (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {publishResults.map((r, i) => {
+                  const product = (products ?? []).find(p => p.id === r.id);
+                  const label = product?.optimized_title || product?.original_title || product?.sku || r.id.slice(0, 8);
+                  return (
+                    <div key={i} className={cn(
+                      "flex items-center gap-2 text-xs px-2 py-1 rounded",
+                      r.status === "published" ? "bg-primary/5 text-primary" :
+                      r.status === "error" ? "bg-destructive/5 text-destructive" :
+                      "bg-muted text-muted-foreground"
+                    )}>
+                      {r.status === "published" ? <Check className="w-3 h-3 shrink-0" /> : 
+                       r.status === "error" ? <X className="w-3 h-3 shrink-0" /> :
+                       <Ban className="w-3 h-3 shrink-0" />}
+                      <span className="truncate flex-1">{label}</span>
+                      {r.woocommerce_id && (
+                        <Badge variant="secondary" className="text-[9px]">WC #{r.woocommerce_id}</Badge>
+                      )}
+                      {r.error && (
+                        <span className="text-[10px] text-destructive truncate max-w-[200px]" title={r.error}>{r.error}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
           <div className="relative flex-1 min-w-[150px] sm:min-w-[200px] max-w-sm">
