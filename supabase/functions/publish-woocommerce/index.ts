@@ -867,7 +867,7 @@ async function publishVariation(
 ): Promise<WooResult> {
   const { data: parentRow } = await supabase
     .from("products")
-    .select("woocommerce_id, attributes")
+    .select("woocommerce_id, attributes, optimized_title, original_title")
     .eq("id", variation.parent_product_id)
     .single();
 
