@@ -1452,6 +1452,19 @@ const ProductsPage = () => {
         product={detailProduct}
         onClose={() => setDetailProduct(null)}
       />
+
+      {/* WooCommerce Publish Modal */}
+      <WooPublishModal
+        open={showPublishModal}
+        onClose={() => setShowPublishModal(false)}
+        productCount={selected.size}
+        isPending={publishWoo.isPending}
+        onConfirm={(fields) => {
+          publishWoo.mutate({ productIds: Array.from(selected), publishFields: fields });
+          setSelected(new Set());
+          setShowPublishModal(false);
+        }}
+      />
     </div>
   );
 };
