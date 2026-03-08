@@ -273,42 +273,53 @@ Deno.serve(async (req) => {
           } else if (product.category) {
             // Parse hierarchical string like "CONFEÇÃO>Linha 900>Eletricos>Marmitas"
             const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
-            const leafName = parts[parts.length - 1] || product.category;
             
-            // Try to find matching category in local DB by name (leaf)
-            const { data: localCats } = await supabase
-              .from("categories")
-              .select("woocommerce_id, name")
-              .ilike("name", leafName)
-              .limit(1);
-            
-            if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
-              wooProduct.categories = [{ id: localCats[0].woocommerce_id }];
-              console.log(`[categories] Resolved leaf "${leafName}" → WC ID ${localCats[0].woocommerce_id}`);
-            } else {
-              // Try WooCommerce API search for the leaf category
+            // Helper: resolve a single category name via local DB or WC API
+            const resolveCatName = async (name: string): Promise<number | null> => {
+              // Local DB first
+              const { data: localCats } = await supabase
+                .from("categories")
+                .select("woocommerce_id")
+                .ilike("name", name)
+                .not("woocommerce_id", "is", null)
+                .limit(1);
+              if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
+                return localCats[0].woocommerce_id;
+              }
+              // WC API fallback
               try {
                 const searchResp = await fetch(
-                  `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(leafName)}&per_page=10`,
+                  `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
                   { headers: { Authorization: `Basic ${auth}` } }
                 );
                 if (searchResp.ok) {
                   const wooCats = await searchResp.json();
-                  // Find exact match (case-insensitive)
-                  const exactMatch = wooCats.find((c: any) => 
-                    c.name.toLowerCase() === leafName.toLowerCase()
+                  const exactMatch = wooCats.find((c: any) =>
+                    c.name.toLowerCase() === name.toLowerCase()
                   );
-                  if (exactMatch) {
-                    wooProduct.categories = [{ id: exactMatch.id }];
-                    console.log(`[categories] Resolved leaf "${leafName}" → WC ID ${exactMatch.id} via API`);
-                  } else {
-                    // Don't send categories at all if we can't resolve — preserve existing on WooCommerce
-                    console.log(`[categories] Could not resolve "${leafName}" in WooCommerce — skipping to preserve existing categories`);
-                  }
+                  if (exactMatch) return exactMatch.id;
                 }
-              } catch (e) {
-                console.log(`[categories] WC API search failed for "${leafName}": ${(e as Error).message} — skipping`);
+              } catch { /* skip */ }
+              return null;
+            };
+
+            // Resolve every level of the hierarchy
+            const resolvedCatIds: Array<{ id: number }> = [];
+            for (const part of parts) {
+              const wcId = await resolveCatName(part);
+              if (wcId) {
+                resolvedCatIds.push({ id: wcId });
+                console.log(`[categories] Resolved "${part}" → WC ID ${wcId}`);
+              } else {
+                console.log(`[categories] Could not resolve "${part}" — skipped`);
               }
+            }
+
+            if (resolvedCatIds.length > 0) {
+              wooProduct.categories = resolvedCatIds;
+              console.log(`[categories] Full hierarchy resolved: ${JSON.stringify(resolvedCatIds)}`);
+            } else {
+              console.log(`[categories] No categories resolved from "${product.category}" — skipping to preserve existing`);
             }
           }
         }
