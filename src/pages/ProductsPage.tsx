@@ -1494,7 +1494,7 @@ const ProductsPage = () => {
                       <div className="space-y-1.5">
                         {group.variations.map((v, vi) => (
                           <div key={vi} className="flex items-center gap-2 p-1.5 rounded bg-muted/30">
-                            <Badge variant="secondary" className="text-xs shrink-0">{v.attribute_value}</Badge>
+                            <Badge variant="secondary" className="text-xs shrink-0">{Object.values(v.attribute_values).join(" / ")}</Badge>
                             <span className="text-xs truncate flex-1">
                               {(products ?? []).find(p => p.id === v.product_id)?.original_title ?? v.product_id.substring(0, 8)}
                             </span>
@@ -1561,11 +1561,11 @@ const ProductsPage = () => {
             variant="outline"
             size="sm"
             onClick={() => {
-              setDetectedGroups(prev => [...prev, {
-                parent_title: "Novo Grupo",
-                attribute_name: "Tamanho",
-                variations: [],
-              }]);
+               setDetectedGroups(prev => [...prev, {
+                 parent_title: "Novo Grupo",
+                 attribute_names: ["Tamanho"],
+                 variations: [],
+               }]);
             }}
           >
             <Plus className="w-4 h-4 mr-1" /> Novo Grupo

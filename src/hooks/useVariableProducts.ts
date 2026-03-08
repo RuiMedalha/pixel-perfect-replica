@@ -4,22 +4,26 @@ import { toast } from "sonner";
 
 export interface VariationGroup {
   parent_title: string;
-  attribute_name: string;
+  attribute_names: string[];
   variations: Array<{
     product_id: string;
-    attribute_value: string;
+    attribute_values: Record<string, string>;
   }>;
+  // Legacy single-attribute compat
+  attribute_name?: string;
 }
 
 export interface AddToExistingGroup {
   existing_parent_id: string;
   existing_parent_title: string;
-  attribute_name: string;
+  attribute_names: string[];
   products_to_add: Array<{
     product_id: string;
-    attribute_value: string;
+    attribute_values: Record<string, string>;
   }>;
   reason?: string;
+  // Legacy
+  attribute_name?: string;
 }
 
 interface DetectInput {
@@ -41,8 +45,8 @@ interface DetectInput {
   existingGroups?: Array<{
     parent_id: string;
     parent_title: string;
-    attribute_name: string;
-    existing_variations: Array<{ sku: string | null; attribute_value: string }>;
+    attribute_names: string[];
+    existing_variations: Array<{ sku: string | null; attribute_values: Record<string, string> }>;
   }>;
   knowledgeContext?: string;
 }
@@ -51,6 +55,33 @@ interface DetectResult {
   groups: VariationGroup[];
   addToExisting: AddToExistingGroup[];
   total_products: number;
+}
+
+/** Normalize legacy single-attribute format to multi-attribute */
+function normalizeGroup(g: any): VariationGroup {
+  const attrNames = g.attribute_names || (g.attribute_name ? [g.attribute_name] : ["Variação"]);
+  return {
+    parent_title: g.parent_title,
+    attribute_names: attrNames,
+    variations: (g.variations || []).map((v: any) => ({
+      product_id: v.product_id,
+      attribute_values: v.attribute_values || (v.attribute_value ? { [attrNames[0]]: v.attribute_value } : {}),
+    })),
+  };
+}
+
+function normalizeAddition(a: any): AddToExistingGroup {
+  const attrNames = a.attribute_names || (a.attribute_name ? [a.attribute_name] : ["Variação"]);
+  return {
+    existing_parent_id: a.existing_parent_id,
+    existing_parent_title: a.existing_parent_title,
+    attribute_names: attrNames,
+    products_to_add: (a.products_to_add || []).map((v: any) => ({
+      product_id: v.product_id,
+      attribute_values: v.attribute_values || (v.attribute_value ? { [attrNames[0]]: v.attribute_value } : {}),
+    })),
+    reason: a.reason,
+  };
 }
 
 export function useDetectVariations() {
@@ -67,8 +98,8 @@ export function useDetectVariations() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return {
-        groups: data.groups || [],
-        addToExisting: data.addToExisting || [],
+        groups: (data.groups || []).map(normalizeGroup),
+        addToExisting: (data.addToExisting || []).map(normalizeAddition),
         total_products: data.total_products || 0,
       };
     },
@@ -93,15 +124,18 @@ export function useApplyVariations() {
         const parentVariation = group.variations[0];
         const parentId = parentVariation.product_id;
 
+        // Build parent attributes array: [{name, values: [...]}]
+        const parentAttrs = group.attribute_names.map(name => ({
+          name,
+          values: [...new Set(group.variations.map(v => v.attribute_values[name]).filter(Boolean))],
+        }));
+
         const { error: parentError } = await supabase
           .from("products")
           .update({
             product_type: "variable",
             optimized_title: group.parent_title,
-            attributes: [{
-              name: group.attribute_name,
-              values: group.variations.map((v) => v.attribute_value),
-            }],
+            attributes: parentAttrs,
           })
           .eq("id", parentId);
 
@@ -111,15 +145,18 @@ export function useApplyVariations() {
         }
 
         for (const variation of group.variations.slice(1)) {
+          // Build child attributes: [{name, value}]
+          const childAttrs = group.attribute_names.map(name => ({
+            name,
+            value: variation.attribute_values[name] || "",
+          }));
+
           await supabase
             .from("products")
             .update({
               product_type: "variation",
               parent_product_id: parentId,
-              attributes: [{
-                name: group.attribute_name,
-                value: variation.attribute_value,
-              }],
+              attributes: childAttrs,
             })
             .eq("id", variation.product_id);
         }
@@ -130,7 +167,6 @@ export function useApplyVariations() {
       // Apply additions to existing groups
       if (addToExisting && addToExisting.length > 0) {
         for (const addition of addToExisting) {
-          // First get current parent attributes to update values list
           const { data: parent } = await supabase
             .from("products")
             .select("attributes")
@@ -138,38 +174,42 @@ export function useApplyVariations() {
             .single();
 
           const currentAttrs = Array.isArray(parent?.attributes) ? parent.attributes as any[] : [];
-          const attrIdx = currentAttrs.findIndex((a: any) => a.name === addition.attribute_name);
 
           for (const product of addition.products_to_add) {
+            const childAttrs = addition.attribute_names.map(name => ({
+              name,
+              value: product.attribute_values[name] || "",
+            }));
+
             await supabase
               .from("products")
               .update({
                 product_type: "variation",
                 parent_product_id: addition.existing_parent_id,
-                attributes: [{
-                  name: addition.attribute_name,
-                  value: product.attribute_value,
-                }],
+                attributes: childAttrs,
               })
               .eq("id", product.product_id);
 
-            // Add new value to parent's attribute values
-            if (attrIdx >= 0) {
-              const values = currentAttrs[attrIdx].values || [];
-              if (!values.includes(product.attribute_value)) {
-                values.push(product.attribute_value);
-                currentAttrs[attrIdx].values = values;
+            // Update parent attribute values
+            for (const name of addition.attribute_names) {
+              const attrIdx = currentAttrs.findIndex((a: any) => a.name === name);
+              const val = product.attribute_values[name];
+              if (val && attrIdx >= 0) {
+                const values = currentAttrs[attrIdx].values || [];
+                if (!values.includes(val)) {
+                  values.push(val);
+                  currentAttrs[attrIdx].values = values;
+                }
+              } else if (val && attrIdx < 0) {
+                currentAttrs.push({ name, values: [val] });
               }
             }
           }
 
-          // Update parent attributes
-          if (attrIdx >= 0) {
-            await supabase
-              .from("products")
-              .update({ attributes: currentAttrs })
-              .eq("id", addition.existing_parent_id);
-          }
+          await supabase
+            .from("products")
+            .update({ attributes: currentAttrs })
+            .eq("id", addition.existing_parent_id);
 
           results.push({
             group: addition.existing_parent_title,

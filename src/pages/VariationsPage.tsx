@@ -49,16 +49,20 @@ const VariationsPage = () => {
     return variableProducts.map(parent => {
       const children = variationProducts.filter(p => p.parent_product_id === parent.id);
       const attrs = Array.isArray(parent.attributes) ? parent.attributes as any[] : [];
+      const attrNames = attrs.map((a: any) => a.name).filter(Boolean);
       return {
         parent_id: parent.id,
         parent_title: parent.optimized_title || parent.original_title || "",
-        attribute_name: attrs[0]?.name || "Variação",
+        attribute_names: attrNames.length > 0 ? attrNames : ["Variação"],
         existing_variations: children.map(c => {
           const childAttrs = Array.isArray(c.attributes) ? c.attributes as any[] : [];
-          return {
-            sku: c.sku,
-            attribute_value: childAttrs[0]?.value || c.original_title || "",
-          };
+          const vals: Record<string, string> = {};
+          childAttrs.forEach((a: any) => { if (a.name && a.value) vals[a.name] = a.value; });
+          // Fallback for legacy single-value
+          if (Object.keys(vals).length === 0 && childAttrs[0]?.value) {
+            vals[attrNames[0] || "Variação"] = childAttrs[0].value;
+          }
+          return { sku: c.sku, attribute_values: vals };
         }),
       };
     });
@@ -359,9 +363,9 @@ const VariationsPage = () => {
                             </button>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate">{group.parent_title}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                 <Badge variant="secondary" className="text-[10px]">{group.variations.length} variações</Badge>
-                                <Badge variant="outline" className="text-[10px]">{group.attribute_name}</Badge>
+                                {group.attribute_names.map(n => <Badge key={n} variant="outline" className="text-[10px]">{n}</Badge>)}
                               </div>
                             </div>
                           </div>
@@ -372,7 +376,7 @@ const VariationsPage = () => {
                                   <thead className="bg-muted/50"><tr>
                                     <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
                                     <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
-                                    <th className="text-left p-2 font-medium text-muted-foreground">{group.attribute_name}</th>
+                                    {group.attribute_names.map(n => <th key={n} className="text-left p-2 font-medium text-muted-foreground">{n}</th>)}
                                   </tr></thead>
                                   <tbody>
                                     {group.variations.map((v, vi) => {
@@ -381,7 +385,9 @@ const VariationsPage = () => {
                                         <tr key={vi} className="border-t">
                                           <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
                                           <td className="p-2 truncate max-w-[200px]">{p?.original_title ?? "—"}</td>
-                                          <td className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_value}</Badge></td>
+                                          {group.attribute_names.map(n => (
+                                            <td key={n} className="p-2"><Badge variant="outline" className="text-[10px]">{v.attribute_values[n] || "—"}</Badge></td>
+                                          ))}
                                         </tr>
                                       );
                                     })}
@@ -414,7 +420,7 @@ const VariationsPage = () => {
                               </p>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <Badge className="text-[10px] bg-primary/20 text-primary border-0">+{addition.products_to_add.length} novo(s)</Badge>
-                                <Badge variant="outline" className="text-[10px]">{addition.attribute_name}</Badge>
+                                {addition.attribute_names.map(n => <Badge key={n} variant="outline" className="text-[10px]">{n}</Badge>)}
                                 {addition.reason && <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{addition.reason}</span>}
                               </div>
                             </div>
@@ -434,15 +440,17 @@ const VariationsPage = () => {
                                       <table className="w-full text-xs">
                                         <thead className="bg-muted/50"><tr>
                                           <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
-                                          <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                          {addition.attribute_names.map(n => <th key={n} className="text-left p-2 font-medium text-muted-foreground">{n}</th>)}
                                         </tr></thead>
                                         <tbody>
                                           {existingVariations.length === 0 ? (
-                                            <tr><td colSpan={2} className="p-2 text-muted-foreground italic">Sem variações</td></tr>
+                                            <tr><td colSpan={1 + addition.attribute_names.length} className="p-2 text-muted-foreground italic">Sem variações</td></tr>
                                           ) : existingVariations.map((ev, evi) => (
                                             <tr key={evi} className="border-t">
                                               <td className="p-2 font-mono">{ev.sku ?? "—"}</td>
-                                              <td className="p-2"><Badge variant="outline" className="text-[10px]">{ev.attribute_value}</Badge></td>
+                                              {addition.attribute_names.map(n => (
+                                                <td key={n} className="p-2"><Badge variant="outline" className="text-[10px]">{ev.attribute_values[n] || "—"}</Badge></td>
+                                              ))}
                                             </tr>
                                           ))}
                                         </tbody>
@@ -456,10 +464,10 @@ const VariationsPage = () => {
                                     </p>
                                     <div className="border border-primary/30 rounded-lg overflow-hidden bg-primary/5">
                                       <table className="w-full text-xs">
-                                        <thead className="bg-primary/10"><tr>
+                                         <thead className="bg-primary/10"><tr>
                                           <th className="text-left p-2 font-medium text-muted-foreground">SKU</th>
                                           <th className="text-left p-2 font-medium text-muted-foreground">Título</th>
-                                          <th className="text-left p-2 font-medium text-muted-foreground">{addition.attribute_name}</th>
+                                          {addition.attribute_names.map(n => <th key={n} className="text-left p-2 font-medium text-muted-foreground">{n}</th>)}
                                         </tr></thead>
                                         <tbody>
                                           {addition.products_to_add.map((v, vi) => {
@@ -468,7 +476,9 @@ const VariationsPage = () => {
                                               <tr key={vi} className="border-t border-primary/10">
                                                 <td className="p-2 font-mono">{p?.sku ?? "—"}</td>
                                                 <td className="p-2 truncate max-w-[150px]">{p?.original_title ?? "—"}</td>
-                                                <td className="p-2"><Badge className="text-[10px] bg-primary/20 text-primary border-0">{v.attribute_value}</Badge></td>
+                                                {addition.attribute_names.map(n => (
+                                                  <td key={n} className="p-2"><Badge className="text-[10px] bg-primary/20 text-primary border-0">{v.attribute_values[n] || "—"}</Badge></td>
+                                                ))}
                                               </tr>
                                             );
                                           })}
