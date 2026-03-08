@@ -479,6 +479,7 @@ const VariationsPage = () => {
                                                 {addition.attribute_names.map(n => (
                                                   <td key={n} className="p-2"><Badge className="text-[10px] bg-primary/20 text-primary border-0">{v.attribute_values[n] || "—"}</Badge></td>
                                                 ))}
+                                              </tr>
                                             );
                                           })}
                                         </tbody>
