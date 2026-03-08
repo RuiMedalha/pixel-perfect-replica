@@ -154,6 +154,27 @@ async function splitPdfFile(file: File): Promise<File[]> {
   }
 }
 
+async function pollForParseResult(fileName: string, userId: string, workspaceId?: string, maxWaitMs = 300_000): Promise<any> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const query = supabase
+      .from("uploaded_files")
+      .select("metadata, status")
+      .eq("user_id", userId)
+      .eq("file_name", fileName)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (workspaceId) query.eq("workspace_id", workspaceId);
+    const { data } = await query.maybeSingle();
+    const meta = data?.metadata as any;
+    if (meta?.parseResult?.done) {
+      return meta.parseResult;
+    }
+  }
+  return { count: 0, updated: 0, total: 0, skipped: 0, errors: ["Timeout ao aguardar processamento"] };
+}
+
 export function useUploadCatalog() {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [customFields, setCustomFields] = useState<ProductField[]>([]);
