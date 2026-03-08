@@ -807,10 +807,22 @@ async function publishVariation(
       }
     }
 
-    const action: "created" | "updated" = existingVarWooId ? "updated" : "created";
-    const varWooData = existingVarWooId
-      ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
-      : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+    let action: "created" | "updated" = existingVarWooId ? "updated" : "created";
+    let varWooData;
+    try {
+      varWooData = existingVarWooId
+        ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
+        : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+    } catch (skuErr) {
+      if (skuErr instanceof WooSkuConflictError) {
+        console.log(`SKU conflict for variation ${variation.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
+        varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${skuErr.resourceId}`, "PUT", variationPayload);
+        await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", variation.id);
+        action = "updated";
+      } else {
+        throw skuErr;
+      }
+    }
 
     await supabase
       .from("products")
