@@ -267,6 +267,7 @@ serve(async (req) => {
               ? String(p.focus_keyword).split(",").map((s: string) => s.trim()).filter(Boolean)
               : null,
             seo_slug: toStr(p.seo_slug, 200),
+            woocommerce_id: p.woocommerce_id ? parseInt(String(p.woocommerce_id), 10) || null : null,
           };
         });
 
