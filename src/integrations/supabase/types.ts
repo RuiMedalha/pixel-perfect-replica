@@ -575,6 +575,77 @@ export type Database = {
         }
         Relationships: []
       }
+      publish_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          current_product_name: string | null
+          error_message: string | null
+          failed_products: number
+          id: string
+          pricing: Json | null
+          processed_products: number
+          product_ids: string[]
+          publish_fields: string[] | null
+          results: Json | null
+          scheduled_for: string | null
+          started_at: string | null
+          status: string
+          total_products: number
+          updated_at: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          current_product_name?: string | null
+          error_message?: string | null
+          failed_products?: number
+          id?: string
+          pricing?: Json | null
+          processed_products?: number
+          product_ids?: string[]
+          publish_fields?: string[] | null
+          results?: Json | null
+          scheduled_for?: string | null
+          started_at?: string | null
+          status?: string
+          total_products?: number
+          updated_at?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          current_product_name?: string | null
+          error_message?: string | null
+          failed_products?: number
+          id?: string
+          pricing?: Json | null
+          processed_products?: number
+          product_ids?: string[]
+          publish_fields?: string[] | null
+          results?: Json | null
+          scheduled_for?: string | null
+          started_at?: string | null
+          status?: string
+          total_products?: number
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publish_jobs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           created_at: string
