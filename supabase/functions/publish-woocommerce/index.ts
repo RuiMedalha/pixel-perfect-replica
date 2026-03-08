@@ -523,8 +523,10 @@ async function buildBasePayload(
   return wooProduct;
 }
 
-function buildAttributesForParent(variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+function buildAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
   const attrMap = new Map<string, Set<string>>();
+
+  // First, try to collect from children's individual attributes ({name, value})
   for (const v of variations) {
     const attrs = v.attributes || [];
     if (Array.isArray(attrs)) {
@@ -536,6 +538,29 @@ function buildAttributesForParent(variations: any[]): Array<{ name: string; opti
       }
     }
   }
+
+  // Fallback: if no attributes found from children, use parent's attributes ({name, values[]})
+  if (attrMap.size === 0) {
+    const parentAttrs = parent.attributes || [];
+    if (Array.isArray(parentAttrs)) {
+      for (const attr of parentAttrs) {
+        if (attr.name && Array.isArray(attr.values) && attr.values.length > 0) {
+          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
+          for (const val of attr.values) {
+            if (val) attrMap.get(attr.name)!.add(val);
+          }
+        }
+        // Also handle {name, options[]} format from previous WooCommerce syncs
+        if (attr.name && Array.isArray(attr.options) && attr.options.length > 0) {
+          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
+          for (const val of attr.options) {
+            if (val) attrMap.get(attr.name)!.add(val);
+          }
+        }
+      }
+    }
+  }
+
   return Array.from(attrMap.entries()).map(([name, values]) => ({
     name,
     options: Array.from(values),
@@ -544,10 +569,36 @@ function buildAttributesForParent(variations: any[]): Array<{ name: string; opti
   }));
 }
 
-function buildVariationAttributes(product: any): Array<{ name: string; option: string }> {
+function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
   const attrs = product.attributes || [];
-  if (!Array.isArray(attrs)) return [];
-  return attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
+  if (Array.isArray(attrs)) {
+    const mapped = attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
+    if (mapped.length > 0) return mapped;
+  }
+
+  // Fallback: infer from parent's attributes by matching child title
+  if (parent) {
+    const parentAttrs = parent.attributes || [];
+    if (Array.isArray(parentAttrs)) {
+      const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
+      if (childTitle) {
+        const result: Array<{ name: string; option: string }> = [];
+        for (const attr of parentAttrs) {
+          const values: string[] = attr.values || attr.options || [];
+          const sorted = [...values].sort((a, b) => b.length - a.length);
+          for (const val of sorted) {
+            if (val && childTitle.includes(val.toLowerCase())) {
+              result.push({ name: attr.name, option: val });
+              break;
+            }
+          }
+        }
+        if (result.length > 0) return result;
+      }
+    }
+  }
+
+  return [];
 }
 
 async function publishSingleProduct(
@@ -625,7 +676,7 @@ async function publishVariableProduct(
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
 
-  const attributes = buildAttributesForParent(children || []);
+  const attributes = buildAttributesForParent(parent, children || []);
   if (attributes.length > 0) parentPayload.attributes = attributes;
 
   if (has("upsells")) {
@@ -661,7 +712,7 @@ async function publishVariableProduct(
   for (const child of (children || [])) {
     try {
       const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
-      const variationAttrs = buildVariationAttributes(child);
+      const variationAttrs = buildVariationAttributes(child, parent);
       if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
 
       let existingVarWooId = child.woocommerce_id;
@@ -705,7 +756,7 @@ async function publishVariation(
 ): Promise<WooResult> {
   const { data: parentRow } = await supabase
     .from("products")
-    .select("woocommerce_id")
+    .select("woocommerce_id, attributes")
     .eq("id", variation.parent_product_id)
     .single();
 
@@ -713,7 +764,7 @@ async function publishVariation(
 
   if (parentWooId) {
     const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
-    const variationAttrs = buildVariationAttributes(variation);
+    const variationAttrs = buildVariationAttributes(variation, parentRow);
     if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
 
     let existingVarWooId = variation.woocommerce_id;
