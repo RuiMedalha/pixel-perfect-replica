@@ -366,6 +366,195 @@ const ProductsPage = () => {
     { value: "error", label: "Erro" },
   ];
 
+  const PhaseIndicator = ({ product }: { product: Product }) => {
+    const p1 = !!(product.optimized_title || product.optimized_description || product.optimized_short_description);
+    const p2 = !!(product.meta_title || product.meta_description || product.seo_slug || product.faq);
+    const p3 = !!(product.optimized_price || (product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
+    return (
+      <div className="flex items-center justify-center gap-0.5">
+        {[
+          { done: p1, label: "1" },
+          { done: p2, label: "2" },
+          { done: p3, label: "3" },
+        ].map(ph => (
+          <span
+            key={ph.label}
+            className={cn(
+              "inline-flex items-center justify-center w-5 h-5 rounded text-[9px] font-bold",
+              ph.done ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground/50"
+            )}
+            title={`Fase ${ph.label}: ${ph.done ? "Concluída" : "Pendente"}`}
+          >
+            {ph.label}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  const ProductRow = ({ product }: { product: Product }) => (
+    <tr
+      key={product.id}
+      className={cn(
+        "border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer",
+        product.status === "processing" && "bg-primary/5"
+      )}
+      onClick={() => setDetailProduct(product)}
+    >
+      <td className="p-3" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={selected.has(product.id)}
+          onCheckedChange={() => toggleSelect(product.id)}
+        />
+      </td>
+      <td className="p-3 font-mono text-xs">{product.sku ?? "—"}</td>
+      <td className="p-3 max-w-[180px] truncate">{product.original_title ?? "—"}</td>
+      <td className="p-3 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
+        {editingCell?.id === product.id && editingCell.field === "optimized_title" ? (
+          <div className="flex gap-1">
+            <Input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="text-xs h-7"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveInlineEdit();
+                if (e.key === "Escape") cancelInlineEdit();
+              }}
+            />
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+              <Save className="w-3 h-3" />
+            </Button>
+          </div>
+        ) : (
+          <span
+            className="truncate block text-primary font-medium cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+            onDoubleClick={() => startInlineEdit(product.id, "optimized_title", product.optimized_title ?? "")}
+            title="Duplo-clique para editar"
+          >
+            {product.optimized_title ?? "—"}
+          </span>
+        )}
+      </td>
+      <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
+        {editingCell?.id === product.id && editingCell.field === "category" ? (
+          <div className="flex gap-1">
+            <Input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="text-xs h-7"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveInlineEdit();
+                if (e.key === "Escape") cancelInlineEdit();
+              }}
+            />
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+              <Save className="w-3 h-3" />
+            </Button>
+          </div>
+        ) : (
+          <span
+            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+            onDoubleClick={() => startInlineEdit(product.id, "category", product.category ?? "")}
+            title="Duplo-clique para editar"
+          >
+            {product.category ?? "—"}
+          </span>
+        )}
+      </td>
+      <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>
+        {editingCell?.id === product.id && editingCell.field === "optimized_short_description" ? (
+          <div className="flex gap-1">
+            <Input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="text-xs h-7"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveInlineEdit();
+                if (e.key === "Escape") cancelInlineEdit();
+              }}
+            />
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+              <Save className="w-3 h-3" />
+            </Button>
+          </div>
+        ) : (
+          <span
+            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+            onDoubleClick={() => startInlineEdit(product.id, "optimized_short_description", product.optimized_short_description ?? "")}
+            title="Duplo-clique para editar"
+          >
+            {product.optimized_short_description ?? "—"}
+          </span>
+        )}
+      </td>
+      <td className="p-3 max-w-[120px]" onClick={(e) => e.stopPropagation()}>
+        {editingCell?.id === product.id && editingCell.field === "seo_slug" ? (
+          <div className="flex gap-1">
+            <Input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              className="text-xs h-7 font-mono"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveInlineEdit();
+                if (e.key === "Escape") cancelInlineEdit();
+              }}
+            />
+            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={saveInlineEdit}>
+              <Save className="w-3 h-3" />
+            </Button>
+          </div>
+        ) : (
+          <span
+            className="truncate block text-xs font-mono text-muted-foreground cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+            onDoubleClick={() => startInlineEdit(product.id, "seo_slug", product.seo_slug ?? "")}
+            title="Duplo-clique para editar"
+          >
+            {product.seo_slug ?? "—"}
+          </span>
+        )}
+      </td>
+      <td className="p-3">
+        <div className="flex items-center gap-1.5">
+          {product.product_type && product.product_type !== "simple" && (
+            <Badge variant="secondary" className="text-[10px]">
+              {product.product_type === "variable" ? "Variável" : "Variação"}
+            </Badge>
+          )}
+          <Badge variant="outline" className={cn("text-xs", statusColors[product.status])}>
+            {product.status === "processing" && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
+            {statusLabels[product.status]}
+          </Badge>
+        </div>
+      </td>
+      <td className="p-3 text-center">
+        <PhaseIndicator product={product} />
+      </td>
+      <td className="p-3 text-center">
+        {(() => {
+          const { score } = calculateSeoScore(product);
+          return <span className={cn("text-xs font-bold", getSeoScoreColor(score))}>{score}</span>;
+        })()}
+      </td>
+      <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end gap-1">
+          <Button size="sm" variant="ghost" onClick={() => setDetailProduct(product)}>
+            <Edit className="w-3.5 h-3.5" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => handleOptimizeClick([product.id])} disabled={optimizeProducts.isPending}>
+            <Sparkles className="w-3.5 h-3.5" />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => updateStatus.mutate({ ids: [product.id], status: "optimized" })}>
+            <Check className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 animate-fade-in">
       <div className="space-y-3">
