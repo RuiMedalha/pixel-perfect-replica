@@ -250,7 +250,7 @@ serve(async (req) => {
             short_description: toStr(p.short_description, 1000),
             technical_specs: techSpecs,
             original_price: parsePrice(p.price),
-            optimized_price: parsePrice(p.sale_price),
+            sale_price: parsePrice(p.sale_price),
             sku: toStr(p.sku, 100),
             category: toStr(p.category, 200),
             supplier_ref: toStr(p.supplier_ref, 200),
