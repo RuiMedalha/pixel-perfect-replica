@@ -352,6 +352,7 @@ serve(async (req) => {
 
       // UPDATE existing products one by one (only mapped fields)
       for (const { id, data: updateData, product: p } of toUpdate) {
+        console.log(`✏️ Updating SKU ${toStr(p.sku, 100)} (id: ${id}), fields: [${Object.keys(updateData).join(", ")}], category: "${updateData.category}"`);
         const { error: updateError } = await supabase
           .from("products")
           .update(updateData)
