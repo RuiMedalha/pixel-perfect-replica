@@ -159,7 +159,12 @@ const ProductsPage = () => {
       else if (phaseFilter === "none") matchesPhase = !phases.p1 && !phases.p2 && !phases.p3;
     }
 
-    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase;
+    // WooCommerce filter
+    let matchesWoo = true;
+    if (wooFilter === "published") matchesWoo = !!p.woocommerce_id;
+    else if (wooFilter === "not_published") matchesWoo = !p.woocommerce_id;
+
+    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase && matchesWoo;
   });
 
   // Build grouped view structure
