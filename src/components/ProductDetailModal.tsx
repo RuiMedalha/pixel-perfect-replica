@@ -7,10 +7,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns } from "lucide-react";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns, GitBranch } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
+import { useProducts } from "@/hooks/useProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
@@ -26,6 +27,7 @@ interface Props {
 }
 
 export function ProductDetailModal({ product, onClose }: Props) {
+  const { data: allProducts } = useProducts();
   const updateProduct = useUpdateProduct();
   const updateStatus = useUpdateProductStatus();
   const publishWoo = usePublishWooCommerce();
@@ -130,6 +132,11 @@ export function ProductDetailModal({ product, onClose }: Props) {
             <TabsTrigger value="historico">
               <History className="w-3.5 h-3.5 mr-1" /> Versões
             </TabsTrigger>
+            {product.product_type === "variable" && (
+              <TabsTrigger value="variacoes">
+                <GitBranch className="w-3.5 h-3.5 mr-1" /> Variações
+              </TabsTrigger>
+            )}
             <TabsTrigger value="ai-log">
               <Brain className="w-3.5 h-3.5 mr-1" /> Log IA
             </TabsTrigger>
@@ -610,6 +617,89 @@ export function ProductDetailModal({ product, onClose }: Props) {
               ))
             )}
           </TabsContent>
+
+          {/* VARIATIONS TAB */}
+          {product.product_type === "variable" && (
+            <TabsContent value="variacoes" className="mt-4 space-y-4">
+              {(() => {
+                const children = (allProducts ?? []).filter(p => p.parent_product_id === product.id);
+                const attrs = Array.isArray(product.attributes) ? product.attributes as any[] : [];
+                const attrName = attrs[0]?.name || "Atributo";
+                const attrValues = attrs[0]?.values || [];
+
+                return children.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <GitBranch className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p>Nenhuma variação associada a este produto.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 mb-2">
+                      <Badge variant="secondary">{children.length} variação(ões)</Badge>
+                      <span className="text-sm text-muted-foreground">Atributo: <strong>{attrName}</strong></span>
+                    </div>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left p-3 text-xs font-medium text-muted-foreground">SKU</th>
+                            <th className="text-left p-3 text-xs font-medium text-muted-foreground">{attrName}</th>
+                            <th className="text-left p-3 text-xs font-medium text-muted-foreground">Título Otimizado</th>
+                            <th className="text-left p-3 text-xs font-medium text-muted-foreground">Preço</th>
+                            <th className="text-left p-3 text-xs font-medium text-muted-foreground">Estado</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {children.map(child => {
+                            const childAttrs = Array.isArray(child.attributes) ? child.attributes as any[] : [];
+                            const childAttrValue = childAttrs[0]?.value || "—";
+                            return (
+                              <tr key={child.id} className="border-t hover:bg-muted/30">
+                                <td className="p-3 font-mono text-xs">{child.sku ?? "—"}</td>
+                                <td className="p-3">
+                                  <Badge variant="outline" className="text-xs">{childAttrValue}</Badge>
+                                </td>
+                                <td className="p-3 max-w-[200px] truncate">{child.optimized_title || child.original_title || "—"}</td>
+                                <td className="p-3 text-xs">{child.optimized_price ?? child.original_price ?? "—"}€</td>
+                                <td className="p-3">
+                                  <Badge variant="outline" className="text-xs">
+                                    {child.status === "optimized" ? "Otimizado" : child.status === "published" ? "Publicado" : child.status === "pending" ? "Pendente" : child.status}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Preview of how the variable product will look */}
+                    <Card>
+                      <CardContent className="p-4">
+                        <h4 className="text-sm font-semibold mb-3">Preview WooCommerce</h4>
+                        <div className="space-y-2">
+                          <p className="font-medium">{product.optimized_title || product.original_title}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">{attrName}:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {(attrValues.length > 0 ? attrValues : children.map((c: any) => {
+                                const ca = Array.isArray(c.attributes) ? c.attributes as any[] : [];
+                                return ca[0]?.value || "—";
+                              })).map((val: string, i: number) => (
+                                <Badge key={i} variant="secondary" className="text-xs">{val}</Badge>
+                              ))}
+                            </div>
+                          </div>
+                          {product.optimized_short_description && (
+                            <p className="text-xs text-muted-foreground mt-2">{product.optimized_short_description}</p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                );
+              })()}
+            </TabsContent>
+          )}
 
           {/* RAW DATA TAB */}
           <TabsContent value="brutos" className="mt-4">
