@@ -497,7 +497,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
-    const published = results.filter((r: WooResult) => r.status === "published").length;
+    const published = results.filter((r: WooResult) => r.status === "created" || r.status === "updated").length;
     const errors = results.filter((r: WooResult) => r.status === "error").length;
     await adminClient.from("activity_log").insert({
       user_id: user.id,
