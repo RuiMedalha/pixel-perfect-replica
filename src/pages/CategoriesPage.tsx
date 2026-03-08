@@ -77,6 +77,7 @@ const CategoriesPage = () => {
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
+  const syncWooCategories = useSyncWooCategories();
 
   const [showForm, setShowForm] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
