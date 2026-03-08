@@ -814,14 +814,18 @@ const ProductsPage = () => {
                   return (
                     <div key={i} className={cn(
                       "flex items-center gap-2 text-xs px-2 py-1 rounded",
-                      r.status === "published" ? "bg-primary/5 text-primary" :
+                      r.status === "created" ? "bg-success/10 text-success" :
+                      r.status === "updated" ? "bg-primary/10 text-primary" :
                       r.status === "error" ? "bg-destructive/5 text-destructive" :
                       "bg-muted text-muted-foreground"
                     )}>
-                      {r.status === "published" ? <Check className="w-3 h-3 shrink-0" /> : 
+                      {r.status === "created" ? <Check className="w-3 h-3 shrink-0" /> :
+                       r.status === "updated" ? <Check className="w-3 h-3 shrink-0" /> :
                        r.status === "error" ? <X className="w-3 h-3 shrink-0" /> :
                        <Ban className="w-3 h-3 shrink-0" />}
                       <span className="truncate flex-1">{label}</span>
+                      {r.status === "created" && <Badge className="text-[9px] bg-success/20 text-success border-success/30">Criado</Badge>}
+                      {r.status === "updated" && <Badge className="text-[9px] bg-primary/20 text-primary border-primary/30">Atualizado</Badge>}
                       {r.woocommerce_id && (
                         <Badge variant="secondary" className="text-[9px]">WC #{r.woocommerce_id}</Badge>
                       )}
