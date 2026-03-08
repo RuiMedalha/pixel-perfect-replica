@@ -67,6 +67,7 @@ const SettingsPage = () => {
   const [testingSku, setTestingSku] = useState<Record<number, string>>({});
   const [testingLoading, setTestingLoading] = useState<Record<number, boolean>>({});
   const [testResult, setTestResult] = useState<{ index: number; preview: string; chars: number; url: string } | null>(null);
+  const [wooPublishFields, setWooPublishFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
   useEffect(() => {
     if (settings) {
       setForm(settings);
