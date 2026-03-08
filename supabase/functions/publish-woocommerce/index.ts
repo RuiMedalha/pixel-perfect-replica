@@ -335,6 +335,21 @@ async function findWooProductBySku(baseUrl: string, auth: string, sku: string | 
   return null;
 }
 
+async function findWooVariationBySku(baseUrl: string, auth: string, parentWooId: number, sku: string): Promise<number | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${parentWooId}/variations?sku=${encodeURIComponent(sku)}&per_page=1`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (Array.isArray(data) && data.length > 0 && data[0].id) {
+      return data[0].id;
+    }
+  } catch { /* skip */ }
+  return null;
+}
+
 async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: string, auth: string, skus: any[]): Promise<number[]> {
   if (!skus || skus.length === 0) return [];
   const skuList = skus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
