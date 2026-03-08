@@ -353,6 +353,7 @@ export type Database = {
           meta_title: string | null
           optimized_description: string | null
           optimized_price: number | null
+          optimized_sale_price: number | null
           optimized_short_description: string | null
           optimized_title: string | null
           product_id: string
@@ -369,6 +370,7 @@ export type Database = {
           meta_title?: string | null
           optimized_description?: string | null
           optimized_price?: number | null
+          optimized_sale_price?: number | null
           optimized_short_description?: string | null
           optimized_title?: string | null
           product_id: string
@@ -385,6 +387,7 @@ export type Database = {
           meta_title?: string | null
           optimized_description?: string | null
           optimized_price?: number | null
+          optimized_sale_price?: number | null
           optimized_short_description?: string | null
           optimized_title?: string | null
           product_id?: string
@@ -419,6 +422,7 @@ export type Database = {
           meta_title: string | null
           optimized_description: string | null
           optimized_price: number | null
+          optimized_sale_price: number | null
           optimized_short_description: string | null
           optimized_title: string | null
           original_description: string | null
@@ -426,6 +430,7 @@ export type Database = {
           original_title: string | null
           parent_product_id: string | null
           product_type: string
+          sale_price: number | null
           seo_score: number | null
           seo_slug: string | null
           short_description: string | null
@@ -456,6 +461,7 @@ export type Database = {
           meta_title?: string | null
           optimized_description?: string | null
           optimized_price?: number | null
+          optimized_sale_price?: number | null
           optimized_short_description?: string | null
           optimized_title?: string | null
           original_description?: string | null
@@ -463,6 +469,7 @@ export type Database = {
           original_title?: string | null
           parent_product_id?: string | null
           product_type?: string
+          sale_price?: number | null
           seo_score?: number | null
           seo_slug?: string | null
           short_description?: string | null
@@ -493,6 +500,7 @@ export type Database = {
           meta_title?: string | null
           optimized_description?: string | null
           optimized_price?: number | null
+          optimized_sale_price?: number | null
           optimized_short_description?: string | null
           optimized_title?: string | null
           original_description?: string | null
@@ -500,6 +508,7 @@ export type Database = {
           original_title?: string | null
           parent_product_id?: string | null
           product_type?: string
+          sale_price?: number | null
           seo_score?: number | null
           seo_slug?: string | null
           short_description?: string | null

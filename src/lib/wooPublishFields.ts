@@ -38,7 +38,8 @@ export const WOO_PUBLISH_GROUPS: WooPublishGroup[] = [
     label: "Preço",
     icon: "💰",
     fields: [
-      { key: "price", label: "Preço", group: "pricing" },
+      { key: "price", label: "Preço Regular", group: "pricing" },
+      { key: "sale_price", label: "Preço Promocional", group: "pricing" },
     ],
   },
   {
