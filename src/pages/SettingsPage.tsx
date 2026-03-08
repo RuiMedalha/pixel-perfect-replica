@@ -135,6 +135,7 @@ const SettingsPage = () => {
       ...form,
       [SETTING_KEYS.suppliers]: JSON.stringify(suppliers),
       [SETTING_KEYS.knowledge_urls]: JSON.stringify(knowledgeUrls.filter(Boolean)),
+      [SETTING_KEY_WOO_PUBLISH_FIELDS]: JSON.stringify(Array.from(wooPublishFields)),
     };
     saveSettings.mutate(data);
   };
