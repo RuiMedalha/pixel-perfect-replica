@@ -1472,7 +1472,23 @@ const ProductsPage = () => {
             autoIncludedVariationsCount={variationCount}
             isPending={publishWoo.isPending}
             onConfirm={(fields, pricing) => {
-              publishWoo.mutate({ productIds: allPublishIds, publishFields: fields, pricing });
+              setPublishTotal(allPublishIds.length);
+              setPublishResults(null);
+              publishWoo.mutate(
+                { productIds: allPublishIds, publishFields: fields, pricing },
+                {
+                  onSuccess: (data) => {
+                    setPublishResults(data.results);
+                    const ok = data.results.filter(r => r.status === "published").length;
+                    const fail = data.results.filter(r => r.status === "error").length;
+                    if (fail > 0) {
+                      toast.warning(`${ok} publicado(s), ${fail} com erro.`);
+                    } else {
+                      toast.success(`${ok} produto(s) publicado(s) no WooCommerce!`);
+                    }
+                  },
+                }
+              );
               setSelected(new Set());
               setShowPublishModal(false);
             }}
