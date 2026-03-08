@@ -290,7 +290,7 @@ Deno.serve(async (req) => {
     // ──────────────────────────────────────────────
     for (const product of simpleProducts) {
       try {
-        const wooProduct = buildBasePayload(product);
+        const wooProduct = await buildBasePayload(product);
 
         // Upsells / Cross-sells
         if (has("upsells")) {
