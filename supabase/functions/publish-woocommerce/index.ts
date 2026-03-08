@@ -332,7 +332,7 @@ Deno.serve(async (req) => {
         const children = allChildVariations.filter((c: any) => c.parent_product_id === parent.id);
 
         // Build parent payload
-        const parentPayload = buildBasePayload(parent);
+        const parentPayload = await buildBasePayload(parent);
         parentPayload.type = "variable";
 
         // Build attributes from children
