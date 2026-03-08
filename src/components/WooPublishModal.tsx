@@ -2,16 +2,22 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Send, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent } from "lucide-react";
 import { WOO_PUBLISH_GROUPS, ALL_WOO_FIELD_KEYS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { useSettings } from "@/hooks/useSettings";
+
+export interface PricingOptions {
+  markupPercent: number;
+  discountPercent: number;
+}
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onConfirm: (fields: string[]) => void;
+  onConfirm: (fields: string[], pricing?: PricingOptions) => void;
   productCount: number;
   variableParentCount?: number;
   autoIncludedVariationsCount?: number;
@@ -22,6 +28,8 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
   const { data: settings } = useSettings();
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [markupPercent, setMarkupPercent] = useState<string>("");
+  const [discountPercent, setDiscountPercent] = useState<string>("");
 
   // Load defaults from settings
   useEffect(() => {
@@ -68,6 +76,21 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
     });
   };
 
+  const hasPriceSelected = selectedFields.has("price") || selectedFields.has("sale_price");
+  const markup = parseFloat(markupPercent) || 0;
+  const discount = parseFloat(discountPercent) || 0;
+  const hasPricingAdjustments = markup > 0 || discount > 0;
+
+  const handleConfirm = () => {
+    const pricing = hasPricingAdjustments ? { markupPercent: markup, discountPercent: discount } : undefined;
+    onConfirm(Array.from(selectedFields), pricing);
+  };
+
+  // Example price calculation for preview
+  const examplePrice = 100;
+  const adjustedRegular = examplePrice * (1 + markup / 100);
+  const adjustedSale = discount > 0 ? adjustedRegular * (1 - discount / 100) : null;
+
   return (
     <Dialog open={open} onOpenChange={() => !isPending && onClose()}>
       <DialogContent className="max-w-md">
@@ -87,7 +110,7 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           </div>
         )}
 
-        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+        <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
           {WOO_PUBLISH_GROUPS.map(group => {
             const groupFieldKeys = group.fields.map(f => f.key);
             const selectedCount = groupFieldKeys.filter(k => selectedFields.has(k)).length;
@@ -126,13 +149,68 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           })}
         </div>
 
+        {/* Pricing adjustments */}
+        {hasPriceSelected && (
+          <div className="border border-border rounded-md p-3 space-y-3 bg-muted/30">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <TrendingUp className="w-4 h-4 text-primary" />
+              Ajuste de Preços (opcional)
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Markup no regular_price</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="999"
+                    step="0.1"
+                    placeholder="0"
+                    value={markupPercent}
+                    onChange={e => setMarkupPercent(e.target.value)}
+                    className="pr-7 h-8 text-sm"
+                  />
+                  <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Desconto no sale_price</Label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="0"
+                    value={discountPercent}
+                    onChange={e => setDiscountPercent(e.target.value)}
+                    className="pr-7 h-8 text-sm"
+                  />
+                  <Percent className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+              </div>
+            </div>
+
+            {hasPricingAdjustments && (
+              <div className="text-xs text-muted-foreground bg-background rounded px-2 py-1.5 border border-border space-y-0.5">
+                <p className="font-medium text-foreground">Exemplo (preço base: {examplePrice}€):</p>
+                <p>Regular: {examplePrice}€ + {markup}% = <span className="font-semibold text-foreground">{adjustedRegular.toFixed(2)}€</span></p>
+                {adjustedSale !== null && (
+                  <p>Promocional: {adjustedRegular.toFixed(2)}€ - {discount}% = <span className="font-semibold text-success">{adjustedSale.toFixed(2)}€</span></p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         <DialogFooter className="gap-2">
           <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>
             Cancelar
           </Button>
           <Button
             size="sm"
-            onClick={() => onConfirm(Array.from(selectedFields))}
+            onClick={handleConfirm}
             disabled={isPending || selectedFields.size === 0}
           >
             {isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
