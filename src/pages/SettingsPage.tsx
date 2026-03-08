@@ -79,6 +79,10 @@ const SettingsPage = () => {
         const parsed = JSON.parse(settings[SETTING_KEYS.knowledge_urls] ?? "[]");
         if (Array.isArray(parsed) && parsed.length > 0) setKnowledgeUrls(parsed);
       } catch { /* keep default */ }
+      try {
+        const parsed = JSON.parse(settings[SETTING_KEY_WOO_PUBLISH_FIELDS] ?? "null");
+        if (Array.isArray(parsed)) setWooPublishFields(new Set(parsed));
+      } catch { /* keep default */ }
     }
   }, [settings]);
 
