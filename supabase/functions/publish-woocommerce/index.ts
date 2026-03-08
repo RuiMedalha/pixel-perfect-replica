@@ -134,17 +134,48 @@ Deno.serve(async (req) => {
       return null;
     };
 
-    // Helper: resolve SKUs to WooCommerce IDs
+    // Helper: resolve SKUs to WooCommerce IDs (local DB + WooCommerce API fallback)
     const resolveSkusToWooIds = async (skus: any[]): Promise<number[]> => {
       if (!skus || skus.length === 0) return [];
       const skuList = skus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
       if (skuList.length === 0) return [];
+
+      // Step 1: Try local DB
       const { data: found } = await supabase
         .from("products")
-        .select("woocommerce_id")
+        .select("sku, woocommerce_id")
         .in("sku", skuList)
         .not("woocommerce_id", "is", null);
-      return (found || []).map((p: any) => p.woocommerce_id).filter(Boolean);
+
+      const resolvedIds: number[] = [];
+      const resolvedSkus = new Set<string>();
+
+      for (const p of (found || [])) {
+        if (p.woocommerce_id) {
+          resolvedIds.push(p.woocommerce_id);
+          resolvedSkus.add(p.sku);
+        }
+      }
+
+      // Step 2: For unresolved SKUs, fallback to WooCommerce API
+      const unresolvedSkus = skuList.filter((s: string) => !resolvedSkus.has(s));
+      for (const sku of unresolvedSkus) {
+        const wooId = await findWooProductBySku(sku);
+        if (wooId) {
+          resolvedIds.push(wooId);
+          // Save woocommerce_id locally for future lookups
+          await supabase
+            .from("products")
+            .update({ woocommerce_id: wooId })
+            .eq("sku", sku)
+            .is("woocommerce_id", null);
+          console.log(`Resolved SKU ${sku} → WC #${wooId} via API`);
+        } else {
+          console.log(`Could not resolve SKU ${sku} in WooCommerce`);
+        }
+      }
+
+      return resolvedIds;
     };
 
     // Build base product payload (shared between simple/variable/variation)
