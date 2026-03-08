@@ -1012,6 +1012,7 @@ const ProductsPage = () => {
                     setSourceFileFilter("all");
                     setProductTypeFilter("all");
                     setPhaseFilter("all");
+                    setWooFilter("all");
                   }}
                 >
                   Limpar filtros
