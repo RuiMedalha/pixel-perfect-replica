@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useProductStats } from "@/hooks/useProducts";
 import { useRecentActivity } from "@/hooks/useActivityLog";
 import { useTokenUsageSummary, useQualityMetrics } from "@/hooks/useOptimizationLogs";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { formatDistanceToNow } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -19,6 +20,7 @@ const actionLabels: Record<string, string> = {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { activeWorkspace } = useWorkspaceContext();
   const { data: stats, isLoading: statsLoading } = useProductStats();
   const { data: activity, isLoading: activityLoading } = useRecentActivity();
   const { data: tokenSummary, isLoading: tokenLoading } = useTokenUsageSummary();
@@ -34,7 +36,9 @@ const Dashboard = () => {
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">Visão geral do estado dos seus produtos.</p>
+        <p className="text-muted-foreground mt-1">
+          {activeWorkspace ? `Workspace: ${activeWorkspace.name}` : "Visão geral do estado dos seus produtos."}
+        </p>
       </div>
 
       {/* Stats */}

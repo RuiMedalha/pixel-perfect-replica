@@ -1,0 +1,1 @@
+ALTER TABLE public.activity_log ADD COLUMN workspace_id uuid REFERENCES public.workspaces(id) ON DELETE SET NULL;
