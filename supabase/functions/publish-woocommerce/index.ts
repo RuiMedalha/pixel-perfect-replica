@@ -192,7 +192,35 @@ Deno.serve(async (req) => {
       if (!isVariation) {
         // Taxonomies
         if (has("categories")) {
-          wooProduct.categories = product.category ? [{ name: product.category }] : [];
+          // Resolve category_id to woocommerce_id if available
+          if (product.category_id) {
+            const { data: catRow } = await supabase
+              .from("categories")
+              .select("woocommerce_id, name, parent_id")
+              .eq("id", product.category_id)
+              .single();
+            if (catRow?.woocommerce_id) {
+              // Build full category chain (child + parents)
+              const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
+              let parentId = catRow.parent_id;
+              while (parentId) {
+                const { data: parentCat } = await supabase
+                  .from("categories")
+                  .select("woocommerce_id, parent_id")
+                  .eq("id", parentId)
+                  .single();
+                if (parentCat?.woocommerce_id) {
+                  catIds.push({ id: parentCat.woocommerce_id });
+                }
+                parentId = parentCat?.parent_id || null;
+              }
+              wooProduct.categories = catIds;
+            } else if (catRow) {
+              wooProduct.categories = [{ name: catRow.name }];
+            }
+          } else if (product.category) {
+            wooProduct.categories = [{ name: product.category }];
+          }
         }
         if (has("tags")) {
           wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));

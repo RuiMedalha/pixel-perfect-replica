@@ -110,3 +110,28 @@ export function useDeleteCategory() {
     onError: (err: Error) => toast.error(err.message),
   });
 }
+
+export function useSyncWooCategories() {
+  const qc = useQueryClient();
+  const { activeWorkspace } = useWorkspaceContext();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!activeWorkspace) throw new Error("Nenhum workspace ativo");
+      const { data, error } = await supabase.functions.invoke("sync-woo-categories", {
+        body: { workspaceId: activeWorkspace.id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { total: number; created: number; updated: number };
+    },
+    onMutate: () => {
+      toast.info("A sincronizar categorias do WooCommerce...");
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["categories"] });
+      toast.success(`${data.total} categorias sincronizadas (${data.created} novas, ${data.updated} atualizadas)`);
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+}

@@ -7,9 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FolderTree, Plus, Edit, Trash2, ChevronRight, ChevronDown, Loader2, FolderOpen } from "lucide-react";
+import { FolderTree, Plus, Edit, Trash2, ChevronRight, ChevronDown, Loader2, FolderOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useCategoryTree, useCreateCategory, useUpdateCategory, useDeleteCategory, type CategoryTree, type Category } from "@/hooks/useCategories";
+import { useCategoryTree, useCreateCategory, useUpdateCategory, useDeleteCategory, useSyncWooCategories, type CategoryTree, type Category } from "@/hooks/useCategories";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { useProducts } from "@/hooks/useProducts";
 
@@ -77,6 +77,7 @@ const CategoriesPage = () => {
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
+  const syncWooCategories = useSyncWooCategories();
 
   const [showForm, setShowForm] = useState(false);
   const [editingCat, setEditingCat] = useState<Category | null>(null);
@@ -161,9 +162,15 @@ const CategoriesPage = () => {
           </h1>
           <p className="text-muted-foreground mt-1">{flat.length} categoria(s) no workspace</p>
         </div>
-        <Button onClick={() => openCreate()}>
-          <Plus className="w-4 h-4 mr-1" /> Nova Categoria
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => syncWooCategories.mutate()} disabled={syncWooCategories.isPending}>
+            {syncWooCategories.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+            Sincronizar WooCommerce
+          </Button>
+          <Button onClick={() => openCreate()}>
+            <Plus className="w-4 h-4 mr-1" /> Nova Categoria
+          </Button>
+        </div>
       </div>
 
       <Card>
