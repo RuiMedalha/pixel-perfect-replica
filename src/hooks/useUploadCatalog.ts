@@ -53,6 +53,7 @@ export const DEFAULT_PRODUCT_FIELDS: ProductField[] = [
   { key: "focus_keyword", label: "Focus Keyword", required: false },
   { key: "seo_slug", label: "SEO Slug", required: false },
   { key: "weight", label: "Peso (kg)", required: false },
+  { key: "woocommerce_id", label: "WooCommerce ID", required: false },
 ];
 
 // Keep PRODUCT_FIELDS for backward compat
