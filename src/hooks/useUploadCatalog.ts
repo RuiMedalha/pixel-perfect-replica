@@ -71,6 +71,75 @@ function readSheetData(workbook: XLSX.WorkBook, sheetName: string): { headers: s
   return { headers: Object.keys(rows[0]), previewRows: rows.slice(0, 3) };
 }
 
+/** Read ALL rows from an Excel sheet, applying columnMapping */
+function readAllSheetRows(workbook: XLSX.WorkBook, sheetName: string, columnMapping?: ColumnMapping): Record<string, unknown>[] {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+  if (columnMapping && Object.keys(columnMapping).length > 0) {
+    return rows.map((row) => {
+      const mapped: Record<string, unknown> = {};
+      for (const [productField, excelColumn] of Object.entries(columnMapping)) {
+        if (excelColumn && row[excelColumn] !== undefined) mapped[productField] = row[excelColumn];
+      }
+      return mapped;
+    });
+  }
+
+  // Auto-map if no mapping provided
+  const autoMap: Record<string, RegExp> = {
+    title: /^(title|titulo|título|nome|produto|name|product|designa[cç][aã]o)$/i,
+    description: /^(description|descri[cç][aã]o|desc|detalhe|details|content|conteudo|conteúdo)$/i,
+    short_description: /^(short[\s_-]?description|descri[cç][aã]o[\s_-]?curta|resumo|summary|excerpt)$/i,
+    price: /^(price|pre[cç]o|valor|pvp|custo|cost|unit_price|regular[\s_-]?price)$/i,
+    sale_price: /^(sale[\s_-]?price|pre[cç]o[\s_-]?promocional)$/i,
+    sku: /^(sku|ref|refer[eê]ncia|codigo|código|code|ean|barcode)$/i,
+    category: /^(category|categoria|cat|categories|categorias|product[\s_-]?cat)$/i,
+    supplier_ref: /^(supplier_ref|ref_fornecedor|fornecedor|supplier|marca|brand)$/i,
+    product_type: /^(type|tipo)$/i,
+    parent_sku: /^(parent|parent[\s_-]?sku|sku[\s_-]?pai)$/i,
+    upsell_skus: /^(up[\s_-]?sells?|upsells?)$/i,
+    crosssell_skus: /^(cross[\s_-]?sells?|crosssells?)$/i,
+    image_urls: /^(image|imagem|images|imagens|image[\s_-]?url|foto|photo|thumbnail)$/i,
+    weight: /^(weight|peso)$/i,
+    length: /^(length|comprimento)$/i,
+    width: /^(width|largura)$/i,
+    height: /^(height|altura)$/i,
+    meta_title: /^(meta[\s_:-]?title|rank[\s_-]?math[\s_-]?title|meta:rank_math_title)$/i,
+    meta_description: /^(meta[\s_:-]?description|rank[\s_-]?math[\s_-]?description|meta:rank_math_description)$/i,
+    focus_keyword: /^(meta[\s_:-]?focus[\s_-]?keyword|rank[\s_-]?math[\s_-]?focus[\s_-]?keyword|focus[\s_-]?keyword|meta:rank_math_focus_keyword)$/i,
+    seo_slug: /^(slug|seo[\s_-]?slug|permalink)$/i,
+    woocommerce_id: /^(id|product[\s_-]?id|woocommerce[\s_-]?id|woo[\s_-]?id)$/i,
+  };
+
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const detectedMapping: Record<string, string> = {};
+  for (const [field, regex] of Object.entries(autoMap)) {
+    const found = headers.find((h) => regex.test(h.trim()));
+    if (found) detectedMapping[field] = found;
+  }
+
+  // Detect attribute columns
+  for (const h of headers) {
+    const attrNameMatch = h.match(/^Attribute\s+(\d+)\s+name$/i);
+    if (attrNameMatch) {
+      const num = attrNameMatch[1];
+      detectedMapping[`attribute_${num}_name`] = h;
+      const valCol = headers.find((vh) => new RegExp(`^Attribute\\s+${num}\\s+value`, "i").test(vh));
+      if (valCol) detectedMapping[`attribute_${num}_values`] = valCol;
+    }
+  }
+
+  return rows.map((row) => {
+    const mapped: Record<string, unknown> = {};
+    for (const [productField, excelColumn] of Object.entries(detectedMapping)) {
+      mapped[productField] = row[excelColumn];
+    }
+    return mapped;
+  });
+}
+
 function autoMapColumns(headers: string[]): ColumnMapping {
   const mapping: ColumnMapping = {};
   const lower = headers.map((h) => h.toLowerCase().trim().replace(/\s+/g, "_"));
@@ -124,7 +193,6 @@ async function splitPdfFile(file: File): Promise<File[]> {
     const totalPages = srcDoc.getPageCount();
     if (totalPages <= 1) return [file];
 
-    // Estimate pages per part based on average page size
     const avgPageSize = file.size / totalPages;
     const pagesPerPart = Math.max(1, Math.floor(MAX_PDF_PART_SIZE / avgPageSize));
     const parts: File[] = [];
@@ -173,6 +241,65 @@ async function pollForParseResult(fileName: string, userId: string, workspaceId?
     }
   }
   return { count: 0, updated: 0, total: 0, skipped: 0, errors: ["Timeout ao aguardar processamento"] };
+}
+
+/** Send parsed rows to edge function in chunks to avoid payload limits */
+async function sendParsedRowsInBatches(
+  rows: Record<string, unknown>[],
+  columnMapping: ColumnMapping | undefined,
+  fileName: string,
+  workspaceId: string | undefined,
+  maxRetries = 3
+): Promise<{ count: number; updated: number; total: number; skipped: number; errors: string[] }> {
+  const BATCH_SIZE = 500; // rows per request
+  let totalCount = 0;
+  let totalUpdated = 0;
+  let totalSkipped = 0;
+  const allErrors: string[] = [];
+
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    let success = false;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { data, error } = await supabase.functions.invoke("parse-catalog", {
+          body: {
+            fileName,
+            parsedRows: batch,
+            columnMapping: columnMapping || undefined,
+            workspaceId: workspaceId || undefined,
+          },
+        });
+
+        if (error) {
+          console.warn(`Batch ${i / BATCH_SIZE + 1} attempt ${attempt} error:`, error.message);
+          if (attempt < maxRetries) {
+            await new Promise((r) => setTimeout(r, 2000 * attempt));
+            continue;
+          }
+          allErrors.push(`Batch ${i / BATCH_SIZE + 1}: ${error.message}`);
+          break;
+        }
+
+        totalCount += data?.count || 0;
+        totalUpdated += data?.updated || 0;
+        totalSkipped += data?.skipped || 0;
+        if (data?.errors?.length) allErrors.push(...data.errors);
+        success = true;
+        break;
+      } catch (e: any) {
+        console.warn(`Batch ${i / BATCH_SIZE + 1} attempt ${attempt} failed:`, e?.message);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, 2000 * attempt));
+        } else {
+          allErrors.push(`Batch ${i / BATCH_SIZE + 1}: ${e?.message || "Unknown error"}`);
+        }
+      }
+    }
+  }
+
+  return { count: totalCount, updated: totalUpdated, total: rows.length, skipped: totalSkipped, errors: allErrors };
 }
 
 export function useUploadCatalog() {
@@ -343,8 +470,8 @@ export function useUploadCatalog() {
 
       updateFile(uploadedFile.id, { status: "a_processar", progress: 50 });
 
+      // ─── Knowledge files ───
       if (uploadedFile.uploadType === "knowledge") {
-        // Knowledge files: CREATE the uploaded_files record FIRST so parse-catalog can find it
         updateFile(uploadedFile.id, { status: "a_processar", progress: 60 });
         
         const hash = await computeFileHash(uploadedFile.file);
@@ -379,7 +506,6 @@ export function useUploadCatalog() {
           console.warn("Knowledge parsing failed:", e);
         }
 
-        // Update the record with extracted text and mark as processed
         if (insertedFile?.id) {
           await supabase.from("uploaded_files").update({
             status: "processed",
@@ -393,12 +519,65 @@ export function useUploadCatalog() {
         return;
       }
 
+      // ─── Excel products: parse on frontend, send rows to backend ───
+      if (uploadedFile.type === "Excel") {
+        updateFile(uploadedFile.id, { status: "a_processar", progress: 60 });
+        toast.info(`A processar "${uploadedFile.name}" localmente...`);
+
+        const workbook = await readExcelFile(uploadedFile.file);
+        const sheetName = uploadedFile.selectedSheet || workbook.SheetNames[0];
+        const parsedRows = readAllSheetRows(workbook, sheetName, uploadedFile.columnMapping);
+
+        if (parsedRows.length === 0) {
+          await registerUpload(uploadedFile, user.id, filePath, 0, workspaceId);
+          updateFile(uploadedFile.id, { status: "concluido", progress: 100, productsCount: 0 });
+          toast.warning(`Nenhum produto encontrado em "${uploadedFile.name}".`);
+          qc.invalidateQueries({ queryKey: ["products"] });
+          qc.invalidateQueries({ queryKey: ["uploaded-files"] });
+          return;
+        }
+
+        updateFile(uploadedFile.id, { status: "a_processar", progress: 70 });
+
+        const result = await sendParsedRowsInBatches(
+          parsedRows,
+          uploadedFile.columnMapping,
+          uploadedFile.name,
+          workspaceId
+        );
+
+        const totalProcessed = (result.count || 0) + (result.updated || 0);
+        await registerUpload(uploadedFile, user.id, filePath, totalProcessed, workspaceId);
+        updateFile(uploadedFile.id, {
+          status: "concluido",
+          progress: 100,
+          productsCount: totalProcessed,
+        });
+
+        const msgParts: string[] = [];
+        if (result.count > 0) msgParts.push(`${result.count} novo(s)`);
+        if (result.updated > 0) msgParts.push(`${result.updated} atualizado(s)`);
+        if (result.skipped > 0) msgParts.push(`${result.skipped} ignorado(s)`);
+        if (msgParts.length > 0) {
+          toast.success(`${msgParts.join(", ")} de "${uploadedFile.name}"`);
+        } else {
+          toast.success(`"${uploadedFile.name}" processado.`);
+        }
+        if (result.errors.length > 0) {
+          console.warn("Parse errors:", result.errors);
+          toast.warning(`${result.errors.length} erro(s) durante o processamento.`);
+        }
+
+        qc.invalidateQueries({ queryKey: ["products"] });
+        qc.invalidateQueries({ queryKey: ["uploaded-files"] });
+        return;
+      }
+
+      // ─── PDF products: still use server-side processing ───
       const { data, error } = await supabase.functions.invoke("parse-catalog", {
         body: {
           filePath,
           fileName: uploadedFile.name,
-          columnMapping: uploadedFile.columnMapping || undefined,
-          sheetName: uploadedFile.selectedSheet || undefined,
           workspaceId: workspaceId || undefined,
         },
       });
@@ -407,7 +586,6 @@ export function useUploadCatalog() {
       if (data?.error && data?.count === undefined && !data?.background) throw new Error(data.error);
 
       if (data?.background) {
-        // Background mode: poll uploaded_files for parseResult in metadata
         toast.info(`A processar "${uploadedFile.name}" em segundo plano...`);
         const result = await pollForParseResult(uploadedFile.name, user.id, workspaceId);
         const count = result?.count || 0;
@@ -438,24 +616,26 @@ export function useUploadCatalog() {
         const msgParts: string[] = [];
         if (count > 0) msgParts.push(`${count} novo(s)`);
         if (updatedCount > 0) msgParts.push(`${updatedCount} atualizado(s)`);
-        toast.success(`${msgParts.join(", ")} de "${uploadedFile.name}"`);
+        if (msgParts.length > 0) {
+          toast.success(`${msgParts.join(", ")} de "${uploadedFile.name}"`);
+        } else {
+          toast.success(`"${uploadedFile.name}" processado.`);
+        }
       }
 
       qc.invalidateQueries({ queryKey: ["products"] });
-      qc.invalidateQueries({ queryKey: ["product-stats"] });
-      qc.invalidateQueries({ queryKey: ["recent-activity"] });
       qc.invalidateQueries({ queryKey: ["uploaded-files"] });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro desconhecido";
-      updateFile(uploadedFile.id, { status: "erro", progress: 0, error: msg });
-      toast.error(msg);
+      updateFile(uploadedFile.id, { status: "erro", error: msg });
+      toast.error(`Erro ao processar "${uploadedFile.name}": ${msg}`);
     }
   };
 
-  const processAll = async (workspaceId?: string) => {
+  const processAllFiles = async (workspaceId?: string) => {
     const pending = files.filter((f) => f.status === "aguardando");
-    for (const file of pending) {
-      await processFile(file, workspaceId);
+    for (const f of pending) {
+      await processFile(f, workspaceId);
     }
   };
 
@@ -466,9 +646,9 @@ export function useUploadCatalog() {
   return {
     files,
     addFiles,
-    processAll,
-    processFile,
     removeFile,
+    processFile,
+    processAllFiles,
     setColumnMapping,
     confirmMapping,
     selectSheet,
