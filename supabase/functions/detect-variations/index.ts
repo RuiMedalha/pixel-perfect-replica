@@ -293,7 +293,15 @@ ${JSON.stringify(productList, null, 1).substring(0, 25000)}${existingGroupsConte
       );
     }
 
-    const parsed = JSON.parse(toolCall.function.arguments);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(toolCall.function.arguments);
+    } catch (_parseErr) {
+      // Attempt to recover truncated JSON from tool_calls arguments
+      const raw = toolCall.function.arguments || "";
+      console.warn("JSON parse failed, attempting recovery on", raw.length, "chars");
+      parsed = parseWithRecovery(raw);
+    }
     const newGroups = parsed.new_groups || [];
     const addToExisting = parsed.add_to_existing || [];
     const reclassify = parsed.reclassify || [];
