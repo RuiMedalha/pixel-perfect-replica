@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useProductStats } from "@/hooks/useProducts";
 import { useRecentActivity } from "@/hooks/useActivityLog";
 import { useTokenUsageSummary, useQualityMetrics } from "@/hooks/useOptimizationLogs";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { formatDistanceToNow } from "date-fns";
 import { pt } from "date-fns/locale";
 
