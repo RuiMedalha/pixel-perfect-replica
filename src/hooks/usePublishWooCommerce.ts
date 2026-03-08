@@ -11,16 +11,17 @@ export interface PublishResult {
 }
 
 export interface PublishResponse {
-  results: PublishResult[];
+  jobId?: string;
+  results?: PublishResult[];
 }
 
 export function usePublishWooCommerce() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ productIds, publishFields, pricing }: { productIds: string[]; publishFields?: string[]; pricing?: PricingOptions }): Promise<PublishResponse> => {
+    mutationFn: async ({ productIds, publishFields, pricing, scheduledFor, workspaceId }: { productIds: string[]; publishFields?: string[]; pricing?: PricingOptions; scheduledFor?: string; workspaceId?: string }): Promise<PublishResponse> => {
       const { data, error } = await supabase.functions.invoke("publish-woocommerce", {
-        body: { productIds, publishFields, pricing },
+        body: { productIds, publishFields, pricing, scheduledFor, workspaceId },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);

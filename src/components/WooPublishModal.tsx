@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent, CalendarIcon, Clock } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { WOO_PUBLISH_GROUPS, ALL_WOO_FIELD_KEYS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { useSettings } from "@/hooks/useSettings";
 
@@ -17,7 +21,7 @@ export interface PricingOptions {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onConfirm: (fields: string[], pricing?: PricingOptions) => void;
+  onConfirm: (fields: string[], pricing?: PricingOptions, scheduledFor?: string) => void;
   productCount: number;
   variableParentCount?: number;
   autoIncludedVariationsCount?: number;
@@ -30,6 +34,9 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [markupPercent, setMarkupPercent] = useState<string>("");
   const [discountPercent, setDiscountPercent] = useState<string>("");
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined);
+  const [scheduleTime, setScheduleTime] = useState("09:00");
 
   // Load defaults from settings
   useEffect(() => {
@@ -83,7 +90,14 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
 
   const handleConfirm = () => {
     const pricing = hasPricingAdjustments ? { markupPercent: markup, discountPercent: discount } : undefined;
-    onConfirm(Array.from(selectedFields), pricing);
+    let scheduledFor: string | undefined;
+    if (scheduleEnabled && scheduleDate) {
+      const [hours, minutes] = scheduleTime.split(":").map(Number);
+      const dt = new Date(scheduleDate);
+      dt.setHours(hours, minutes, 0, 0);
+      scheduledFor = dt.toISOString();
+    }
+    onConfirm(Array.from(selectedFields), pricing, scheduledFor);
   };
 
   // Example price calculation for preview
@@ -93,12 +107,12 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
 
   return (
     <Dialog open={open} onOpenChange={() => !isPending && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-base">Publicar {productCount} produto(s) no WooCommerce</DialogTitle>
         </DialogHeader>
 
-        <p className="text-xs text-muted-foreground">Escolha os campos a enviar. Apenas os campos selecionados serão atualizados no WooCommerce.</p>
+        <p className="text-xs text-muted-foreground">Escolha os campos a enviar. O processamento é feito em background — pode fechar o browser.</p>
 
         {variableParentCount > 0 && (
           <div className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
@@ -110,7 +124,7 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           </div>
         )}
 
-        <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+        <div className="space-y-1 max-h-[250px] overflow-y-auto pr-1">
           {WOO_PUBLISH_GROUPS.map(group => {
             const groupFieldKeys = group.fields.map(f => f.key);
             const selectedCount = groupFieldKeys.filter(k => selectedFields.has(k)).length;
@@ -204,6 +218,54 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           </div>
         )}
 
+        {/* Schedule */}
+        <div className="border border-border rounded-md p-3 space-y-3 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              <Clock className="w-4 h-4 text-primary" />
+              Agendar publicação
+            </div>
+            <Checkbox
+              checked={scheduleEnabled}
+              onCheckedChange={(v) => setScheduleEnabled(!!v)}
+            />
+          </div>
+          {scheduleEnabled && (
+            <div className="flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "flex-1 justify-start text-left font-normal h-8 text-sm",
+                      !scheduleDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
+                    {scheduleDate ? format(scheduleDate, "dd/MM/yyyy") : "Escolher data"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={scheduleDate}
+                    onSelect={setScheduleDate}
+                    disabled={(date) => date < new Date()}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
+              <Input
+                type="time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+                className="w-24 h-8 text-sm"
+              />
+            </div>
+          )}
+        </div>
+
         <DialogFooter className="gap-2">
           <Button variant="outline" size="sm" onClick={onClose} disabled={isPending}>
             Cancelar
@@ -211,10 +273,10 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           <Button
             size="sm"
             onClick={handleConfirm}
-            disabled={isPending || selectedFields.size === 0}
+            disabled={isPending || selectedFields.size === 0 || (scheduleEnabled && !scheduleDate)}
           >
             {isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Send className="w-4 h-4 mr-1" />}
-            Publicar ({selectedFields.size} campos)
+            {scheduleEnabled ? "Agendar" : "Publicar"} ({selectedFields.size} campos)
           </Button>
         </DialogFooter>
       </DialogContent>
