@@ -56,6 +56,7 @@ const ProductsPage = () => {
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
   const publishWoo = usePublishWooCommerce();
+  const { activePublishJob, isCreating: isCreatingPublish, createPublishJob, cancelPublishJob, dismissPublishJob } = usePublishJob();
   const deleteProducts = useDeleteProducts();
   const updateProduct = useUpdateProduct();
   const detectVariations = useDetectVariations();
