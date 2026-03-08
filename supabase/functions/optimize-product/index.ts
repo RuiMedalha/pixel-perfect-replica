@@ -943,24 +943,16 @@ REGRAS GLOBAIS:
         if (fields.includes("upsells")) {
           toolProperties.upsell_skus = {
             type: "array",
-            description: "Produtos superiores sugeridos como upsell, com SKU e título reais do catálogo",
-            items: {
-              type: "object",
-              properties: { sku: { type: "string" }, title: { type: "string" } },
-              required: ["sku", "title"],
-            },
+            description: "SKUs reais de produtos superiores sugeridos como upsell (apenas os SKUs, sem títulos)",
+            items: { type: "string" },
           };
           requiredFields.push("upsell_skus");
         }
         if (fields.includes("crosssells")) {
           toolProperties.crosssell_skus = {
             type: "array",
-            description: "Produtos complementares sugeridos como cross-sell, com SKU e título reais do catálogo",
-            items: {
-              type: "object",
-              properties: { sku: { type: "string" }, title: { type: "string" } },
-              required: ["sku", "title"],
-            },
+            description: "SKUs reais de produtos complementares sugeridos como cross-sell (apenas os SKUs, sem títulos)",
+            items: { type: "string" },
           };
           requiredFields.push("crosssell_skus");
         }
