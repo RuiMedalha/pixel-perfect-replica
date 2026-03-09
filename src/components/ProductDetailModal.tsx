@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns, GitBranch, Eye, Save, Pencil } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { VariationsPanel } from "@/components/VariationsPanel";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
 import { useProducts } from "@/hooks/useProducts";
