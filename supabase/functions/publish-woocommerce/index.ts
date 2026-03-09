@@ -767,27 +767,22 @@ function tokenizeTitle(s: string): string[] {
 
 function inferVariationOptionFromTitle(parentTitle: string, childTitle: string): string | null {
   const rawChild = String(childTitle || "").trim();
+  const rawParent = String(parentTitle || "").trim();
   if (!rawChild) return null;
 
-  const childLower = rawChild.toLowerCase();
-  const marker = "kool-touch";
-  const idx = childLower.lastIndexOf(marker);
-  if (idx >= 0) {
-    const after = rawChild
-      .substring(idx + marker.length)
-      .trim()
-      .replace(/^[-–—:]+\s*/, "")
-      .trim();
-    if (after && after.length <= 80 && after.toLowerCase() !== rawChild.toLowerCase()) return after;
+  // Method 1: If child title starts with parent title, extract the suffix
+  const suffix = extractTitleSuffix(rawParent, rawChild);
+  if (suffix && suffix !== rawChild && suffix.length <= 80 && suffix.length > 0) {
+    // Clean up leading separators
+    const cleaned = suffix.replace(/^[-–—:,\s]+/, "").trim();
+    if (cleaned && cleaned.length <= 80) return cleaned;
   }
 
-  const pTokens = new Set(tokenizeTitle(parentTitle).map((t) => t.toLowerCase()));
+  // Method 2: Token-based diff - remove parent tokens from child
+  const pTokens = new Set(tokenizeTitle(rawParent).map((t) => t.toLowerCase()));
   const remaining = tokenizeTitle(rawChild).filter((t) => !pTokens.has(t.toLowerCase()));
   const candidate = remaining.join(" ").trim();
   if (candidate && candidate.length <= 80) return candidate;
-
-  const suffix = extractTitleSuffix(parentTitle, rawChild);
-  if (suffix && suffix.length <= 80) return suffix;
 
   return null;
 }
