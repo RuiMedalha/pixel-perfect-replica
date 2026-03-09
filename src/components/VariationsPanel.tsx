@@ -450,18 +450,51 @@ export function VariationsPanel({ product, allProducts, updateProduct }: Props) 
           <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
             <Eye className="w-4 h-4" /> Preview WooCommerce
           </h4>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="font-medium">{product.optimized_title || product.original_title}</p>
             {allAttrNames.map(name => {
               const values = [...new Set(inferredAttrs.filter(a => a.attrName === name).map(a => a.attrValue))];
+              const isColor = name.toLowerCase() === "cor" || name.toLowerCase() === "color";
               return (
-                <div key={name} className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{name}:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {values.map((val, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">{val}</Badge>
-                    ))}
-                  </div>
+                <div key={name}>
+                  <span className="text-xs text-muted-foreground font-medium mb-1.5 block">{name}</span>
+                  {isColor ? (
+                    <TooltipProvider>
+                      <div className="flex flex-wrap gap-2">
+                        {values.map((val, i) => {
+                          const color = getColorFromValue(val);
+                          const isTransparent = color === "transparent";
+                          const isGradient = color?.startsWith("linear-gradient");
+                          return (
+                            <Tooltip key={i}>
+                              <TooltipTrigger asChild>
+                                <button
+                                  className={cn(
+                                    "w-7 h-7 rounded-full border-2 border-border shadow-sm transition-transform hover:scale-110",
+                                    isTransparent && "bg-[repeating-conic-gradient(#d4d4d4_0%_25%,transparent_0%_50%)] bg-[length:8px_8px]"
+                                  )}
+                                  style={{
+                                    background: color
+                                      ? (isTransparent ? undefined : color)
+                                      : `hsl(${(val.charCodeAt(0) * 37) % 360}, 60%, 55%)`,
+                                  }}
+                                />
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" className="text-xs">
+                                {val}
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </TooltipProvider>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {values.map((val, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">{val}</Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
