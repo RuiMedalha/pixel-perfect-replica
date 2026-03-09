@@ -129,13 +129,16 @@ Deno.serve(async (req) => {
       const endIndex = Math.min(startIndex + BATCH_SIZE, productIds.length);
       const batchIds = productIds.slice(startIndex, endIndex);
 
-      // Fetch products for this batch
+      // Fetch products for this batch (keep original order from product_ids)
       const { data: batchProducts } = await supabase
         .from("products")
         .select("*")
         .in("id", batchIds);
 
-      if (!batchProducts || batchProducts.length === 0) {
+      const batchById = new Map<string, any>((batchProducts || []).map((p: any) => [p.id, p]));
+      const orderedBatchProducts = batchIds.map((id) => batchById.get(id)).filter(Boolean);
+
+      if (!orderedBatchProducts || orderedBatchProducts.length === 0) {
         // Skip this batch
         if (endIndex >= productIds.length) {
           await finalizeJob(adminClient, jobId, job, user.id);
@@ -148,7 +151,7 @@ Deno.serve(async (req) => {
       const existingResults = (job.results || []) as WooResult[];
 
       // Process each product in the batch
-      for (const product of (batchProducts || [])) {
+      for (const product of orderedBatchProducts) {
         // Re-check cancellation
         const { data: freshJob } = await adminClient
           .from("publish_jobs")
@@ -246,6 +249,28 @@ Deno.serve(async (req) => {
       const childIds = (children || []).map((c: any) => c.id);
       allIds = [...new Set([...allIds, ...childIds])];
     }
+
+    // Ensure parents are processed before variations to avoid "pai não publicado" errors
+    const { data: allRows } = await supabase
+      .from("products")
+      .select("id, parent_product_id, product_type")
+      .in("id", allIds);
+
+    const rowById = new Map<string, any>((allRows || []).map((r: any) => [r.id, r]));
+    const rank = (id: string) => {
+      const r = rowById.get(id);
+      if (!r) return 3;
+      if (!r.parent_product_id && r.product_type === "variable") return 0; // variable parent
+      if (!r.parent_product_id) return 1; // simple/parentless
+      return 2; // variation
+    };
+
+    allIds = [...allIds].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    });
 
     const isScheduled = scheduledFor && new Date(scheduledFor) > new Date();
     const status = isScheduled ? "scheduled" : "queued";
@@ -438,54 +463,48 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
 }
 
 async function buildBasePayload(
-  product: any, supabase: any, baseUrl: string, auth: string,
-  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false, parent?: any
+  product: any,
+  supabase: any,
+  baseUrl: string,
+  auth: string,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
 ): Promise<Record<string, unknown>> {
   const wooProduct: Record<string, unknown> = {};
 
   if (has("title")) {
-    // For variations, append attribute suffix to title
-    let title = product.optimized_title || product.original_title || "Sem título";
-    if (isVariation && parent) {
-      const variationAttrs = buildVariationAttributes(product, parent);
-      if (variationAttrs.length > 0) {
-        const suffix = variationAttrs.map(a => a.option).join(" ");
-        title = `${title} - ${suffix}`;
-      }
-    }
-    wooProduct.name = title;
+    wooProduct.name = product.optimized_title || product.original_title || "Sem título";
   }
-  // Variations should NOT include description/short_description - they inherit from parent
-  if (has("description") && !isVariation) {
+
+  if (has("description")) {
     wooProduct.description = product.optimized_description || product.original_description || "";
   }
-  if (has("short_description") && !isVariation) {
+
+  if (has("short_description")) {
     wooProduct.short_description = product.optimized_short_description || product.short_description || "";
   }
 
   if (has("price")) {
     let basePrice = parseFloat(product.optimized_price || product.original_price || "0") || 0;
-    if (markupPercent > 0) {
-      basePrice = basePrice * (1 + markupPercent / 100);
-    }
+    if (markupPercent > 0) basePrice = basePrice * (1 + markupPercent / 100);
     wooProduct.regular_price = basePrice.toFixed(2);
 
     if (has("sale_price") && discountPercent > 0) {
       wooProduct.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
     }
   }
+
   if (has("sale_price") && !wooProduct.sale_price) {
     const sp = product.optimized_sale_price ?? product.sale_price;
-    if (sp != null) {
-      wooProduct.sale_price = String(sp);
-    }
+    if (sp != null) wooProduct.sale_price = String(sp);
   }
 
   if (has("sku")) {
     wooProduct.sku = product.sku || undefined;
   }
 
-  if (has("slug") && !isVariation) {
+  if (has("slug")) {
     wooProduct.slug = product.seo_slug || undefined;
   }
 
@@ -502,85 +521,130 @@ async function buildBasePayload(
     }
   }
 
-  if (!isVariation) {
-    if (has("categories")) {
-      if (product.category_id) {
-        const { data: catRow } = await supabase
-          .from("categories")
-          .select("woocommerce_id, name, parent_id")
-          .eq("id", product.category_id)
-          .single();
-        if (catRow?.woocommerce_id) {
-          const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
-          let parentId = catRow.parent_id;
-          while (parentId) {
-            const { data: parentCat } = await supabase
-              .from("categories")
-              .select("woocommerce_id, parent_id")
-              .eq("id", parentId)
-              .single();
-            if (parentCat?.woocommerce_id) {
-              catIds.push({ id: parentCat.woocommerce_id });
-            }
-            parentId = parentCat?.parent_id || null;
-          }
-          wooProduct.categories = catIds;
-        } else if (catRow) {
-          wooProduct.categories = [{ name: catRow.name }];
-        }
-      } else if (product.category) {
-        const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
-        const resolveCatName = async (name: string): Promise<number | null> => {
-          const { data: localCats } = await supabase
+  if (has("categories")) {
+    if (product.category_id) {
+      const { data: catRow } = await supabase
+        .from("categories")
+        .select("woocommerce_id, name, parent_id")
+        .eq("id", product.category_id)
+        .single();
+      if (catRow?.woocommerce_id) {
+        const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
+        let parentId = catRow.parent_id;
+        while (parentId) {
+          const { data: parentCat } = await supabase
             .from("categories")
-            .select("woocommerce_id")
-            .ilike("name", name)
-            .not("woocommerce_id", "is", null)
-            .limit(1);
-          if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
-            return localCats[0].woocommerce_id;
+            .select("woocommerce_id, parent_id")
+            .eq("id", parentId)
+            .single();
+          if (parentCat?.woocommerce_id) catIds.push({ id: parentCat.woocommerce_id });
+          parentId = parentCat?.parent_id || null;
+        }
+        wooProduct.categories = catIds;
+      } else if (catRow) {
+        wooProduct.categories = [{ name: catRow.name }];
+      }
+    } else if (product.category) {
+      const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
+      const resolveCatName = async (name: string): Promise<number | null> => {
+        const { data: localCats } = await supabase
+          .from("categories")
+          .select("woocommerce_id")
+          .ilike("name", name)
+          .not("woocommerce_id", "is", null)
+          .limit(1);
+        if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
+          return localCats[0].woocommerce_id;
+        }
+        try {
+          const searchResp = await fetch(
+            `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
+            { headers: { Authorization: `Basic ${auth}` } }
+          );
+          if (searchResp.ok) {
+            const wooCats = await searchResp.json();
+            const exactMatch = wooCats.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
+            if (exactMatch) return exactMatch.id;
           }
-          try {
-            const searchResp = await fetch(
-              `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
-              { headers: { Authorization: `Basic ${auth}` } }
-            );
-            if (searchResp.ok) {
-              const wooCats = await searchResp.json();
-              const exactMatch = wooCats.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
-              if (exactMatch) return exactMatch.id;
-            }
-          } catch { /* skip */ }
-          return null;
-        };
-
-        const resolvedCatIds: Array<{ id: number }> = [];
-        for (const part of parts) {
-          const wcId = await resolveCatName(part);
-          if (wcId) resolvedCatIds.push({ id: wcId });
+        } catch {
+          /* skip */
         }
-        if (resolvedCatIds.length > 0) {
-          wooProduct.categories = resolvedCatIds;
-        }
-      }
-    }
-    if (has("tags")) {
-      wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));
-    }
+        return null;
+      };
 
-    if (has("meta_title") || has("meta_description")) {
-      const meta_data: Array<{ key: string; value: string }> = [];
-      if (has("meta_title")) {
-        meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
+      const resolvedCatIds: Array<{ id: number }> = [];
+      for (const part of parts) {
+        const wcId = await resolveCatName(part);
+        if (wcId) resolvedCatIds.push({ id: wcId });
       }
-      if (has("meta_description")) {
-        meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
-      }
-      wooProduct.meta_data = meta_data;
+      if (resolvedCatIds.length > 0) wooProduct.categories = resolvedCatIds;
     }
   }
 
+  if (has("tags")) {
+    wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));
+  }
+
+  if (has("meta_title") || has("meta_description")) {
+    const meta_data: Array<{ key: string; value: string }> = [];
+    if (has("meta_title")) meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
+    if (has("meta_description")) meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
+    wooProduct.meta_data = meta_data;
+  }
+
   return wooProduct;
+}
+
+const TECHNICAL_ATTR_NAMES = new Set([
+  "marca",
+  "brand",
+  "ean",
+  "ean13",
+  "gtin",
+  "barcode",
+]);
+
+async function buildVariationPayload(
+  variation: any,
+  parent: any,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
+): Promise<Record<string, unknown>> {
+  // WooCommerce variations do NOT support many product fields (name, categories, tags, upsells/cross-sells, images[])
+  const payload: Record<string, unknown> = {};
+
+  if (has("price")) {
+    let basePrice = parseFloat(variation.optimized_price || variation.original_price || "0") || 0;
+    if (markupPercent > 0) basePrice = basePrice * (1 + markupPercent / 100);
+    payload.regular_price = basePrice.toFixed(2);
+
+    if (has("sale_price") && discountPercent > 0) {
+      payload.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
+    }
+  }
+
+  if (has("sale_price") && !payload.sale_price) {
+    const sp = variation.optimized_sale_price ?? variation.sale_price;
+    if (sp != null) payload.sale_price = String(sp);
+  }
+
+  if (has("sku")) {
+    payload.sku = variation.sku || undefined;
+  }
+
+  if (has("images")) {
+    const urls: string[] = Array.isArray(variation.image_urls) ? variation.image_urls : [];
+    if (urls.length > 0) {
+      payload.image = { src: urls[0] };
+    }
+  }
+
+  // Only variation-defining attributes go on the variation payload.
+  const variationAttrs = buildVariationAttributes(variation, parent);
+  if (variationAttrs.length > 0) payload.attributes = variationAttrs;
+
+  return payload;
 }
 
 // Extract the unique suffix from a child title compared to the parent title
@@ -594,16 +658,25 @@ function extractTitleSuffix(parentTitle: string, childTitle: string): string {
 }
 
 function buildAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+  // Variation-defining attributes (Cor, Tamanho, etc.) for the *parent* product.
   const attrMap = new Map<string, Set<string>>();
+
+  const add = (name: string, value: string) => {
+    const n = String(name || "").trim();
+    const v = String(value || "").trim();
+    if (!n || !v) return;
+    const lower = n.toLowerCase();
+    if (TECHNICAL_ATTR_NAMES.has(lower)) return;
+    if (!attrMap.has(n)) attrMap.set(n, new Set());
+    attrMap.get(n)!.add(v);
+  };
 
   for (const v of variations) {
     const attrs = v.attributes || [];
     if (Array.isArray(attrs)) {
       for (const attr of attrs) {
-        if (attr.name && attr.value) {
-          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          attrMap.get(attr.name)!.add(attr.value);
-        }
+        if (attr?.variation === false) continue;
+        add(attr?.name, attr?.value);
       }
     }
   }
@@ -612,14 +685,19 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
     const parentAttrs = parent.attributes || [];
     if (Array.isArray(parentAttrs)) {
       for (const attr of parentAttrs) {
-        if (attr.name && Array.isArray(attr.values) && attr.values.length > 0) {
-          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          for (const val of attr.values) { if (val) attrMap.get(attr.name)!.add(val); }
-        }
-        if (attr.name && Array.isArray(attr.options) && attr.options.length > 0) {
-          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          for (const val of attr.options) { if (val) attrMap.get(attr.name)!.add(val); }
-        }
+        const n = String(attr?.name || "").trim();
+        if (!n) continue;
+        const lower = n.toLowerCase();
+        if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
+        if (attr?.variation === false) continue;
+
+        const values: string[] = Array.isArray(attr.values)
+          ? attr.values
+          : Array.isArray(attr.options)
+            ? attr.options
+            : [];
+
+        for (const val of values) add(n, val);
       }
     }
   }
@@ -630,7 +708,12 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
     for (const v of variations) {
       const attrs = v.attributes || [];
       if (Array.isArray(attrs)) {
-        for (const attr of attrs) { if (attr.name) knownAttrNames.add(attr.name); }
+        for (const attr of attrs) {
+          const n = String(attr?.name || "").trim();
+          if (n && !TECHNICAL_ATTR_NAMES.has(n.toLowerCase()) && attr?.variation !== false) {
+            knownAttrNames.add(n);
+          }
+        }
       }
     }
     const parentTitle = parent.optimized_title || parent.original_title || "";
@@ -641,9 +724,9 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
       if (suffix) suffixes.push(suffix);
     }
     if (suffixes.length > 0) {
-      const attrName = knownAttrNames.size > 0 ? Array.from(knownAttrNames)[0] : "Variação";
-      attrMap.set(attrName, new Set(suffixes));
-      console.log(`Built attributes from title diffs: ${attrName} => [${suffixes.join(", ")}]`);
+      const fallbackName = knownAttrNames.size > 0 ? Array.from(knownAttrNames)[0] : "Variação";
+      attrMap.set(fallbackName, new Set(suffixes));
+      console.log(`Built attributes from title diffs: ${fallbackName} => [${suffixes.join(", ")}]`);
     }
   }
 
@@ -655,16 +738,56 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
   }));
 }
 
+function buildStaticAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+  // Technical/non-variation attributes (Marca/EAN/etc.) for the *parent* product.
+  const map = new Map<string, Set<string>>();
+
+  const add = (name: string, value: string) => {
+    const n = String(name || "").trim();
+    const v = String(value || "").trim();
+    if (!n || !v) return;
+    if (!map.has(n)) map.set(n, new Set());
+    map.get(n)!.add(v);
+  };
+
+  const collect = (attrs: any[]) => {
+    if (!Array.isArray(attrs)) return;
+    for (const attr of attrs) {
+      const n = String(attr?.name || "").trim();
+      if (!n) continue;
+      const lower = n.toLowerCase();
+      const isTechnical = attr?.variation === false || TECHNICAL_ATTR_NAMES.has(lower);
+      if (!isTechnical) continue;
+
+      if (attr?.value) add(n, attr.value);
+      if (Array.isArray(attr.values)) for (const v of attr.values) add(n, v);
+      if (Array.isArray(attr.options)) for (const v of attr.options) add(n, v);
+    }
+  };
+
+  collect(parent.attributes || []);
+  for (const v of variations) collect(v.attributes || []);
+
+  return Array.from(map.entries()).map(([name, values]) => ({
+    name,
+    options: Array.from(values),
+    variation: false,
+    visible: true,
+  }));
+}
+
 function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
   const attrs = product.attributes || [];
   const variationAttrs: Array<{ name: string; option: string }> = [];
-  
+
   if (Array.isArray(attrs)) {
-    // Only include attributes marked for variation (not technical attributes)
     for (const attr of attrs) {
-      if (attr.name && attr.value && attr.variation !== false) {
-        variationAttrs.push({ name: attr.name, option: attr.value });
-      }
+      const n = String(attr?.name || "").trim();
+      if (!n || !attr?.value) continue;
+      const lower = n.toLowerCase();
+      if (attr?.variation === false) continue;
+      if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
+      variationAttrs.push({ name: n, option: String(attr.value) });
     }
     if (variationAttrs.length > 0) return variationAttrs;
   }
@@ -675,11 +798,17 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
       const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
       if (childTitle) {
         for (const attr of parentAttrs) {
+          const n = String(attr?.name || "").trim();
+          if (!n) continue;
+          const lower = n.toLowerCase();
+          if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
+          if (attr?.variation === false) continue;
+
           const values: string[] = attr.values || attr.options || [];
           const sorted = [...values].sort((a, b) => b.length - a.length);
           for (const val of sorted) {
-            if (val && childTitle.includes(val.toLowerCase())) {
-              variationAttrs.push({ name: attr.name, option: val });
+            if (val && childTitle.includes(String(val).toLowerCase())) {
+              variationAttrs.push({ name: n, option: val });
               break;
             }
           }
@@ -696,32 +825,16 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     const suffix = extractTitleSuffix(parentTitle, childTitle);
     if (suffix) {
       const childAttrs = product.attributes || [];
-      const attrName = (Array.isArray(childAttrs) && childAttrs.length > 0 && childAttrs[0].name)
-        ? childAttrs[0].name
+      let attrName = (Array.isArray(childAttrs) && childAttrs.length > 0 && childAttrs[0].name)
+        ? String(childAttrs[0].name)
         : "Variação";
+      if (TECHNICAL_ATTR_NAMES.has(attrName.toLowerCase())) attrName = "Variação";
       console.log(`Variation ${product.id}: inferred ${attrName}=${suffix} from title diff`);
       return [{ name: attrName, option: suffix }];
     }
   }
 
   return [];
-}
-
-function buildTechnicalAttributes(product: any): Array<{ name: string; option: string }> {
-  // Extract technical attributes like Marca, EAN that should be preserved on variations
-  const attrs = product.attributes || [];
-  const technicalAttrs: Array<{ name: string; option: string }> = [];
-  
-  if (Array.isArray(attrs)) {
-    for (const attr of attrs) {
-      // Include non-variation attributes (technical specs)
-      if (attr.name && attr.value && attr.variation === false) {
-        technicalAttrs.push({ name: attr.name, option: attr.value });
-      }
-    }
-  }
-  
-  return technicalAttrs;
 }
 
 async function publishSingleProduct(
@@ -810,8 +923,26 @@ async function publishVariableProduct(
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
 
-  const attributes = buildAttributesForParent(parent, children || []);
-  if (attributes.length > 0) parentPayload.attributes = attributes;
+  const variationAttributes = buildAttributesForParent(parent, children || []);
+  const staticAttributes = buildStaticAttributesForParent(parent, children || []);
+
+  if (variationAttributes.length > 0 || staticAttributes.length > 0) {
+    const merged: any[] = [...variationAttributes];
+    const byName = new Map<string, any>(merged.map((a) => [a.name, a]));
+
+    for (const s of staticAttributes) {
+      const existing = byName.get(s.name);
+      if (!existing) {
+        merged.push(s);
+        byName.set(s.name, s);
+      } else {
+        const set = new Set<string>([...(existing.options || []), ...(s.options || [])]);
+        existing.options = Array.from(set);
+      }
+    }
+
+    parentPayload.attributes = merged;
+  }
 
   if (has("upsells")) {
     const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, parent.upsell_skus || []);
@@ -822,6 +953,7 @@ async function publishVariableProduct(
     if (crosssellIds.length > 0) parentPayload.cross_sell_ids = crosssellIds;
   }
 
+  // Variable parents must not have prices; prices live on variations
   delete parentPayload.regular_price;
   delete parentPayload.sale_price;
 
@@ -842,67 +974,7 @@ async function publishVariableProduct(
     .update({ woocommerce_id: parentWooId, status: "published" as any })
     .eq("id", parent.id);
 
-  // Publish children
-  for (const child of (children || [])) {
-    try {
-      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parent);
-      
-      // Build variation attributes (e.g., Cor, Tamanho)
-      const variationAttrs = buildVariationAttributes(child, parent);
-      
-      // Build technical attributes (e.g., Marca, EAN)
-      const technicalAttrs = buildTechnicalAttributes(child);
-      
-      // Merge both types of attributes
-      const allAttrs = [...variationAttrs, ...technicalAttrs];
-      if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
-      
-      // Add upsells and crosssells for variations
-      if (has("upsells")) {
-        const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.upsell_skus || []);
-        if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
-      }
-      if (has("crosssells")) {
-        const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.crosssell_skus || []);
-        if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
-      }
-
-      let existingVarWooId = child.woocommerce_id;
-      // If no local woocommerce_id, try to find existing variation by SKU
-      if (!existingVarWooId && child.sku) {
-        existingVarWooId = await findWooVariationBySku(baseUrl, auth, parentWooId, child.sku);
-        if (existingVarWooId) {
-          // Persist the discovered woocommerce_id
-          await supabase
-            .from("products")
-            .update({ woocommerce_id: existingVarWooId })
-            .eq("id", child.id);
-        }
-      }
-
-      let varWooData;
-      try {
-        varWooData = existingVarWooId
-          ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
-          : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
-      } catch (skuErr) {
-        if (skuErr instanceof WooSkuConflictError) {
-          console.log(`SKU conflict for variation ${child.id}, handling properly`);
-          varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, child.id, child.sku || "", variationPayload, skuErr, supabase);
-        } else {
-          throw skuErr;
-        }
-      }
-
-      await supabase
-        .from("products")
-        .update({ woocommerce_id: varWooData.id, status: "published" as any })
-        .eq("id", child.id);
-    } catch (e) {
-      console.error(`Error publishing variation ${child.id}:`, (e as Error).message);
-    }
-  }
-
+  // Variations are processed separately (they are added to the job queue), to avoid duplicate creation and SKU conflicts.
   return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
 }
 
@@ -925,27 +997,7 @@ async function publishVariation(
   const parentWooId = parentRow?.woocommerce_id;
 
   if (parentWooId) {
-    const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parentRow);
-    
-    // Build variation attributes (e.g., Cor, Tamanho)
-    const variationAttrs = buildVariationAttributes(variation, parentRow);
-    
-    // Build technical attributes (e.g., Marca, EAN)
-    const technicalAttrs = buildTechnicalAttributes(variation);
-    
-    // Merge both types of attributes
-    const allAttrs = [...variationAttrs, ...technicalAttrs];
-    if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
-    
-    // Add upsells and crosssells for variations
-    if (has("upsells")) {
-      const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, variation.upsell_skus || []);
-      if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
-    }
-    if (has("crosssells")) {
-      const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, variation.crosssell_skus || []);
-      if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
-    }
+    const variationPayload = await buildVariationPayload(variation, parentRow, has, markupPercent, discountPercent);
 
     let existingVarWooId = variation.woocommerce_id;
     if (!existingVarWooId && variation.sku) {
@@ -960,6 +1012,7 @@ async function publishVariation(
 
     let action: "created" | "updated" = existingVarWooId ? "updated" : "created";
     let varWooData;
+
     try {
       varWooData = existingVarWooId
         ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
@@ -967,7 +1020,16 @@ async function publishVariation(
     } catch (skuErr) {
       if (skuErr instanceof WooSkuConflictError) {
         console.log(`SKU conflict for standalone variation ${variation.id}, handling properly`);
-        varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, variation.id, variation.sku || "", variationPayload, skuErr, supabase);
+        varWooData = await handleVariationSkuConflict(
+          baseUrl,
+          auth,
+          parentWooId,
+          variation.id,
+          variation.sku || "",
+          variationPayload,
+          skuErr,
+          supabase
+        );
         action = "updated";
       } else {
         throw skuErr;
