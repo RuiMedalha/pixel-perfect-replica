@@ -662,8 +662,9 @@ const ProductsPage = () => {
             </Button>
           </div>
           <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
-            const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
-            exportProductsToExcel(selectedProducts);
+            setExportTarget("all");
+            setExportSkuPrefix("");
+            setShowExportDialog(true);
           }}>
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Exportar </span>Excel
           </Button>
