@@ -398,16 +398,73 @@ async function deleteWooProduct(baseUrl: string, auth: string, productId: number
       method: "DELETE",
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
     });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(`Falha a eliminar produto ${productId} no WooCommerce: ${resp.status} ${body.substring(0, 200)}`);
+    }
     return resp.ok;
-  } catch { return false; }
+  } catch (e) {
+    console.warn(`Exceção ao eliminar produto ${productId} no WooCommerce:`, e);
+    return false;
+  }
+}
+
+async function deleteWooVariation(baseUrl: string, auth: string, parentWooId: number, variationWooId: number): Promise<boolean> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${parentWooId}/variations/${variationWooId}?force=true`, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(
+        `Falha a eliminar variação ${variationWooId} (pai ${parentWooId}) no WooCommerce: ${resp.status} ${body.substring(0, 200)}`
+      );
+    }
+    return resp.ok;
+  } catch (e) {
+    console.warn(`Exceção ao eliminar variação ${variationWooId} (pai ${parentWooId}) no WooCommerce:`, e);
+    return false;
+  }
+}
+
+async function getWooResource(baseUrl: string, auth: string, resourceId: number): Promise<any | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${resourceId}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+async function getWooVariation(baseUrl: string, auth: string, parentWooId: number, variationWooId: number): Promise<any | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${parentWooId}/variations/${variationWooId}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
 }
 
 async function handleVariationSkuConflict(
-  baseUrl: string, auth: string, parentWooId: number, childId: string, sku: string,
-  variationPayload: Record<string, unknown>, skuErr: WooSkuConflictError, supabase: any
+  baseUrl: string,
+  auth: string,
+  parentWooId: number,
+  childId: string,
+  sku: string,
+  variationPayload: Record<string, unknown>,
+  skuErr: WooSkuConflictError,
+  supabase: any
 ): Promise<any> {
-  // The resource_id from SKU conflict might be a standalone product, NOT a variation under this parent.
-  // Step 1: Try to find the variation by SKU under the correct parent
+  // Step 1: if the variation already exists under the correct parent, update it
   const realVarId = await findWooVariationBySku(baseUrl, auth, parentWooId, sku);
   if (realVarId) {
     console.log(`Found existing variation ${realVarId} under parent ${parentWooId} for child ${childId}`);
@@ -416,13 +473,70 @@ async function handleVariationSkuConflict(
     return varWooData;
   }
 
-  // Step 2: The conflicting SKU is a standalone product — delete it and create as variation
-  console.log(`SKU conflict resource_id ${skuErr.resourceId} is not a variation under parent ${parentWooId}. Deleting standalone and creating variation.`);
-  await deleteWooProduct(baseUrl, auth, skuErr.resourceId);
+  // Step 1b: sometimes Woo gives us the variation ID directly in resource_id
+  const directVar = await getWooVariation(baseUrl, auth, parentWooId, skuErr.resourceId);
+  if (directVar?.id) {
+    console.log(`SKU conflict resource_id ${skuErr.resourceId} já é variação do pai ${parentWooId}; a atualizar.`);
+    const varWooData = await wooFetch(
+      baseUrl,
+      auth,
+      `/products/${parentWooId}/variations/${skuErr.resourceId}`,
+      "PUT",
+      variationPayload
+    );
+    await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", childId);
+    return varWooData;
+  }
 
-  // Now create the variation fresh
-  const varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
-  return varWooData;
+  // Step 2: try to understand what resource_id is (product vs variation under another parent)
+  const resource = await getWooResource(baseUrl, auth, skuErr.resourceId);
+
+  if (resource?.type === "variation" && resource?.parent_id) {
+    const otherParentId = Number(resource.parent_id);
+    if (otherParentId === parentWooId) {
+      const varWooData = await wooFetch(
+        baseUrl,
+        auth,
+        `/products/${parentWooId}/variations/${skuErr.resourceId}`,
+        "PUT",
+        variationPayload
+      );
+      await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", childId);
+      return varWooData;
+    }
+
+    console.log(
+      `SKU conflict: resource_id ${skuErr.resourceId} é variação do produto ${otherParentId}; a tentar eliminar e recriar sob ${parentWooId}.`
+    );
+    const deleted = await deleteWooVariation(baseUrl, auth, otherParentId, skuErr.resourceId);
+    if (!deleted) {
+      throw new Error(
+        `SKU conflict: o SKU já existe na variação #${skuErr.resourceId} (pai #${otherParentId}) e não foi possível remover automaticamente. Resolva apagando/alterando esse SKU no WooCommerce e tente novamente.`
+      );
+    }
+  } else {
+    console.log(
+      `SKU conflict resource_id ${skuErr.resourceId} não é variação do pai ${parentWooId}. A tentar eliminar produto standalone e criar como variação.`
+    );
+    const deleted = await deleteWooProduct(baseUrl, auth, skuErr.resourceId);
+    if (!deleted) {
+      throw new Error(
+        `SKU conflict: o SKU já existe no produto #${skuErr.resourceId} e não foi possível remover automaticamente. Resolva apagando/alterando esse SKU no WooCommerce e tente novamente.`
+      );
+    }
+  }
+
+  // Step 3: create the variation again
+  try {
+    return await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+  } catch (e) {
+    if (e instanceof WooSkuConflictError) {
+      throw new Error(
+        `SKU conflict persistente: o SKU continua a existir no WooCommerce (ID #${e.resourceId}). Altere o SKU no Excel/app ou elimine o item com esse SKU no WooCommerce e volte a publicar.`
+      );
+    }
+    throw e;
+  }
 }
 
 async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: string, auth: string, skus: any[]): Promise<number[]> {
@@ -604,6 +718,82 @@ const TECHNICAL_ATTR_NAMES = new Set([
   "barcode",
 ]);
 
+const DEFAULT_VARIATION_ATTR_NAME = "Cor";
+
+const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
+
+function tokenizeTitle(s: string): string[] {
+  return String(s || "")
+    .replace(/[()\[\]{}]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => t.replace(/[^\p{L}\p{N}\-\.]+/gu, ""))
+    .filter(Boolean);
+}
+
+function inferVariationOptionFromTitle(parentTitle: string, childTitle: string): string | null {
+  const rawChild = String(childTitle || "").trim();
+  if (!rawChild) return null;
+
+  const childLower = rawChild.toLowerCase();
+  const marker = "kool-touch";
+  const idx = childLower.lastIndexOf(marker);
+  if (idx >= 0) {
+    const after = rawChild
+      .substring(idx + marker.length)
+      .trim()
+      .replace(/^[-–—:]+\s*/, "")
+      .trim();
+    if (after && after.length <= 80 && after.toLowerCase() !== rawChild.toLowerCase()) return after;
+  }
+
+  const pTokens = new Set(tokenizeTitle(parentTitle).map((t) => t.toLowerCase()));
+  const remaining = tokenizeTitle(rawChild).filter((t) => !pTokens.has(t.toLowerCase()));
+  const candidate = remaining.join(" ").trim();
+  if (candidate && candidate.length <= 80) return candidate;
+
+  const suffix = extractTitleSuffix(parentTitle, rawChild);
+  if (suffix && suffix.length <= 80) return suffix;
+
+  return null;
+}
+
+function mergeWooAttributes(existing: any[], incoming: any[]): any[] {
+  const byName = new Map<string, any>();
+  const norm = (n: string) => String(n || "").toLowerCase().trim();
+
+  for (const a of (existing || [])) {
+    if (!a?.name) continue;
+    const key = norm(a.name);
+    if (!key) continue;
+    byName.set(key, { ...a, options: Array.isArray(a.options) ? a.options : [] });
+  }
+
+  for (const a of (incoming || [])) {
+    if (!a?.name) continue;
+    const key = norm(a.name);
+    if (!key) continue;
+
+    const inOptions = Array.isArray(a.options) ? a.options : [];
+
+    const current = byName.get(key);
+    if (!current) {
+      byName.set(key, { ...a, options: inOptions });
+      continue;
+    }
+
+    const set = new Set<string>([...(current.options || []), ...inOptions].map((v) => String(v)));
+    current.options = Array.from(set);
+
+    // Keep existing id/position; prefer incoming flags when present
+    if (typeof a.visible === "boolean") current.visible = a.visible;
+    if (typeof a.variation === "boolean") current.variation = a.variation;
+  }
+
+  return Array.from(byName.values());
+}
+
 async function buildVariationPayload(
   variation: any,
   parent: any,
@@ -613,6 +803,9 @@ async function buildVariationPayload(
 ): Promise<Record<string, unknown>> {
   // WooCommerce variations do NOT support many product fields (name, categories, tags, upsells/cross-sells, images[])
   const payload: Record<string, unknown> = {};
+
+  // Evita a “descrição duplicada” no storefront (Woo mostra a descrição da variação separadamente quando existe)
+  payload.description = "";
 
   if (has("price")) {
     let basePrice = parseFloat(variation.optimized_price || variation.original_price || "0") || 0;
@@ -641,7 +834,16 @@ async function buildVariationPayload(
   }
 
   // Only variation-defining attributes go on the variation payload.
-  const variationAttrs = buildVariationAttributes(variation, parent);
+  let variationAttrs = buildVariationAttributes(variation, parent);
+
+  // If nothing came from structured attrs, infer a safe default (typically Cor)
+  if (variationAttrs.length === 0) {
+    const parentTitle = parent?.optimized_title || parent?.original_title || "";
+    const childTitle = variation.optimized_title || variation.original_title || "";
+    const option = inferVariationOptionFromTitle(parentTitle, childTitle);
+    if (option) variationAttrs = [{ name: DEFAULT_VARIATION_ATTR_NAME, option }];
+  }
+
   if (variationAttrs.length > 0) payload.attributes = variationAttrs;
 
   return payload;
@@ -649,84 +851,58 @@ async function buildVariationPayload(
 
 // Extract the unique suffix from a child title compared to the parent title
 function extractTitleSuffix(parentTitle: string, childTitle: string): string {
-  const p = parentTitle.toLowerCase().trim();
-  const c = childTitle.toLowerCase().trim();
+  const p = String(parentTitle || "").toLowerCase().trim();
+  const c = String(childTitle || "").toLowerCase().trim();
   let i = 0;
   while (i < p.length && i < c.length && p[i] === c[i]) i++;
-  const suffix = childTitle.trim().substring(i).trim();
-  return suffix || childTitle.trim();
+  const suffix = String(childTitle || "").trim().substring(i).trim();
+  return suffix || String(childTitle || "").trim();
 }
 
-function buildAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+function buildAttributesForParent(
+  parent: any,
+  variations: any[]
+): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
   // Variation-defining attributes (Cor, Tamanho, etc.) for the *parent* product.
   const attrMap = new Map<string, Set<string>>();
+
+  const parentTitle = parent?.optimized_title || parent?.original_title || "";
+
+  // Collect candidate attribute names from the dataset
+  const nameCandidates = new Set<string>();
+  for (const v of variations) {
+    const attrs = v?.attributes;
+    if (!Array.isArray(attrs)) continue;
+    for (const attr of attrs) {
+      const n = String(attr?.name || "").trim();
+      if (!n) continue;
+      if (attr?.variation === false) continue;
+      if (isTechnicalAttrName(n)) continue;
+      nameCandidates.add(n);
+    }
+  }
+
+  const names = nameCandidates.size > 0 ? Array.from(nameCandidates) : (variations.length > 0 ? [DEFAULT_VARIATION_ATTR_NAME] : []);
 
   const add = (name: string, value: string) => {
     const n = String(name || "").trim();
     const v = String(value || "").trim();
     if (!n || !v) return;
-    const lower = n.toLowerCase();
-    if (TECHNICAL_ATTR_NAMES.has(lower)) return;
+    if (isTechnicalAttrName(n)) return;
     if (!attrMap.has(n)) attrMap.set(n, new Set());
     attrMap.get(n)!.add(v);
   };
 
   for (const v of variations) {
-    const attrs = v.attributes || [];
-    if (Array.isArray(attrs)) {
-      for (const attr of attrs) {
-        if (attr?.variation === false) continue;
-        add(attr?.name, attr?.value);
-      }
-    }
-  }
+    const childTitle = v?.optimized_title || v?.original_title || "";
+    const attrs = Array.isArray(v?.attributes) ? v.attributes : [];
 
-  if (attrMap.size === 0) {
-    const parentAttrs = parent.attributes || [];
-    if (Array.isArray(parentAttrs)) {
-      for (const attr of parentAttrs) {
-        const n = String(attr?.name || "").trim();
-        if (!n) continue;
-        const lower = n.toLowerCase();
-        if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
-        if (attr?.variation === false) continue;
-
-        const values: string[] = Array.isArray(attr.values)
-          ? attr.values
-          : Array.isArray(attr.options)
-            ? attr.options
-            : [];
-
-        for (const val of values) add(n, val);
-      }
-    }
-  }
-
-  // Ultimate fallback: extract attribute values from title differences
-  if (attrMap.size === 0 && variations.length > 0) {
-    const knownAttrNames = new Set<string>();
-    for (const v of variations) {
-      const attrs = v.attributes || [];
-      if (Array.isArray(attrs)) {
-        for (const attr of attrs) {
-          const n = String(attr?.name || "").trim();
-          if (n && !TECHNICAL_ATTR_NAMES.has(n.toLowerCase()) && attr?.variation !== false) {
-            knownAttrNames.add(n);
-          }
-        }
-      }
-    }
-    const parentTitle = parent.optimized_title || parent.original_title || "";
-    const suffixes: string[] = [];
-    for (const v of variations) {
-      const childTitle = v.optimized_title || v.original_title || "";
-      const suffix = extractTitleSuffix(parentTitle, childTitle);
-      if (suffix) suffixes.push(suffix);
-    }
-    if (suffixes.length > 0) {
-      const fallbackName = knownAttrNames.size > 0 ? Array.from(knownAttrNames)[0] : "Variação";
-      attrMap.set(fallbackName, new Set(suffixes));
-      console.log(`Built attributes from title diffs: ${fallbackName} => [${suffixes.join(", ")}]`);
+    for (const name of names) {
+      // Find structured attribute value if present
+      const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
+      const raw = String(found?.value || "").trim();
+      const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
+      if (option) add(name, option);
     }
   }
 
@@ -738,7 +914,10 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
   }));
 }
 
-function buildStaticAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+function buildStaticAttributesForParent(
+  parent: any,
+  variations: any[]
+): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
   // Technical/non-variation attributes (Marca/EAN/etc.) for the *parent* product.
   const map = new Map<string, Set<string>>();
 
@@ -755,8 +934,7 @@ function buildStaticAttributesForParent(parent: any, variations: any[]): Array<{
     for (const attr of attrs) {
       const n = String(attr?.name || "").trim();
       if (!n) continue;
-      const lower = n.toLowerCase();
-      const isTechnical = attr?.variation === false || TECHNICAL_ATTR_NAMES.has(lower);
+      const isTechnical = attr?.variation === false || isTechnicalAttrName(n);
       if (!isTechnical) continue;
 
       if (attr?.value) add(n, attr.value);
@@ -777,63 +955,47 @@ function buildStaticAttributesForParent(parent: any, variations: any[]): Array<{
 }
 
 function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
-  const attrs = product.attributes || [];
-  const variationAttrs: Array<{ name: string; option: string }> = [];
+  const attrs = Array.isArray(product?.attributes) ? product.attributes : [];
+  const parentTitle = parent?.optimized_title || parent?.original_title || "";
+  const childTitle = product?.optimized_title || product?.original_title || "";
 
-  if (Array.isArray(attrs)) {
-    for (const attr of attrs) {
-      const n = String(attr?.name || "").trim();
-      if (!n || !attr?.value) continue;
-      const lower = n.toLowerCase();
-      if (attr?.variation === false) continue;
-      if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
-      variationAttrs.push({ name: n, option: String(attr.value) });
-    }
-    if (variationAttrs.length > 0) return variationAttrs;
+  const out: Array<{ name: string; option: string }> = [];
+
+  // Prefer structured attrs from the catalog
+  for (const attr of attrs) {
+    const n = String(attr?.name || "").trim();
+    if (!n) continue;
+    if (attr?.variation === false) continue;
+    if (isTechnicalAttrName(n)) continue;
+
+    const raw = String(attr?.value || "").trim();
+    const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
+    if (option) out.push({ name: n, option });
   }
 
-  if (parent) {
-    const parentAttrs = parent.attributes || [];
-    if (Array.isArray(parentAttrs) && parentAttrs.length > 0) {
-      const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
-      if (childTitle) {
-        for (const attr of parentAttrs) {
-          const n = String(attr?.name || "").trim();
-          if (!n) continue;
-          const lower = n.toLowerCase();
-          if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
-          if (attr?.variation === false) continue;
+  if (out.length > 0) return out;
 
-          const values: string[] = attr.values || attr.options || [];
-          const sorted = [...values].sort((a, b) => b.length - a.length);
-          for (const val of sorted) {
-            if (val && childTitle.includes(String(val).toLowerCase())) {
-              variationAttrs.push({ name: n, option: val });
-              break;
-            }
-          }
+  // If we have parent attributes (rare in DB), try matching options in title
+  if (parent && Array.isArray(parent.attributes) && parent.attributes.length > 0) {
+    const childLower = String(childTitle || "").toLowerCase();
+    for (const attr of parent.attributes) {
+      const n = String(attr?.name || "").trim();
+      if (!n) continue;
+      if (attr?.variation === false) continue;
+      if (isTechnicalAttrName(n)) continue;
+
+      const values: string[] = (attr.values || attr.options || []).map((v: any) => String(v));
+      const sorted = [...values].sort((a, b) => b.length - a.length);
+      for (const val of sorted) {
+        if (val && childLower.includes(val.toLowerCase())) {
+          return [{ name: n, option: val }];
         }
-        if (variationAttrs.length > 0) return variationAttrs;
       }
     }
   }
 
-  // Ultimate fallback: use title difference as attribute value
-  if (parent) {
-    const parentTitle = parent.optimized_title || parent.original_title || "";
-    const childTitle = product.optimized_title || product.original_title || "";
-    const suffix = extractTitleSuffix(parentTitle, childTitle);
-    if (suffix) {
-      const childAttrs = product.attributes || [];
-      let attrName = (Array.isArray(childAttrs) && childAttrs.length > 0 && childAttrs[0].name)
-        ? String(childAttrs[0].name)
-        : "Variação";
-      if (TECHNICAL_ATTR_NAMES.has(attrName.toLowerCase())) attrName = "Variação";
-      console.log(`Variation ${product.id}: inferred ${attrName}=${suffix} from title diff`);
-      return [{ name: attrName, option: suffix }];
-    }
-  }
-
+  const option = inferVariationOptionFromTitle(parentTitle, childTitle);
+  if (option) return [{ name: DEFAULT_VARIATION_ATTR_NAME, option }];
   return [];
 }
 
@@ -963,6 +1125,19 @@ async function publishVariableProduct(
   }
 
   const parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
+
+  // Ao atualizar, preserva atributos já existentes no WooCommerce (ex.: Marca/Modelo/EAN) para não os “apagar”.
+  if (existingParentWooId && Array.isArray((parentPayload as any).attributes)) {
+    try {
+      const existingWoo = await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "GET");
+      if (Array.isArray(existingWoo?.attributes)) {
+        (parentPayload as any).attributes = mergeWooAttributes(existingWoo.attributes, (parentPayload as any).attributes);
+      }
+    } catch (e) {
+      console.warn("Não foi possível ler atributos existentes do WooCommerce; a continuar.", e);
+    }
+  }
+
   const parentWooData = existingParentWooId
     ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
     : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
