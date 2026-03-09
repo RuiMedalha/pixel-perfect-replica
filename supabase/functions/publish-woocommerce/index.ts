@@ -1036,7 +1036,7 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   }
 
   const option = inferVariationOptionFromTitle(parentTitle, childTitle);
-  if (option) return [{ name: DEFAULT_VARIATION_ATTR_NAME, option }];
+  if (option) return [{ name: inferAttrNameFromOption(option), option }];
   return [];
 }
 
