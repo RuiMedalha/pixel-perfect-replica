@@ -576,6 +576,22 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
   return resolvedIds;
 }
 
+// Helper to determine if an image reference is a numeric WooCommerce media ID or a URL
+function buildImageEntry(ref: string, position: number, altText?: string, hasAlt?: boolean): Record<string, unknown> {
+  const trimmed = String(ref || "").trim();
+  const img: Record<string, unknown> = { position };
+  // If it's purely numeric, treat as WooCommerce media library ID
+  if (/^\d+$/.test(trimmed)) {
+    img.id = parseInt(trimmed, 10);
+  } else {
+    img.src = trimmed;
+  }
+  if (hasAlt && altText) {
+    img.alt = altText;
+  }
+  return img;
+}
+
 async function buildBasePayload(
   product: any,
   supabase: any,
@@ -625,12 +641,10 @@ async function buildBasePayload(
   if (has("images")) {
     if (product.image_urls && product.image_urls.length > 0) {
       const altTexts = product.image_alt_texts || [];
-      wooProduct.images = product.image_urls.map((url: string, i: number) => {
-        const img: Record<string, unknown> = { src: url, position: i };
-        if (has("image_alt_text") && altTexts[i]) {
-          img.alt = typeof altTexts[i] === "string" ? altTexts[i] : (altTexts[i] as any)?.alt || "";
-        }
-        return img;
+      wooProduct.images = product.image_urls.map((ref: string, i: number) => {
+        const altRaw = altTexts[i];
+        const altStr = typeof altRaw === "string" ? altRaw : (altRaw as any)?.alt || "";
+        return buildImageEntry(ref, i, altStr, has("image_alt_text") && !!altRaw);
       });
     }
   }
@@ -704,6 +718,34 @@ async function buildBasePayload(
     if (has("meta_title")) meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
     if (has("meta_description")) meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
     wooProduct.meta_data = meta_data;
+  }
+
+  // ── Attributes (EAN, Marca, Modelo, etc.) for non-variation products ──
+  // For simple products we send ALL attributes as visible, non-variation attributes.
+  // For variable products this is handled separately in publishVariableProduct.
+  if (product.product_type !== "variable" && !product.parent_product_id) {
+    const productAttrs = Array.isArray(product.attributes) ? product.attributes : [];
+    if (productAttrs.length > 0) {
+      const attrPayload: Array<{ name: string; options: string[]; visible: boolean; variation: boolean }> = [];
+      for (const attr of productAttrs) {
+        const n = String(attr?.name || "").trim();
+        if (!n) continue;
+        const values: string[] = [];
+        if (attr?.value) values.push(String(attr.value));
+        if (Array.isArray(attr?.values)) for (const v of attr.values) values.push(String(v));
+        if (Array.isArray(attr?.options)) for (const v of attr.options) values.push(String(v));
+        if (values.length === 0) continue;
+        attrPayload.push({
+          name: n,
+          options: [...new Set(values)],
+          visible: true,
+          variation: false,
+        });
+      }
+      if (attrPayload.length > 0) {
+        wooProduct.attributes = attrPayload;
+      }
+    }
   }
 
   return wooProduct;
@@ -857,7 +899,8 @@ async function buildVariationPayload(
   if (has("images")) {
     const urls: string[] = Array.isArray(variation.image_urls) ? variation.image_urls : [];
     if (urls.length > 0) {
-      payload.image = { src: urls[0] };
+      // Variation supports only ONE image; use buildImageEntry for ID vs URL detection
+      payload.image = buildImageEntry(urls[0], 0);
     }
   }
 
@@ -1126,18 +1169,17 @@ async function publishVariableProduct(
   // If the parent has no images, aggregate unique images from children for the gallery
   if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children && children.length > 0) {
     const childImages: Array<Record<string, unknown>> = [];
-    const seenUrls = new Set<string>();
+    const seenRefs = new Set<string>();
     for (const child of children) {
-      const urls: string[] = Array.isArray(child.image_urls) ? child.image_urls : [];
+      const refs: string[] = Array.isArray(child.image_urls) ? child.image_urls : [];
       const altTexts = child.image_alt_texts || [];
-      for (let i = 0; i < urls.length; i++) {
-        if (urls[i] && !seenUrls.has(urls[i])) {
-          seenUrls.add(urls[i]);
-          const img: Record<string, unknown> = { src: urls[i], position: childImages.length };
-          if (has("image_alt_text") && altTexts[i]) {
-            img.alt = typeof altTexts[i] === "string" ? altTexts[i] : (altTexts[i] as any)?.alt || "";
-          }
-          childImages.push(img);
+      for (let i = 0; i < refs.length; i++) {
+        const ref = String(refs[i] || "").trim();
+        if (ref && !seenRefs.has(ref)) {
+          seenRefs.add(ref);
+          const altRaw = altTexts[i];
+          const altStr = typeof altRaw === "string" ? altRaw : (altRaw as any)?.alt || "";
+          childImages.push(buildImageEntry(ref, childImages.length, altStr, has("image_alt_text") && !!altRaw));
         }
       }
     }
