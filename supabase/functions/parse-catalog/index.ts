@@ -557,11 +557,7 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const fileSizeKB = fileData.size / 1024;
-  if (fileSizeKB > 12000) {
-    console.warn(`⚠️ PDF "${fileName}" too large for product parsing. Skipping.`);
-    return [];
-  }
+  console.log(`📄 Parsing PDF "${fileName}" (${(fileData.size / 1024 / 1024).toFixed(1)}MB) for products...`);
 
   const buffer = await fileData.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -573,6 +569,26 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
   }
   const base64 = btoa(binary);
 
+  const systemPrompt = `És um especialista em extração de dados de catálogos de produtos industriais e comerciais.
+
+REGRAS DE EXTRAÇÃO:
+1. CABEÇALHOS DE PÁGINA: Identifica o nome da COLEÇÃO/MODELO que aparece no topo ou cabeçalho de cada página (ex: "Mica", "Gema", "Ópera"). Este nome aplica-se a TODOS os produtos listados nessa página.
+2. TÍTULO: Compõe o título como "{Descrição do item} {Coleção/Modelo} {Marca}" (ex: "Cuchara mesa Mica JAY", "Cazo Ópera Lacor").
+3. MARCA: Identifica a marca do catálogo pelo nome do ficheiro, logótipo ou cabeçalho (ex: "JAY", "Lacor").
+4. SKU/REFERÊNCIA: Extrai o código de referência de cada produto (coluna "Ref", "Código", "Art.", etc).
+5. PREÇO: Extrai o preço unitário (coluna "€", "PVP", "Precio", etc). Usa ponto como separador decimal.
+6. ESPECIFICAÇÕES TÉCNICAS: Extrai dimensões como comprimento (L), espessura (e), diâmetro (Ø), capacidade (cl/L), etc. Formata como "L: 202mm | e: 4.0mm".
+7. CATEGORIA: Identifica a categoria geral dos produtos (ex: "Cubiertos INOX 18/10", "Utensilios de cocina").
+8. DESCRIÇÃO CURTA: Se existir texto descritivo sobre o produto ou coleção, extrai-o.
+9. PRODUTOS VARIÁVEIS: Se vários produtos pertencem à mesma coleção/modelo (ex: colher, garfo, faca da coleção "Mica"), marca-os como variações:
+   - O produto "pai" (a coleção) tem product_type="variable" e parent_title vazio
+   - Cada item individual tem product_type="variation" e parent_title="Coleção {Modelo} {Marca}"
+   - Se não pertencem a uma coleção, usa product_type="simple"
+10. IMAGENS: Se encontrares URLs ou referências de imagens, inclui-as.
+11. Extrai TODOS os produtos — não ignores nenhuma linha de tabela.
+
+Responde APENAS com a tool call.`;
+
   const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -580,16 +596,13 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-2.5-pro",
       messages: [
-        {
-          role: "system",
-          content: `És um extrator de dados de catálogos de produtos. Analisa o PDF e extrai TODOS os produtos. Para cada produto, extrai: title, description, price, sku, category, supplier_ref. Responde APENAS com a tool call.`,
-        },
+        { role: "system", content: systemPrompt },
         {
           role: "user",
           content: [
-            { type: "text", text: `Extrai todos os produtos deste catálogo PDF: "${fileName}".` },
+            { type: "text", text: `Extrai TODOS os produtos deste catálogo PDF: "${fileName}". Analisa cada página, identifica coleções/modelos nos cabeçalhos e extrai cada linha de produto.` },
             { type: "image_url", image_url: { url: `data:application/pdf;base64,${base64}` } },
           ],
         },
@@ -599,7 +612,7 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
           type: "function",
           function: {
             name: "extract_products",
-            description: "Devolve os produtos extraídos do catálogo",
+            description: "Devolve os produtos extraídos do catálogo com coleções, variações e especificações técnicas",
             parameters: {
               type: "object",
               properties: {
@@ -608,12 +621,19 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
                   items: {
                     type: "object",
                     properties: {
-                      title: { type: "string" },
-                      description: { type: "string" },
-                      price: { type: "string" },
-                      sku: { type: "string" },
-                      category: { type: "string" },
-                      supplier_ref: { type: "string" },
+                      title: { type: "string", description: "Título completo: {Item} {Coleção} {Marca}" },
+                      description: { type: "string", description: "Descrição longa do produto ou coleção" },
+                      short_description: { type: "string", description: "Descrição curta" },
+                      price: { type: "string", description: "Preço com ponto decimal (ex: 2.68)" },
+                      sku: { type: "string", description: "Código de referência" },
+                      category: { type: "string", description: "Categoria do produto" },
+                      supplier_ref: { type: "string", description: "Referência do fornecedor" },
+                      brand: { type: "string", description: "Marca (ex: JAY, Lacor)" },
+                      model: { type: "string", description: "Nome da coleção/modelo (ex: Mica, Gema)" },
+                      technical_specs: { type: "string", description: "Especificações técnicas formatadas (ex: L: 202mm | e: 4.0mm)" },
+                      product_type: { type: "string", enum: ["simple", "variable", "variation"], description: "Tipo de produto" },
+                      parent_title: { type: "string", description: "Título do produto pai para variações" },
+                      image_urls: { type: "array", items: { type: "string" }, description: "URLs de imagens" },
                     },
                     required: ["title"],
                   },
@@ -636,9 +656,41 @@ async function parsePdfWithAI(fileData: Blob, fileName: string): Promise<Array<R
   }
 
   const aiData = await aiResponse.json();
+  
+  // Try tool call first
   const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-  if (!toolCall) return [];
+  if (toolCall) {
+    try {
+      const parsed = JSON.parse(toolCall.function.arguments);
+      const products = parsed.products || [];
+      console.log(`✅ Extracted ${products.length} products from PDF via tool call`);
+      
+      // Post-process: map brand/model into attributes and enrich data
+      return products.map((p: any) => {
+        const result: Record<string, unknown> = { ...p };
+        // Map model to the modelo field used by buildProductData
+        if (p.model && !p.modelo) result.modelo = p.model;
+        return result;
+      });
+    } catch (parseErr) {
+      console.error("Tool call JSON parse error:", parseErr);
+    }
+  }
 
-  const parsed = JSON.parse(toolCall.function.arguments);
-  return parsed.products || [];
+  // Fallback: try to extract JSON from text content
+  const textContent = aiData.choices?.[0]?.message?.content || "";
+  if (textContent) {
+    console.log("⚠️ No tool call returned, trying text fallback...");
+    const jsonMatch = textContent.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      try {
+        const products = JSON.parse(jsonMatch[0]);
+        console.log(`✅ Extracted ${products.length} products from PDF via text fallback`);
+        return products;
+      } catch { /* ignore */ }
+    }
+  }
+
+  console.warn("⚠️ No products extracted from PDF");
+  return [];
 }
