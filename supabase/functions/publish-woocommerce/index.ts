@@ -463,54 +463,48 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
 }
 
 async function buildBasePayload(
-  product: any, supabase: any, baseUrl: string, auth: string,
-  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false, parent?: any
+  product: any,
+  supabase: any,
+  baseUrl: string,
+  auth: string,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
 ): Promise<Record<string, unknown>> {
   const wooProduct: Record<string, unknown> = {};
 
   if (has("title")) {
-    // For variations, append attribute suffix to title
-    let title = product.optimized_title || product.original_title || "Sem título";
-    if (isVariation && parent) {
-      const variationAttrs = buildVariationAttributes(product, parent);
-      if (variationAttrs.length > 0) {
-        const suffix = variationAttrs.map(a => a.option).join(" ");
-        title = `${title} - ${suffix}`;
-      }
-    }
-    wooProduct.name = title;
+    wooProduct.name = product.optimized_title || product.original_title || "Sem título";
   }
-  // Variations should NOT include description/short_description - they inherit from parent
-  if (has("description") && !isVariation) {
+
+  if (has("description")) {
     wooProduct.description = product.optimized_description || product.original_description || "";
   }
-  if (has("short_description") && !isVariation) {
+
+  if (has("short_description")) {
     wooProduct.short_description = product.optimized_short_description || product.short_description || "";
   }
 
   if (has("price")) {
     let basePrice = parseFloat(product.optimized_price || product.original_price || "0") || 0;
-    if (markupPercent > 0) {
-      basePrice = basePrice * (1 + markupPercent / 100);
-    }
+    if (markupPercent > 0) basePrice = basePrice * (1 + markupPercent / 100);
     wooProduct.regular_price = basePrice.toFixed(2);
 
     if (has("sale_price") && discountPercent > 0) {
       wooProduct.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
     }
   }
+
   if (has("sale_price") && !wooProduct.sale_price) {
     const sp = product.optimized_sale_price ?? product.sale_price;
-    if (sp != null) {
-      wooProduct.sale_price = String(sp);
-    }
+    if (sp != null) wooProduct.sale_price = String(sp);
   }
 
   if (has("sku")) {
     wooProduct.sku = product.sku || undefined;
   }
 
-  if (has("slug") && !isVariation) {
+  if (has("slug")) {
     wooProduct.slug = product.seo_slug || undefined;
   }
 
@@ -527,85 +521,130 @@ async function buildBasePayload(
     }
   }
 
-  if (!isVariation) {
-    if (has("categories")) {
-      if (product.category_id) {
-        const { data: catRow } = await supabase
-          .from("categories")
-          .select("woocommerce_id, name, parent_id")
-          .eq("id", product.category_id)
-          .single();
-        if (catRow?.woocommerce_id) {
-          const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
-          let parentId = catRow.parent_id;
-          while (parentId) {
-            const { data: parentCat } = await supabase
-              .from("categories")
-              .select("woocommerce_id, parent_id")
-              .eq("id", parentId)
-              .single();
-            if (parentCat?.woocommerce_id) {
-              catIds.push({ id: parentCat.woocommerce_id });
-            }
-            parentId = parentCat?.parent_id || null;
-          }
-          wooProduct.categories = catIds;
-        } else if (catRow) {
-          wooProduct.categories = [{ name: catRow.name }];
-        }
-      } else if (product.category) {
-        const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
-        const resolveCatName = async (name: string): Promise<number | null> => {
-          const { data: localCats } = await supabase
+  if (has("categories")) {
+    if (product.category_id) {
+      const { data: catRow } = await supabase
+        .from("categories")
+        .select("woocommerce_id, name, parent_id")
+        .eq("id", product.category_id)
+        .single();
+      if (catRow?.woocommerce_id) {
+        const catIds: Array<{ id: number }> = [{ id: catRow.woocommerce_id }];
+        let parentId = catRow.parent_id;
+        while (parentId) {
+          const { data: parentCat } = await supabase
             .from("categories")
-            .select("woocommerce_id")
-            .ilike("name", name)
-            .not("woocommerce_id", "is", null)
-            .limit(1);
-          if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
-            return localCats[0].woocommerce_id;
+            .select("woocommerce_id, parent_id")
+            .eq("id", parentId)
+            .single();
+          if (parentCat?.woocommerce_id) catIds.push({ id: parentCat.woocommerce_id });
+          parentId = parentCat?.parent_id || null;
+        }
+        wooProduct.categories = catIds;
+      } else if (catRow) {
+        wooProduct.categories = [{ name: catRow.name }];
+      }
+    } else if (product.category) {
+      const parts = product.category.split(/>/).map((s: string) => s.trim()).filter(Boolean);
+      const resolveCatName = async (name: string): Promise<number | null> => {
+        const { data: localCats } = await supabase
+          .from("categories")
+          .select("woocommerce_id")
+          .ilike("name", name)
+          .not("woocommerce_id", "is", null)
+          .limit(1);
+        if (localCats && localCats.length > 0 && localCats[0].woocommerce_id) {
+          return localCats[0].woocommerce_id;
+        }
+        try {
+          const searchResp = await fetch(
+            `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
+            { headers: { Authorization: `Basic ${auth}` } }
+          );
+          if (searchResp.ok) {
+            const wooCats = await searchResp.json();
+            const exactMatch = wooCats.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
+            if (exactMatch) return exactMatch.id;
           }
-          try {
-            const searchResp = await fetch(
-              `${baseUrl}/wp-json/wc/v3/products/categories?search=${encodeURIComponent(name)}&per_page=10`,
-              { headers: { Authorization: `Basic ${auth}` } }
-            );
-            if (searchResp.ok) {
-              const wooCats = await searchResp.json();
-              const exactMatch = wooCats.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
-              if (exactMatch) return exactMatch.id;
-            }
-          } catch { /* skip */ }
-          return null;
-        };
-
-        const resolvedCatIds: Array<{ id: number }> = [];
-        for (const part of parts) {
-          const wcId = await resolveCatName(part);
-          if (wcId) resolvedCatIds.push({ id: wcId });
+        } catch {
+          /* skip */
         }
-        if (resolvedCatIds.length > 0) {
-          wooProduct.categories = resolvedCatIds;
-        }
-      }
-    }
-    if (has("tags")) {
-      wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));
-    }
+        return null;
+      };
 
-    if (has("meta_title") || has("meta_description")) {
-      const meta_data: Array<{ key: string; value: string }> = [];
-      if (has("meta_title")) {
-        meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
+      const resolvedCatIds: Array<{ id: number }> = [];
+      for (const part of parts) {
+        const wcId = await resolveCatName(part);
+        if (wcId) resolvedCatIds.push({ id: wcId });
       }
-      if (has("meta_description")) {
-        meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
-      }
-      wooProduct.meta_data = meta_data;
+      if (resolvedCatIds.length > 0) wooProduct.categories = resolvedCatIds;
     }
   }
 
+  if (has("tags")) {
+    wooProduct.tags = (product.tags || []).map((t: string) => ({ name: t }));
+  }
+
+  if (has("meta_title") || has("meta_description")) {
+    const meta_data: Array<{ key: string; value: string }> = [];
+    if (has("meta_title")) meta_data.push({ key: "_yoast_wpseo_title", value: product.meta_title || "" });
+    if (has("meta_description")) meta_data.push({ key: "_yoast_wpseo_metadesc", value: product.meta_description || "" });
+    wooProduct.meta_data = meta_data;
+  }
+
   return wooProduct;
+}
+
+const TECHNICAL_ATTR_NAMES = new Set([
+  "marca",
+  "brand",
+  "ean",
+  "ean13",
+  "gtin",
+  "barcode",
+]);
+
+async function buildVariationPayload(
+  variation: any,
+  parent: any,
+  has: (k: string) => boolean,
+  markupPercent: number,
+  discountPercent: number
+): Promise<Record<string, unknown>> {
+  // WooCommerce variations do NOT support many product fields (name, categories, tags, upsells/cross-sells, images[])
+  const payload: Record<string, unknown> = {};
+
+  if (has("price")) {
+    let basePrice = parseFloat(variation.optimized_price || variation.original_price || "0") || 0;
+    if (markupPercent > 0) basePrice = basePrice * (1 + markupPercent / 100);
+    payload.regular_price = basePrice.toFixed(2);
+
+    if (has("sale_price") && discountPercent > 0) {
+      payload.sale_price = (basePrice * (1 - discountPercent / 100)).toFixed(2);
+    }
+  }
+
+  if (has("sale_price") && !payload.sale_price) {
+    const sp = variation.optimized_sale_price ?? variation.sale_price;
+    if (sp != null) payload.sale_price = String(sp);
+  }
+
+  if (has("sku")) {
+    payload.sku = variation.sku || undefined;
+  }
+
+  if (has("images")) {
+    const urls: string[] = Array.isArray(variation.image_urls) ? variation.image_urls : [];
+    if (urls.length > 0) {
+      payload.image = { src: urls[0] };
+    }
+  }
+
+  // Only variation-defining attributes go on the variation payload.
+  const variationAttrs = buildVariationAttributes(variation, parent);
+  if (variationAttrs.length > 0) payload.attributes = variationAttrs;
+
+  return payload;
 }
 
 // Extract the unique suffix from a child title compared to the parent title
