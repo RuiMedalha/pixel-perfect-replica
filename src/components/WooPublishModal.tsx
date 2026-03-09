@@ -103,7 +103,8 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
       dt.setHours(hours, minutes, 0, 0);
       scheduledFor = dt.toISOString();
     }
-    onConfirm(Array.from(selectedFields), pricing, scheduledFor);
+    const skuPrefixOpt = skuPrefix.trim() ? { prefix: skuPrefix.trim().toUpperCase(), onlyIfMissing: true } : undefined;
+    onConfirm(Array.from(selectedFields), pricing, scheduledFor, skuPrefixOpt);
   };
 
   // Example price calculation for preview
