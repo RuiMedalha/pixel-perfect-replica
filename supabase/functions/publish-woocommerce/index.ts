@@ -398,16 +398,73 @@ async function deleteWooProduct(baseUrl: string, auth: string, productId: number
       method: "DELETE",
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
     });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(`Falha a eliminar produto ${productId} no WooCommerce: ${resp.status} ${body.substring(0, 200)}`);
+    }
     return resp.ok;
-  } catch { return false; }
+  } catch (e) {
+    console.warn(`Exceção ao eliminar produto ${productId} no WooCommerce:`, e);
+    return false;
+  }
+}
+
+async function deleteWooVariation(baseUrl: string, auth: string, parentWooId: number, variationWooId: number): Promise<boolean> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${parentWooId}/variations/${variationWooId}?force=true`, {
+      method: "DELETE",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.warn(
+        `Falha a eliminar variação ${variationWooId} (pai ${parentWooId}) no WooCommerce: ${resp.status} ${body.substring(0, 200)}`
+      );
+    }
+    return resp.ok;
+  } catch (e) {
+    console.warn(`Exceção ao eliminar variação ${variationWooId} (pai ${parentWooId}) no WooCommerce:`, e);
+    return false;
+  }
+}
+
+async function getWooResource(baseUrl: string, auth: string, resourceId: number): Promise<any | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${resourceId}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
+}
+
+async function getWooVariation(baseUrl: string, auth: string, parentWooId: number, variationWooId: number): Promise<any | null> {
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3/products/${parentWooId}/variations/${variationWooId}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+    });
+    if (!resp.ok) return null;
+    return await resp.json();
+  } catch {
+    return null;
+  }
 }
 
 async function handleVariationSkuConflict(
-  baseUrl: string, auth: string, parentWooId: number, childId: string, sku: string,
-  variationPayload: Record<string, unknown>, skuErr: WooSkuConflictError, supabase: any
+  baseUrl: string,
+  auth: string,
+  parentWooId: number,
+  childId: string,
+  sku: string,
+  variationPayload: Record<string, unknown>,
+  skuErr: WooSkuConflictError,
+  supabase: any
 ): Promise<any> {
-  // The resource_id from SKU conflict might be a standalone product, NOT a variation under this parent.
-  // Step 1: Try to find the variation by SKU under the correct parent
+  // Step 1: if the variation already exists under the correct parent, update it
   const realVarId = await findWooVariationBySku(baseUrl, auth, parentWooId, sku);
   if (realVarId) {
     console.log(`Found existing variation ${realVarId} under parent ${parentWooId} for child ${childId}`);
@@ -416,13 +473,70 @@ async function handleVariationSkuConflict(
     return varWooData;
   }
 
-  // Step 2: The conflicting SKU is a standalone product — delete it and create as variation
-  console.log(`SKU conflict resource_id ${skuErr.resourceId} is not a variation under parent ${parentWooId}. Deleting standalone and creating variation.`);
-  await deleteWooProduct(baseUrl, auth, skuErr.resourceId);
+  // Step 1b: sometimes Woo gives us the variation ID directly in resource_id
+  const directVar = await getWooVariation(baseUrl, auth, parentWooId, skuErr.resourceId);
+  if (directVar?.id) {
+    console.log(`SKU conflict resource_id ${skuErr.resourceId} já é variação do pai ${parentWooId}; a atualizar.`);
+    const varWooData = await wooFetch(
+      baseUrl,
+      auth,
+      `/products/${parentWooId}/variations/${skuErr.resourceId}`,
+      "PUT",
+      variationPayload
+    );
+    await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", childId);
+    return varWooData;
+  }
 
-  // Now create the variation fresh
-  const varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
-  return varWooData;
+  // Step 2: try to understand what resource_id is (product vs variation under another parent)
+  const resource = await getWooResource(baseUrl, auth, skuErr.resourceId);
+
+  if (resource?.type === "variation" && resource?.parent_id) {
+    const otherParentId = Number(resource.parent_id);
+    if (otherParentId === parentWooId) {
+      const varWooData = await wooFetch(
+        baseUrl,
+        auth,
+        `/products/${parentWooId}/variations/${skuErr.resourceId}`,
+        "PUT",
+        variationPayload
+      );
+      await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", childId);
+      return varWooData;
+    }
+
+    console.log(
+      `SKU conflict: resource_id ${skuErr.resourceId} é variação do produto ${otherParentId}; a tentar eliminar e recriar sob ${parentWooId}.`
+    );
+    const deleted = await deleteWooVariation(baseUrl, auth, otherParentId, skuErr.resourceId);
+    if (!deleted) {
+      throw new Error(
+        `SKU conflict: o SKU já existe na variação #${skuErr.resourceId} (pai #${otherParentId}) e não foi possível remover automaticamente. Resolva apagando/alterando esse SKU no WooCommerce e tente novamente.`
+      );
+    }
+  } else {
+    console.log(
+      `SKU conflict resource_id ${skuErr.resourceId} não é variação do pai ${parentWooId}. A tentar eliminar produto standalone e criar como variação.`
+    );
+    const deleted = await deleteWooProduct(baseUrl, auth, skuErr.resourceId);
+    if (!deleted) {
+      throw new Error(
+        `SKU conflict: o SKU já existe no produto #${skuErr.resourceId} e não foi possível remover automaticamente. Resolva apagando/alterando esse SKU no WooCommerce e tente novamente.`
+      );
+    }
+  }
+
+  // Step 3: create the variation again
+  try {
+    return await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+  } catch (e) {
+    if (e instanceof WooSkuConflictError) {
+      throw new Error(
+        `SKU conflict persistente: o SKU continua a existir no WooCommerce (ID #${e.resourceId}). Altere o SKU no Excel/app ou elimine o item com esse SKU no WooCommerce e volte a publicar.`
+      );
+    }
+    throw e;
+  }
 }
 
 async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: string, auth: string, skus: any[]): Promise<number[]> {
