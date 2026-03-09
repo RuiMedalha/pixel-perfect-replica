@@ -899,7 +899,8 @@ async function buildVariationPayload(
   if (has("images")) {
     const urls: string[] = Array.isArray(variation.image_urls) ? variation.image_urls : [];
     if (urls.length > 0) {
-      payload.image = { src: urls[0] };
+      // Variation supports only ONE image; use buildImageEntry for ID vs URL detection
+      payload.image = buildImageEntry(urls[0], 0);
     }
   }
 
