@@ -185,6 +185,11 @@ export function VariationsPanel({ product, allProducts, updateProduct }: Props) 
 
         updateProduct.mutate({ id: child.id, updates: { attributes: newAttrs } });
       }
+
+      // If parent was needs_review, upgrade to optimized
+      if (product.status === "needs_review") {
+        updateProduct.mutate({ id: product.id, updates: { status: "optimized" } });
+      }
     } finally {
       setSaving(false);
       setEditing(false);
