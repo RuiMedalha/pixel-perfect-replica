@@ -739,9 +739,9 @@ const ProductsPage = () => {
                 <Sparkles className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Otimizar </span>IA ({selected.size})
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
-                const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
-                exportProductsToExcel(selectedProducts, "produtos-selecionados");
-                setSelected(new Set());
+                setExportTarget("selected");
+                setExportSkuPrefix("");
+                setShowExportDialog(true);
               }}>
                 <Download className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Exportar Seleção </span>({selected.size})
               </Button>
