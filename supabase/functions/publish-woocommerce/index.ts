@@ -647,9 +647,16 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
 
 function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
   const attrs = product.attributes || [];
+  const variationAttrs: Array<{ name: string; option: string }> = [];
+  
   if (Array.isArray(attrs)) {
-    const mapped = attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
-    if (mapped.length > 0) return mapped;
+    // Only include attributes marked for variation (not technical attributes)
+    for (const attr of attrs) {
+      if (attr.name && attr.value && attr.variation !== false) {
+        variationAttrs.push({ name: attr.name, option: attr.value });
+      }
+    }
+    if (variationAttrs.length > 0) return variationAttrs;
   }
 
   if (parent) {
@@ -657,18 +664,17 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     if (Array.isArray(parentAttrs) && parentAttrs.length > 0) {
       const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
       if (childTitle) {
-        const result: Array<{ name: string; option: string }> = [];
         for (const attr of parentAttrs) {
           const values: string[] = attr.values || attr.options || [];
           const sorted = [...values].sort((a, b) => b.length - a.length);
           for (const val of sorted) {
             if (val && childTitle.includes(val.toLowerCase())) {
-              result.push({ name: attr.name, option: val });
+              variationAttrs.push({ name: attr.name, option: val });
               break;
             }
           }
         }
-        if (result.length > 0) return result;
+        if (variationAttrs.length > 0) return variationAttrs;
       }
     }
   }
@@ -689,6 +695,23 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   }
 
   return [];
+}
+
+function buildTechnicalAttributes(product: any): Array<{ name: string; option: string }> {
+  // Extract technical attributes like Marca, EAN that should be preserved on variations
+  const attrs = product.attributes || [];
+  const technicalAttrs: Array<{ name: string; option: string }> = [];
+  
+  if (Array.isArray(attrs)) {
+    for (const attr of attrs) {
+      // Include non-variation attributes (technical specs)
+      if (attr.name && attr.value && attr.variation === false) {
+        technicalAttrs.push({ name: attr.name, option: attr.value });
+      }
+    }
+  }
+  
+  return technicalAttrs;
 }
 
 async function publishSingleProduct(
