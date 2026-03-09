@@ -148,6 +148,32 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const mergeMutation = useMutation({
+    mutationFn: async ({ sourceId, targetId }: { sourceId: string; targetId: string }) => {
+      // Move all products, uploaded_files, knowledge_chunks, categories, activity_log, optimization_jobs, publish_jobs
+      const tables = ["products", "uploaded_files", "knowledge_chunks", "categories", "activity_log", "optimization_jobs", "publish_jobs"] as const;
+      for (const table of tables) {
+        const { error } = await supabase
+          .from(table)
+          .update({ workspace_id: targetId } as any)
+          .eq("workspace_id", sourceId);
+        if (error) console.warn(`Merge ${table}:`, error.message);
+      }
+      // Delete source workspace
+      const { error } = await supabase.from("workspaces").delete().eq("id", sourceId);
+      if (error) throw error;
+      return targetId;
+    },
+    onSuccess: (targetId) => {
+      qc.invalidateQueries({ queryKey: ["workspaces"] });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["uploaded-files"] });
+      setActiveWorkspaceId(targetId);
+      toast.success("Workspaces fundidos com sucesso!");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   return (
     <WorkspaceContext.Provider
       value={{
