@@ -104,7 +104,11 @@
   }
 
   html {
-    color-scheme: light !important;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {

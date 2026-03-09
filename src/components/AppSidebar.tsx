@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -138,6 +139,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           {!collapsed && user && (
             <p className="text-sidebar-muted text-xs truncate px-3 py-1">{user.email}</p>
           )}
+          <ThemeToggle collapsed={collapsed} />
           <button
             onClick={signOut}
             className={cn(
