@@ -915,7 +915,15 @@ function buildAttributesForParent(
     }
   }
 
-  const names = nameCandidates.size > 0 ? Array.from(nameCandidates) : (variations.length > 0 ? [DEFAULT_VARIATION_ATTR_NAME] : []);
+  // If no structured attrs found, infer the attr name from first variation's title diff
+  let defaultAttrName = "Opção";
+  if (nameCandidates.size === 0 && variations.length > 0) {
+    const firstChild = variations[0];
+    const firstChildTitle = firstChild?.optimized_title || firstChild?.original_title || "";
+    const firstOption = inferVariationOptionFromTitle(parentTitle, firstChildTitle);
+    if (firstOption) defaultAttrName = inferAttrNameFromOption(firstOption);
+  }
+  const names = nameCandidates.size > 0 ? Array.from(nameCandidates) : (variations.length > 0 ? [defaultAttrName] : []);
 
   const add = (name: string, value: string) => {
     const n = String(name || "").trim();
