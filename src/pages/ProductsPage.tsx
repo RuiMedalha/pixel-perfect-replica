@@ -59,7 +59,7 @@ const ProductsPage = () => {
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
   const { enrich, isEnriching } = useEnrichProducts();
-  const { settings } = useSettings();
+  const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
