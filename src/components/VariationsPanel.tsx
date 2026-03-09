@@ -250,11 +250,23 @@ export function VariationsPanel({ product, allProducts, updateProduct }: Props) 
 
       {/* Warning if inferred */}
       {hasInferred && !editing && (
-        <Alert className="border-amber-500/50 bg-amber-500/10">
+        <Alert className={cn(
+          "border-amber-500/50 bg-amber-500/10",
+          product.status === "needs_review" && "border-amber-600 bg-amber-500/20"
+        )}>
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-sm text-amber-700 dark:text-amber-400">
-            Atributos de variação <strong>inferidos automaticamente</strong> a partir dos títulos (não existem no Excel).
-            Clique em "Editar Atributos" para corrigir antes de publicar.
+            {product.status === "needs_review" ? (
+              <>
+                <strong>Revisão necessária:</strong> A IA não conseguiu determinar os atributos de variação com confiança.
+                Clique em "Editar Atributos" para corrigir e confirmar. O status passará a verde automaticamente.
+              </>
+            ) : (
+              <>
+                Atributos de variação <strong>inferidos automaticamente</strong> a partir dos títulos (não existem no Excel).
+                Clique em "Editar Atributos" para corrigir antes de publicar.
+              </>
+            )}
           </AlertDescription>
         </Alert>
       )}
