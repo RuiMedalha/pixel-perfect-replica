@@ -1286,7 +1286,7 @@ async function publishVariableProduct(
 
   // If the parent has no images, aggregate unique images from children for the gallery
   if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children && children.length > 0) {
-    const childImages: Array<Record<string, unknown>> = [];
+    const childImagePromises: Array<Promise<Record<string, unknown> | null>> = [];
     const seenRefs = new Set<string>();
     for (const child of children) {
       const refs: string[] = Array.isArray(child.image_urls) ? child.image_urls : [];
@@ -1295,12 +1295,14 @@ async function publishVariableProduct(
         const ref = String(refs[i] || "").trim();
         if (ref && !seenRefs.has(ref)) {
           seenRefs.add(ref);
+          const pos = childImagePromises.length;
           const altRaw = altTexts[i];
           const altStr = typeof altRaw === "string" ? altRaw : (altRaw as any)?.alt || "";
-          childImages.push(buildImageEntry(ref, childImages.length, altStr, has("image_alt_text") && !!altRaw));
+          childImagePromises.push(resolveImageRef(ref, pos, baseUrl, auth, altStr, has("image_alt_text") && !!altRaw));
         }
       }
     }
+    const childImages = (await Promise.all(childImagePromises)).filter(Boolean);
     if (childImages.length > 0) {
       parentPayload.images = childImages;
       console.log(`[publish-variable] Aggregated ${childImages.length} images from children for parent`);
