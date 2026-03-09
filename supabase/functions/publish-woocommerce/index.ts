@@ -129,13 +129,16 @@ Deno.serve(async (req) => {
       const endIndex = Math.min(startIndex + BATCH_SIZE, productIds.length);
       const batchIds = productIds.slice(startIndex, endIndex);
 
-      // Fetch products for this batch
+      // Fetch products for this batch (keep original order from product_ids)
       const { data: batchProducts } = await supabase
         .from("products")
         .select("*")
         .in("id", batchIds);
 
-      if (!batchProducts || batchProducts.length === 0) {
+      const batchById = new Map<string, any>((batchProducts || []).map((p: any) => [p.id, p]));
+      const orderedBatchProducts = batchIds.map((id) => batchById.get(id)).filter(Boolean);
+
+      if (!orderedBatchProducts || orderedBatchProducts.length === 0) {
         // Skip this batch
         if (endIndex >= productIds.length) {
           await finalizeJob(adminClient, jobId, job, user.id);
@@ -148,7 +151,7 @@ Deno.serve(async (req) => {
       const existingResults = (job.results || []) as WooResult[];
 
       // Process each product in the batch
-      for (const product of (batchProducts || [])) {
+      for (const product of orderedBatchProducts) {
         // Re-check cancellation
         const { data: freshJob } = await adminClient
           .from("publish_jobs")
