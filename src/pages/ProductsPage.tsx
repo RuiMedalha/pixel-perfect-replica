@@ -1701,6 +1701,48 @@ const ProductsPage = () => {
           />
         );
       })()}
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              Exportar para Excel
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {exportTarget === "selected" ? `Exportar ${selected.size} produto(s) selecionado(s).` : "Exportar todos os produtos."}
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">🏷️ Prefixo SKU (opcional)</Label>
+              <p className="text-[11px] text-muted-foreground">Adiciona um prefixo aos SKUs que ainda não o tenham.</p>
+              <Input
+                placeholder="Ex: UD, PJ, LC..."
+                value={exportSkuPrefix}
+                onChange={e => setExportSkuPrefix(e.target.value.toUpperCase())}
+                className="h-8 text-sm w-32"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowExportDialog(false)}>Cancelar</Button>
+            <Button size="sm" onClick={() => {
+              const prods = exportTarget === "selected"
+                ? (products ?? []).filter(p => selected.has(p.id))
+                : (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
+              const prefix = exportSkuPrefix.trim() || undefined;
+              exportProductsToExcel(prods, exportTarget === "selected" ? "produtos-selecionados" : "produtos-otimizados", prefix);
+              if (exportTarget === "selected") setSelected(new Set());
+              setShowExportDialog(false);
+            }}>
+              <Download className="w-4 h-4 mr-1" />
+              Exportar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
