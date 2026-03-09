@@ -103,6 +103,10 @@
     @apply border-border;
   }
 
+  html {
+    color-scheme: light !important;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: var(--font-sans);
