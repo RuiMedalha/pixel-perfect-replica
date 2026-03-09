@@ -39,6 +39,7 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [markupPercent, setMarkupPercent] = useState<string>("");
   const [discountPercent, setDiscountPercent] = useState<string>("");
+  const [skuPrefix, setSkuPrefix] = useState("");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined);
   const [scheduleTime, setScheduleTime] = useState("09:00");
