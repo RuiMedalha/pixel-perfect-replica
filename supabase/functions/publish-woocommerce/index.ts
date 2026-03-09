@@ -439,14 +439,24 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
 
 async function buildBasePayload(
   product: any, supabase: any, baseUrl: string, auth: string,
-  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false
+  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false, parent?: any
 ): Promise<Record<string, unknown>> {
   const wooProduct: Record<string, unknown> = {};
 
   if (has("title")) {
-    wooProduct.name = product.optimized_title || product.original_title || "Sem título";
+    // For variations, append attribute suffix to title
+    let title = product.optimized_title || product.original_title || "Sem título";
+    if (isVariation && parent) {
+      const variationAttrs = buildVariationAttributes(product, parent);
+      if (variationAttrs.length > 0) {
+        const suffix = variationAttrs.map(a => a.option).join(" ");
+        title = `${title} - ${suffix}`;
+      }
+    }
+    wooProduct.name = title;
   }
-  if (has("description")) {
+  // Variations should NOT include description/short_description - they inherit from parent
+  if (has("description") && !isVariation) {
     wooProduct.description = product.optimized_description || product.original_description || "";
   }
   if (has("short_description") && !isVariation) {
@@ -647,9 +657,16 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
 
 function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
   const attrs = product.attributes || [];
+  const variationAttrs: Array<{ name: string; option: string }> = [];
+  
   if (Array.isArray(attrs)) {
-    const mapped = attrs.filter((a: any) => a.name && a.value).map((a: any) => ({ name: a.name, option: a.value }));
-    if (mapped.length > 0) return mapped;
+    // Only include attributes marked for variation (not technical attributes)
+    for (const attr of attrs) {
+      if (attr.name && attr.value && attr.variation !== false) {
+        variationAttrs.push({ name: attr.name, option: attr.value });
+      }
+    }
+    if (variationAttrs.length > 0) return variationAttrs;
   }
 
   if (parent) {
@@ -657,18 +674,17 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     if (Array.isArray(parentAttrs) && parentAttrs.length > 0) {
       const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
       if (childTitle) {
-        const result: Array<{ name: string; option: string }> = [];
         for (const attr of parentAttrs) {
           const values: string[] = attr.values || attr.options || [];
           const sorted = [...values].sort((a, b) => b.length - a.length);
           for (const val of sorted) {
             if (val && childTitle.includes(val.toLowerCase())) {
-              result.push({ name: attr.name, option: val });
+              variationAttrs.push({ name: attr.name, option: val });
               break;
             }
           }
         }
-        if (result.length > 0) return result;
+        if (variationAttrs.length > 0) return variationAttrs;
       }
     }
   }
@@ -689,6 +705,23 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   }
 
   return [];
+}
+
+function buildTechnicalAttributes(product: any): Array<{ name: string; option: string }> {
+  // Extract technical attributes like Marca, EAN that should be preserved on variations
+  const attrs = product.attributes || [];
+  const technicalAttrs: Array<{ name: string; option: string }> = [];
+  
+  if (Array.isArray(attrs)) {
+    for (const attr of attrs) {
+      // Include non-variation attributes (technical specs)
+      if (attr.name && attr.value && attr.variation === false) {
+        technicalAttrs.push({ name: attr.name, option: attr.value });
+      }
+    }
+  }
+  
+  return technicalAttrs;
 }
 
 async function publishSingleProduct(
@@ -812,9 +845,27 @@ async function publishVariableProduct(
   // Publish children
   for (const child of (children || [])) {
     try {
-      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
+      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parent);
+      
+      // Build variation attributes (e.g., Cor, Tamanho)
       const variationAttrs = buildVariationAttributes(child, parent);
-      if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
+      
+      // Build technical attributes (e.g., Marca, EAN)
+      const technicalAttrs = buildTechnicalAttributes(child);
+      
+      // Merge both types of attributes
+      const allAttrs = [...variationAttrs, ...technicalAttrs];
+      if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
+      
+      // Add upsells and crosssells for variations
+      if (has("upsells")) {
+        const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.upsell_skus || []);
+        if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
+      }
+      if (has("crosssells")) {
+        const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.crosssell_skus || []);
+        if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
+      }
 
       let existingVarWooId = child.woocommerce_id;
       // If no local woocommerce_id, try to find existing variation by SKU
@@ -874,9 +925,27 @@ async function publishVariation(
   const parentWooId = parentRow?.woocommerce_id;
 
   if (parentWooId) {
-    const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
+    const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parentRow);
+    
+    // Build variation attributes (e.g., Cor, Tamanho)
     const variationAttrs = buildVariationAttributes(variation, parentRow);
-    if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
+    
+    // Build technical attributes (e.g., Marca, EAN)
+    const technicalAttrs = buildTechnicalAttributes(variation);
+    
+    // Merge both types of attributes
+    const allAttrs = [...variationAttrs, ...technicalAttrs];
+    if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
+    
+    // Add upsells and crosssells for variations
+    if (has("upsells")) {
+      const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, variation.upsell_skus || []);
+      if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
+    }
+    if (has("crosssells")) {
+      const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, variation.crosssell_skus || []);
+      if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
+    }
 
     let existingVarWooId = variation.woocommerce_id;
     if (!existingVarWooId && variation.sku) {
