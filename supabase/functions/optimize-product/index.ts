@@ -1281,6 +1281,10 @@ REGRAS GLOBAIS:
 
                       if (extracted.variations && Array.isArray(extracted.variations)) {
                         const TECH = new Set(["marca","brand","ean","ean13","gtin","barcode","modelo","model"]);
+                        const baseTitle = updateData.optimized_title || product.optimized_title || product.original_title || "";
+                        const baseSlug = updateData.seo_slug || "";
+                        const baseMetaTitle = updateData.meta_title || "";
+
                         for (const v of extracted.variations) {
                           if (!v.child_id || !v.value) continue;
                           const child = variations.find((c: any) => c.id === v.child_id);
@@ -1291,7 +1295,28 @@ REGRAS GLOBAIS:
                             ...techOnly,
                             { name: extracted.attribute_name, value: v.value, variation: true }
                           ];
-                          await supabase.from("products").update({ attributes: newAttrs }).eq("id", v.child_id);
+
+                          // Build title with attribute suffix — this is the key fix:
+                          // re-apply after AI extraction so the title is correct
+                          const childUpdate: Record<string, any> = { attributes: newAttrs };
+
+                          if (baseTitle) {
+                            childUpdate.optimized_title = `${baseTitle} - ${v.value}`;
+                          }
+
+                          if (baseMetaTitle) {
+                            childUpdate.meta_title = `${baseMetaTitle} - ${v.value}`.substring(0, 60);
+                          }
+
+                          if (baseSlug) {
+                            const slugSuffix = v.value.toLowerCase()
+                              .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                              .replace(/[^a-z0-9\-]/g, "-").replace(/-+/g, "-");
+                            childUpdate.seo_slug = slugSuffix ? `${baseSlug}-${slugSuffix}` : baseSlug;
+                          }
+
+                          console.log(`📝 Variation ${v.child_id}: title="${childUpdate.optimized_title}", attr=${extracted.attribute_name}=${v.value}`);
+                          await supabase.from("products").update(childUpdate).eq("id", v.child_id);
                         }
                       }
 
