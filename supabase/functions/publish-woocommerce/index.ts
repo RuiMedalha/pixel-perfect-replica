@@ -1125,6 +1125,19 @@ async function publishVariableProduct(
   }
 
   const parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
+
+  // Ao atualizar, preserva atributos já existentes no WooCommerce (ex.: Marca/Modelo/EAN) para não os “apagar”.
+  if (existingParentWooId && Array.isArray((parentPayload as any).attributes)) {
+    try {
+      const existingWoo = await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "GET");
+      if (Array.isArray(existingWoo?.attributes)) {
+        (parentPayload as any).attributes = mergeWooAttributes(existingWoo.attributes, (parentPayload as any).attributes);
+      }
+    } catch (e) {
+      console.warn("Não foi possível ler atributos existentes do WooCommerce; a continuar.", e);
+    }
+  }
+
   const parentWooData = existingParentWooId
     ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
     : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
