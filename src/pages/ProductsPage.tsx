@@ -97,6 +97,8 @@ const ProductsPage = () => {
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 100;
   
 
   // Inline editing state
@@ -175,6 +177,12 @@ const ProductsPage = () => {
 
     return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase && matchesWoo;
   });
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, categoryFilter, sourceFileFilter, seoScoreFilter, hasKeywordFilter, productTypeFilter, phaseFilter, wooFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginatedFiltered = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   // Build grouped view structure
   const groupedView = useMemo(() => {
@@ -1146,7 +1154,7 @@ const ProductsPage = () => {
                 </thead>
                 <tbody>
                   {viewMode === "list" ? (
-                    filtered.map((product) => (
+                    paginatedFiltered.map((product) => (
                       <ProductRow key={product.id} product={product} />
                     ))
                   ) : (
@@ -1295,6 +1303,22 @@ const ProductsPage = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-2">
+          <span className="text-sm text-muted-foreground">
+            {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} de {filtered.length} produtos
+          </span>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}>«</Button>
+            <Button size="sm" variant="outline" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>‹</Button>
+            <span className="text-sm px-3">{currentPage} / {totalPages}</span>
+            <Button size="sm" variant="outline" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>›</Button>
+            <Button size="sm" variant="outline" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>»</Button>
+          </div>
+        </div>
+      )}
 
       {/* Field Selector Dialog */}
       <Dialog open={showFieldSelector} onOpenChange={setShowFieldSelector}>
