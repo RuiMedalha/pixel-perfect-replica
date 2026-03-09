@@ -22,6 +22,7 @@ interface Supplier {
   name: string;
   prefix: string;
   url: string;
+  scrapingInstructions?: string;
 }
 
 const SETTING_KEYS = {
