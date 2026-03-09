@@ -105,20 +105,43 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
             <p className="text-[10px] uppercase tracking-wider text-sidebar-muted px-3 mb-1.5 font-medium">Workspace</p>
             <div className="space-y-0.5 max-h-32 overflow-y-auto">
               {workspaces.map((ws) => (
-                <button
-                  key={ws.id}
-                  onClick={() => setActiveWorkspaceId(ws.id)}
-                  className={cn(
-                    "flex items-center gap-2 w-full px-3 py-1.5 rounded-md text-xs transition-colors",
-                    ws.id === activeWorkspace?.id
-                      ? "bg-sidebar-accent text-sidebar-primary font-medium"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                  )}
-                >
-                  <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">{ws.name}</span>
-                  {ws.id === activeWorkspace?.id && <Check className="w-3 h-3 ml-auto shrink-0" />}
-                </button>
+                <div key={ws.id} className="group flex items-center gap-1">
+                  <button
+                    onClick={() => setActiveWorkspaceId(ws.id)}
+                    className={cn(
+                      "flex items-center gap-2 flex-1 min-w-0 px-3 py-1.5 rounded-md text-xs transition-colors",
+                      ws.id === activeWorkspace?.id
+                        ? "bg-sidebar-accent text-sidebar-primary font-medium"
+                        : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                    )}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{ws.name}</span>
+                    {ws.id === activeWorkspace?.id && <Check className="w-3 h-3 ml-auto shrink-0" />}
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-sidebar-accent/50 transition-all shrink-0">
+                        <MoreHorizontal className="w-3 h-3 text-sidebar-muted" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40">
+                      <DropdownMenuItem onClick={() => setEditWs({ id: ws.id, name: ws.name })}>
+                        <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+                      </DropdownMenuItem>
+                      {workspaces.length > 1 && (
+                        <DropdownMenuItem onClick={() => { setMergeWs({ sourceId: ws.id, sourceName: ws.name }); setMergeTargetId(""); }}>
+                          <Merge className="w-3.5 h-3.5 mr-2" /> Fundir noutro
+                        </DropdownMenuItem>
+                      )}
+                      {workspaces.length > 1 && (
+                        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteWs({ id: ws.id, name: ws.name })}>
+                          <Trash2 className="w-3.5 h-3.5 mr-2" /> Eliminar
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               ))}
             </div>
             <button

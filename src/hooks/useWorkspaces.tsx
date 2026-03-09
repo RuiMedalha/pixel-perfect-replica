@@ -23,6 +23,7 @@ interface WorkspaceContextType {
   updateWorkspace: (id: string, name: string, description?: string) => void;
   toggleVariableProducts: (id: string, value: boolean) => void;
   deleteWorkspace: (id: string) => void;
+  mergeWorkspaces: (sourceId: string, targetId: string) => void;
   isCreating: boolean;
 }
 
