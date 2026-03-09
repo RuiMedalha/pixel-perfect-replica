@@ -32,9 +32,13 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const { data: profile } = useCurrentUserProfile();
-  const { workspaces, activeWorkspace, setActiveWorkspaceId, createWorkspace, isCreating } = useWorkspaceContext();
+  const { workspaces, activeWorkspace, setActiveWorkspaceId, createWorkspace, updateWorkspace, deleteWorkspace, mergeWorkspaces, isCreating } = useWorkspaceContext();
   const [showNewWs, setShowNewWs] = useState(false);
   const [newWsName, setNewWsName] = useState("");
+  const [editWs, setEditWs] = useState<{ id: string; name: string } | null>(null);
+  const [deleteWs, setDeleteWs] = useState<{ id: string; name: string } | null>(null);
+  const [mergeWs, setMergeWs] = useState<{ sourceId: string; sourceName: string } | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState<string>("");
 
   const allItems = [...navItems, ...(profile?.isAdmin ? adminItems : [])];
 
@@ -43,6 +47,28 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
       createWorkspace(newWsName.trim());
       setNewWsName("");
       setShowNewWs(false);
+    }
+  };
+
+  const handleEditWorkspace = () => {
+    if (editWs && editWs.name.trim()) {
+      updateWorkspace(editWs.id, editWs.name.trim());
+      setEditWs(null);
+    }
+  };
+
+  const handleDeleteWorkspace = () => {
+    if (deleteWs) {
+      deleteWorkspace(deleteWs.id);
+      setDeleteWs(null);
+    }
+  };
+
+  const handleMergeWorkspaces = () => {
+    if (mergeWs && mergeTargetId) {
+      mergeWorkspaces(mergeWs.sourceId, mergeTargetId);
+      setMergeWs(null);
+      setMergeTargetId("");
     }
   };
 
