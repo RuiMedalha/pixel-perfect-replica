@@ -474,11 +474,6 @@ async function extractPdfText(fileData: Blob, fileName: string): Promise<string>
   const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-  const fileSizeKB = fileData.size / 1024;
-  if (fileSizeKB > 12000) {
-    return await extractPdfTextViaUrl(fileName, fileData.size);
-  }
-
   const buffer = await fileData.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";
