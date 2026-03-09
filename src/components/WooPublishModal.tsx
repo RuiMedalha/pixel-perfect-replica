@@ -18,6 +18,11 @@ export interface PricingOptions {
   discountPercent: number;
 }
 
+export interface SkuPrefixOptions {
+  prefix: string;
+  onlyIfMissing: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
