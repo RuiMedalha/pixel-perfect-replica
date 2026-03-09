@@ -845,9 +845,27 @@ async function publishVariableProduct(
   // Publish children
   for (const child of (children || [])) {
     try {
-      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true);
+      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parent);
+      
+      // Build variation attributes (e.g., Cor, Tamanho)
       const variationAttrs = buildVariationAttributes(child, parent);
-      if (variationAttrs.length > 0) variationPayload.attributes = variationAttrs;
+      
+      // Build technical attributes (e.g., Marca, EAN)
+      const technicalAttrs = buildTechnicalAttributes(child);
+      
+      // Merge both types of attributes
+      const allAttrs = [...variationAttrs, ...technicalAttrs];
+      if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
+      
+      // Add upsells and crosssells for variations
+      if (has("upsells")) {
+        const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.upsell_skus || []);
+        if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
+      }
+      if (has("crosssells")) {
+        const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.crosssell_skus || []);
+        if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
+      }
 
       let existingVarWooId = child.woocommerce_id;
       // If no local woocommerce_id, try to find existing variation by SKU
