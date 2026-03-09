@@ -410,10 +410,10 @@ const SettingsPage = () => {
                 </Button>
               </div>
               {/* Test scrape row */}
-              {supplier.prefix && supplier.url && (
+              {supplier.url && (
                 <div className="flex gap-2 items-center pt-1">
                   <Input
-                    placeholder={`SKU de teste (ex: ${supplier.prefix}12345)`}
+                    placeholder={`SKU de teste (ex: ${supplier.prefix ? supplier.prefix + "12345" : "12345"})`}
                     value={testingSku[index] ?? ""}
                     className="flex-1 h-8 text-xs"
                     onChange={(e) => setTestingSku((prev) => ({ ...prev, [index]: e.target.value }))}
