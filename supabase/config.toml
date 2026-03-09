@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.optimize-batch]
 verify_jwt = false
+
+[functions.merge-workspaces]
+verify_jwt = false
+
+[functions.enrich-products]
+verify_jwt = false

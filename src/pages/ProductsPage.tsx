@@ -656,7 +656,34 @@ const ProductsPage = () => {
           }}>
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Exportar </span>Excel
           </Button>
-          {activeWorkspace?.has_variable_products && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-8"
+            onClick={() => {
+              if (!activeWorkspace) return;
+              // Parse supplier prefixes from settings
+              try {
+                const raw = settings?.supplier_prefixes;
+                const prefixes = raw ? JSON.parse(raw) : [];
+                if (!prefixes.length) {
+                  toast.error("Configure os prefixos de fornecedor nas Definições primeiro.");
+                  return;
+                }
+                enrich({
+                  workspaceId: activeWorkspace.id,
+                  supplierPrefixes: prefixes,
+                  productIds: selected.size > 0 ? Array.from(selected) : undefined,
+                });
+              } catch {
+                toast.error("Erro ao ler prefixos de fornecedor. Verifique as Definições.");
+              }
+            }}
+            disabled={isEnriching}
+          >
+            {isEnriching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Globe className="w-3.5 h-3.5 mr-1" />}
+            <span className="hidden sm:inline">Enriquecer </span>Web{selected.size > 0 ? ` (${selected.size})` : ""}
+          </Button>
             <Button
               size="sm"
               variant="outline"
