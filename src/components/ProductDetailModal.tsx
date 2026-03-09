@@ -631,6 +631,11 @@ export function ProductDetailModal({ product, onClose }: Props) {
             </TabsContent>
           )}
 
+          {/* SUPPLIER DATA TAB */}
+          <TabsContent value="fornecedor" className="mt-4 space-y-4">
+            <SupplierDataSection product={product} />
+          </TabsContent>
+
           {/* RAW DATA TAB */}
           <TabsContent value="brutos" className="mt-4">
             <Card>
