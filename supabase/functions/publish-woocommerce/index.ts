@@ -716,11 +716,44 @@ const TECHNICAL_ATTR_NAMES = new Set([
   "ean13",
   "gtin",
   "barcode",
+  "modelo",
+  "model",
 ]);
 
-const DEFAULT_VARIATION_ATTR_NAME = "Cor";
-
 const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
+
+// ── Smart attribute name inference ──
+const SIZE_PATTERN = /\b(\d+[\.,]?\d*)\s*(cm|mm|m|ml|cl|l|lt|kg|g|oz|"|''|pol)\b/i;
+const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
+const COLOR_WORDS = new Set([
+  "preto","branco","azul","vermelho","verde","amarelo","laranja","roxo","rosa",
+  "cinza","cinzento","castanho","dourado","prateado","violeta","bege","coral",
+  "turquesa","creme","bordeaux","borgonha","fucsia","magenta","caqui","salmon",
+  "salmão","marfim","champanhe","nude","terracota","índigo","indigo","lima",
+  "black","white","blue","red","green","yellow","orange","purple","pink",
+  "gray","grey","brown","gold","silver","beige","navy","teal","olive",
+  "inox","aço","cromado","natural","transparente","multicolor"
+]);
+
+function inferAttrNameFromOption(option: string): string {
+  const lower = option.toLowerCase().trim();
+  
+  // Check for size patterns first (more specific)
+  if (SIZE_PATTERN.test(lower)) return "Tamanho";
+  
+  // Check if it's a pure size word
+  const words = lower.split(/[\s\-\/]+/).map(w => w.trim()).filter(Boolean);
+  if (words.length <= 2 && words.some(w => SIZE_WORDS.has(w))) return "Tamanho";
+  
+  // Check for color words
+  if (words.some(w => COLOR_WORDS.has(w))) return "Cor";
+  
+  // If it looks like a dimension (just numbers), it's probably a size
+  if (/^\d+[\.,]?\d*$/.test(lower)) return "Tamanho";
+  
+  // Default fallback
+  return "Opção";
+}
 
 function tokenizeTitle(s: string): string[] {
   return String(s || "")
@@ -734,27 +767,22 @@ function tokenizeTitle(s: string): string[] {
 
 function inferVariationOptionFromTitle(parentTitle: string, childTitle: string): string | null {
   const rawChild = String(childTitle || "").trim();
+  const rawParent = String(parentTitle || "").trim();
   if (!rawChild) return null;
 
-  const childLower = rawChild.toLowerCase();
-  const marker = "kool-touch";
-  const idx = childLower.lastIndexOf(marker);
-  if (idx >= 0) {
-    const after = rawChild
-      .substring(idx + marker.length)
-      .trim()
-      .replace(/^[-–—:]+\s*/, "")
-      .trim();
-    if (after && after.length <= 80 && after.toLowerCase() !== rawChild.toLowerCase()) return after;
+  // Method 1: If child title starts with parent title, extract the suffix
+  const suffix = extractTitleSuffix(rawParent, rawChild);
+  if (suffix && suffix !== rawChild && suffix.length <= 80 && suffix.length > 0) {
+    // Clean up leading separators
+    const cleaned = suffix.replace(/^[-–—:,\s]+/, "").trim();
+    if (cleaned && cleaned.length <= 80) return cleaned;
   }
 
-  const pTokens = new Set(tokenizeTitle(parentTitle).map((t) => t.toLowerCase()));
+  // Method 2: Token-based diff - remove parent tokens from child
+  const pTokens = new Set(tokenizeTitle(rawParent).map((t) => t.toLowerCase()));
   const remaining = tokenizeTitle(rawChild).filter((t) => !pTokens.has(t.toLowerCase()));
   const candidate = remaining.join(" ").trim();
   if (candidate && candidate.length <= 80) return candidate;
-
-  const suffix = extractTitleSuffix(parentTitle, rawChild);
-  if (suffix && suffix.length <= 80) return suffix;
 
   return null;
 }
@@ -841,7 +869,7 @@ async function buildVariationPayload(
     const parentTitle = parent?.optimized_title || parent?.original_title || "";
     const childTitle = variation.optimized_title || variation.original_title || "";
     const option = inferVariationOptionFromTitle(parentTitle, childTitle);
-    if (option) variationAttrs = [{ name: DEFAULT_VARIATION_ATTR_NAME, option }];
+    if (option) variationAttrs = [{ name: inferAttrNameFromOption(option), option }];
   }
 
   if (variationAttrs.length > 0) payload.attributes = variationAttrs;
@@ -882,7 +910,15 @@ function buildAttributesForParent(
     }
   }
 
-  const names = nameCandidates.size > 0 ? Array.from(nameCandidates) : (variations.length > 0 ? [DEFAULT_VARIATION_ATTR_NAME] : []);
+  // If no structured attrs found, infer the attr name from first variation's title diff
+  let defaultAttrName = "Opção";
+  if (nameCandidates.size === 0 && variations.length > 0) {
+    const firstChild = variations[0];
+    const firstChildTitle = firstChild?.optimized_title || firstChild?.original_title || "";
+    const firstOption = inferVariationOptionFromTitle(parentTitle, firstChildTitle);
+    if (firstOption) defaultAttrName = inferAttrNameFromOption(firstOption);
+  }
+  const names = nameCandidates.size > 0 ? Array.from(nameCandidates) : (variations.length > 0 ? [defaultAttrName] : []);
 
   const add = (name: string, value: string) => {
     const n = String(name || "").trim();
@@ -995,7 +1031,7 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   }
 
   const option = inferVariationOptionFromTitle(parentTitle, childTitle);
-  if (option) return [{ name: DEFAULT_VARIATION_ATTR_NAME, option }];
+  if (option) return [{ name: inferAttrNameFromOption(option), option }];
   return [];
 }
 
