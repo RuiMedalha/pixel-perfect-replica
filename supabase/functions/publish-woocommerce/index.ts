@@ -439,14 +439,24 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
 
 async function buildBasePayload(
   product: any, supabase: any, baseUrl: string, auth: string,
-  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false
+  has: (k: string) => boolean, markupPercent: number, discountPercent: number, isVariation = false, parent?: any
 ): Promise<Record<string, unknown>> {
   const wooProduct: Record<string, unknown> = {};
 
   if (has("title")) {
-    wooProduct.name = product.optimized_title || product.original_title || "Sem título";
+    // For variations, append attribute suffix to title
+    let title = product.optimized_title || product.original_title || "Sem título";
+    if (isVariation && parent) {
+      const variationAttrs = buildVariationAttributes(product, parent);
+      if (variationAttrs.length > 0) {
+        const suffix = variationAttrs.map(a => a.option).join(" ");
+        title = `${title} - ${suffix}`;
+      }
+    }
+    wooProduct.name = title;
   }
-  if (has("description")) {
+  // Variations should NOT include description/short_description - they inherit from parent
+  if (has("description") && !isVariation) {
     wooProduct.description = product.optimized_description || product.original_description || "";
   }
   if (has("short_description") && !isVariation) {
