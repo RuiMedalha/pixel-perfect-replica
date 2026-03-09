@@ -977,9 +977,6 @@ async function publishVariableProduct(
   // Variations are processed separately (they are added to the job queue), to avoid duplicate creation and SKU conflicts.
   return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
 
-  return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
-}
-
 async function publishVariation(
   variation: any,
   supabase: any,
