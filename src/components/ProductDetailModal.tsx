@@ -13,6 +13,8 @@ import { VariationsPanel } from "@/components/VariationsPanel";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
 import { useProducts } from "@/hooks/useProducts";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
