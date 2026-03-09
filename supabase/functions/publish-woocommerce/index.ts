@@ -149,6 +149,7 @@ Deno.serve(async (req) => {
       }
 
       const existingResults = (job.results || []) as WooResult[];
+      resetImageCache(); // Clear image resolution cache for each batch invocation
 
       // Process each product in the batch
       for (const product of orderedBatchProducts) {
