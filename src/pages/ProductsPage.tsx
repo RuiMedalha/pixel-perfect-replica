@@ -1154,7 +1154,7 @@ const ProductsPage = () => {
                 </thead>
                 <tbody>
                   {viewMode === "list" ? (
-                    filtered.map((product) => (
+                    paginatedFiltered.map((product) => (
                       <ProductRow key={product.id} product={product} />
                     ))
                   ) : (
