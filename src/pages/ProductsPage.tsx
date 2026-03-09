@@ -682,6 +682,7 @@ const ProductsPage = () => {
                   name: s.name || '',
                   prefix: s.prefix || '',
                   searchUrl: s.searchUrl || (s.url ? (s.url.includes('{sku}') ? s.url : s.url + '{sku}') : ''),
+                  scrapingInstructions: s.scrapingInstructions || '',
                 }));
                 enrich({
                   workspaceId: activeWorkspace.id,
