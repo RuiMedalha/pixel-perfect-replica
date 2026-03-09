@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { GitBranch, Eye, Save, Pencil, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
@@ -22,6 +23,56 @@ const COLOR_WORDS = new Set([
   "gray","grey","brown","gold","silver","beige","navy","teal","olive",
   "inox","aço","cromado","natural","transparente","multicolor"
 ]);
+
+// Color name to CSS color mapping
+const COLOR_MAP: Record<string, string> = {
+  preto: "#1a1a1a", black: "#1a1a1a",
+  branco: "#ffffff", white: "#ffffff",
+  azul: "#2563eb", blue: "#2563eb",
+  vermelho: "#dc2626", red: "#dc2626",
+  verde: "#16a34a", green: "#16a34a",
+  amarelo: "#eab308", yellow: "#eab308",
+  laranja: "#ea580c", orange: "#ea580c",
+  roxo: "#9333ea", purple: "#9333ea",
+  rosa: "#ec4899", pink: "#ec4899",
+  cinza: "#6b7280", cinzento: "#6b7280", gray: "#6b7280", grey: "#6b7280",
+  castanho: "#92400e", brown: "#92400e",
+  dourado: "#d97706", gold: "#d97706",
+  prateado: "#9ca3af", silver: "#9ca3af",
+  violeta: "#7c3aed",
+  bege: "#d4b896", beige: "#d4b896",
+  coral: "#f97316",
+  turquesa: "#14b8a6", teal: "#14b8a6",
+  creme: "#fef3c7",
+  bordeaux: "#7f1d1d", borgonha: "#7f1d1d",
+  fucsia: "#d946ef", magenta: "#d946ef",
+  caqui: "#a3a385",
+  salmon: "#fb923c", salmão: "#fb923c",
+  marfim: "#fffbeb",
+  champanhe: "#f5e6d3",
+  nude: "#e8d4c4",
+  terracota: "#c2410c",
+  índigo: "#4f46e5", indigo: "#4f46e5",
+  lima: "#84cc16",
+  navy: "#1e3a5f",
+  olive: "#65a30d",
+  inox: "#a1a1aa", aço: "#71717a",
+  cromado: "#d4d4d8",
+  natural: "#d6b88a",
+  transparente: "transparent",
+  multicolor: "linear-gradient(135deg, #ef4444, #eab308, #22c55e, #3b82f6, #a855f7)",
+};
+
+function getColorFromValue(value: string): string | null {
+  const lower = value.toLowerCase().trim();
+  // Direct match
+  if (COLOR_MAP[lower]) return COLOR_MAP[lower];
+  // Partial match
+  for (const [name, color] of Object.entries(COLOR_MAP)) {
+    if (lower.includes(name)) return color;
+  }
+  return null;
+}
 
 const TECHNICAL_NAMES = new Set(["marca","brand","ean","ean13","gtin","barcode","modelo","model"]);
 
