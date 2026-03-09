@@ -21,17 +21,13 @@ export function useEnrichProducts() {
 
   const enrich = async ({
     workspaceId,
-    supplierPrefixes,
+    supplierPrefixes = [],
     productIds,
   }: {
     workspaceId: string;
-    supplierPrefixes: SupplierPrefix[];
+    supplierPrefixes?: SupplierPrefix[];
     productIds?: string[];
   }) => {
-    if (supplierPrefixes.length === 0) {
-      toast.error("Configure os prefixos de fornecedor nas Definições antes de enriquecer.");
-      return null;
-    }
 
     setIsEnriching(true);
     setResult(null);

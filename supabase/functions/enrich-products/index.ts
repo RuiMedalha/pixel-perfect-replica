@@ -33,10 +33,10 @@ Deno.serve(async (req) => {
     }
     const userId = user.id;
 
-    const { workspaceId, supplierPrefixes, productIds, batchSize = 5 } = await req.json();
+    const { workspaceId, supplierPrefixes = [], productIds, batchSize = 5 } = await req.json();
     
-    if (!workspaceId || !supplierPrefixes || supplierPrefixes.length === 0) {
-      return new Response(JSON.stringify({ error: "workspaceId and supplierPrefixes are required" }), {
+    if (!workspaceId) {
+      return new Response(JSON.stringify({ error: "workspaceId is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -52,20 +52,18 @@ Deno.serve(async (req) => {
     // Get products to enrich
     let products: any[] = [];
     if (productIds && productIds.length > 0) {
-      // Specific products
       for (let i = 0; i < productIds.length; i += 100) {
         const batch = productIds.slice(i, i + 100);
         const { data } = await supabase.from("products")
-          .select("id, sku, original_title")
+          .select("id, sku, original_title, image_urls, technical_specs, product_type, attributes")
           .in("id", batch);
         if (data) products.push(...data);
       }
     } else {
-      // All products in workspace with SKU
       let from = 0;
       while (true) {
         const { data } = await supabase.from("products")
-          .select("id, sku, original_title")
+          .select("id, sku, original_title, image_urls, technical_specs, product_type, attributes")
           .eq("workspace_id", workspaceId)
           .not("sku", "is", null)
           .range(from, from + 999);
@@ -77,7 +75,6 @@ Deno.serve(async (req) => {
     }
 
     // Check which products already have knowledge cached
-    const skus = products.map(p => p.sku).filter(Boolean);
     const { data: existingChunks } = await supabase.from("knowledge_chunks")
       .select("source_name")
       .eq("workspace_id", workspaceId)
@@ -85,10 +82,8 @@ Deno.serve(async (req) => {
     
     const existingSources = new Set((existingChunks || []).map((c: any) => c.source_name));
 
-    // Filter products that don't have cached data
     const toEnrich = products.filter(p => {
       if (!p.sku) return false;
-      // Check if we already have a scrape for this SKU
       return !existingSources.has(`🌐 SKU: ${p.sku}`);
     });
 
@@ -96,31 +91,45 @@ Deno.serve(async (req) => {
 
     let enriched = 0;
     let failed = 0;
-    const results: { sku: string; success: boolean; url?: string; error?: string }[] = [];
+    const results: { sku: string; success: boolean; url?: string; error?: string; images?: number; isVariable?: boolean }[] = [];
 
-    // Process in batches
     for (let i = 0; i < toEnrich.length; i += batchSize) {
       const batch = toEnrich.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (product: any) => {
         const sku = product.sku;
         
-        // Find matching supplier prefix
+        // Find matching supplier prefix (optional now)
         let matchedPrefix: any = null;
-        for (const sp of supplierPrefixes) {
-          if (sku.toUpperCase().startsWith(sp.prefix.toUpperCase())) {
-            matchedPrefix = sp;
-            break;
+        let searchUrl = '';
+
+        if (supplierPrefixes.length > 0) {
+          for (const sp of supplierPrefixes) {
+            if (sp.prefix && sku.toUpperCase().startsWith(sp.prefix.toUpperCase())) {
+              matchedPrefix = sp;
+              break;
+            }
+          }
+          // If no prefix matched but suppliers exist, try first supplier with full SKU
+          if (!matchedPrefix && supplierPrefixes.length > 0) {
+            // Use first supplier that has a searchUrl with {sku} placeholder
+            const fallback = supplierPrefixes.find((sp: any) => sp.searchUrl?.includes("{sku}"));
+            if (fallback) {
+              searchUrl = fallback.searchUrl.replace("{sku}", sku);
+              matchedPrefix = { ...fallback, prefix: '' };
+            }
           }
         }
 
-        if (!matchedPrefix) {
-          return { sku, success: false, error: "No matching supplier prefix" };
+        if (matchedPrefix && !searchUrl) {
+          const productRef = matchedPrefix.prefix ? sku.substring(matchedPrefix.prefix.length) : sku;
+          searchUrl = matchedPrefix.searchUrl.replace("{sku}", productRef);
         }
 
-        // Build URL by removing prefix from SKU
-        const productRef = sku.substring(matchedPrefix.prefix.length);
-        const searchUrl = matchedPrefix.searchUrl.replace("{sku}", productRef);
+        // If no URL could be built, skip
+        if (!searchUrl) {
+          return { sku, success: false, error: "No supplier URL configured" };
+        }
 
         try {
           const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
@@ -131,7 +140,7 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
               url: searchUrl,
-              formats: ['markdown'],
+              formats: ['markdown', 'links'],
               onlyMainContent: true,
             }),
           });
@@ -143,15 +152,97 @@ Deno.serve(async (req) => {
 
           const data = await response.json();
           const markdown = data.data?.markdown || data.markdown || '';
+          const links = data.data?.links || data.links || [];
           
           if (!markdown || markdown.length < 50) {
             return { sku, success: false, url: searchUrl, error: "No content found" };
           }
 
-          const extractedText = markdown.substring(0, 30000);
-          const title = data.data?.metadata?.title || `SKU: ${sku}`;
+          // --- Extract images from markdown and links ---
+          const imageExtensions = /\.(jpg|jpeg|png|webp|gif)(\?[^\s)]*)?$/i;
+          const mdImageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
+          const foundImages: string[] = [];
 
-          // Save as uploaded file
+          // From markdown ![alt](url)
+          let match;
+          while ((match = mdImageRegex.exec(markdown)) !== null) {
+            const url = match[1];
+            if (imageExtensions.test(url.split('?')[0])) {
+              foundImages.push(url);
+            }
+          }
+
+          // From links array
+          if (Array.isArray(links)) {
+            for (const link of links) {
+              const linkUrl = typeof link === 'string' ? link : link?.url;
+              if (linkUrl && imageExtensions.test(linkUrl.split('?')[0])) {
+                foundImages.push(linkUrl);
+              }
+            }
+          }
+
+          // Also extract from markdown src= attributes
+          const srcRegex = /src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif)[^"']*)/gi;
+          while ((match = srcRegex.exec(markdown)) !== null) {
+            foundImages.push(match[1]);
+          }
+
+          // Deduplicate images
+          const uniqueImages = [...new Set(foundImages)].slice(0, 20);
+
+          // --- Detect variations ---
+          const variationPatterns = [
+            /dispon[ií]vel\s+em\s*:/i,
+            /cores?\s*:/i,
+            /tamanhos?\s*:/i,
+            /sizes?\s*:/i,
+            /colou?rs?\s*:/i,
+            /varia[çc][õo]es?\s*:/i,
+            /selec[ct]\s+(size|color|cor|tamanho)/i,
+            /\|\s*(cor|color|tamanho|size)\s*\|/i,
+          ];
+          const isVariable = variationPatterns.some(p => p.test(markdown));
+
+          // --- Extract technical specs snippet ---
+          let techSpecs = '';
+          const specsSectionRegex = /(especifica[çc][õo]es|caracter[ií]sticas|specifications|technical|ficha\s+t[ée]cnica)[^]*?(?=\n#{1,3}\s|\n\n\n|$)/i;
+          const specsMatch = markdown.match(specsSectionRegex);
+          if (specsMatch) {
+            techSpecs = specsMatch[0].substring(0, 3000);
+          }
+
+          // --- Update product directly ---
+          const updateData: any = {};
+
+          // Add images (merge with existing, no duplicates)
+          if (uniqueImages.length > 0) {
+            const existingImages = product.image_urls || [];
+            const existingSet = new Set(existingImages.map((u: string) => u.toLowerCase()));
+            const newImages = uniqueImages.filter(u => !existingSet.has(u.toLowerCase()));
+            if (newImages.length > 0) {
+              updateData.image_urls = [...existingImages, ...newImages];
+            }
+          }
+
+          // Add technical specs if product doesn't have them
+          if (techSpecs && !product.technical_specs) {
+            updateData.technical_specs = techSpecs;
+          }
+
+          // Mark as variable if detected and currently simple
+          if (isVariable && product.product_type === 'simple') {
+            updateData.product_type = 'variable';
+          }
+
+          // Perform update if there's anything to update
+          if (Object.keys(updateData).length > 0) {
+            await supabase.from("products").update(updateData).eq("id", product.id);
+          }
+
+          // --- Save knowledge chunks (existing logic) ---
+          const extractedText = markdown.substring(0, 30000);
+
           const { data: fileRecord } = await supabase.from("uploaded_files").insert({
             user_id: userId,
             file_name: `🌐 SKU: ${sku}`,
@@ -161,11 +252,10 @@ Deno.serve(async (req) => {
             products_count: 0,
             extracted_text: extractedText.substring(0, 5000),
             workspace_id: workspaceId,
-            metadata: { type: "sku_scrape", sku, source_url: searchUrl, supplier: matchedPrefix.name },
+            metadata: { type: "sku_scrape", sku, source_url: searchUrl, supplier: matchedPrefix?.name || 'direct', imagesFound: uniqueImages.length, isVariable },
           } as any).select("id").single();
 
           if (fileRecord) {
-            // Chunk and store
             const chunks = chunkText(extractedText, 1500);
             const chunkRows = chunks.map((content: string, idx: number) => ({
               file_id: fileRecord.id,
@@ -180,7 +270,7 @@ Deno.serve(async (req) => {
             }
           }
 
-          return { sku, success: true, url: searchUrl };
+          return { sku, success: true, url: searchUrl, images: uniqueImages.length, isVariable };
         } catch (err) {
           return { sku, success: false, url: searchUrl, error: err instanceof Error ? err.message : "Unknown" };
         }

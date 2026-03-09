@@ -678,10 +678,6 @@ const ProductsPage = () => {
               try {
                 const raw = settings?.supplier_prefixes;
                 const prefixes = raw ? JSON.parse(raw) : [];
-                if (!prefixes.length) {
-                  toast.error("Configure os prefixos de fornecedor nas Definições primeiro.");
-                  return;
-                }
                 enrich({
                   workspaceId: activeWorkspace.id,
                   supplierPrefixes: prefixes,
