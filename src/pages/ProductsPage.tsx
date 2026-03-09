@@ -97,9 +97,12 @@ const ProductsPage = () => {
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportSkuPrefix, setExportSkuPrefix] = useState("");
+  const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 100;
-  
+
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -659,8 +662,9 @@ const ProductsPage = () => {
             </Button>
           </div>
           <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
-            const selectedProducts = (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
-            exportProductsToExcel(selectedProducts);
+            setExportTarget("all");
+            setExportSkuPrefix("");
+            setShowExportDialog(true);
           }}>
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Exportar </span>Excel
           </Button>
@@ -735,9 +739,9 @@ const ProductsPage = () => {
                 <Sparkles className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Otimizar </span>IA ({selected.size})
               </Button>
               <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
-                const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
-                exportProductsToExcel(selectedProducts, "produtos-selecionados");
-                setSelected(new Set());
+                setExportTarget("selected");
+                setExportSkuPrefix("");
+                setShowExportDialog(true);
               }}>
                 <Download className="w-3.5 h-3.5 mr-1" /> <span className="hidden sm:inline">Exportar Seleção </span>({selected.size})
               </Button>
@@ -1678,7 +1682,7 @@ const ProductsPage = () => {
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={isCreatingPublish}
-            onConfirm={async (fields, pricing, scheduledFor) => {
+            onConfirm={async (fields, pricing, scheduledFor, skuPrefix) => {
               try {
                 await createPublishJob({
                   productIds: allPublishIds,
@@ -1686,17 +1690,59 @@ const ProductsPage = () => {
                   pricing,
                   scheduledFor,
                   workspaceId: activeWorkspace?.id,
+                  skuPrefix,
                 });
                 setSelected(new Set());
                 setShowPublishModal(false);
               } catch (err) {
                 // Modal permanece aberto e seleção mantida em caso de erro
-                // Feedback já é mostrado via toast no hook
               }
             }}
           />
         );
       })()}
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              Exportar para Excel
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {exportTarget === "selected" ? `Exportar ${selected.size} produto(s) selecionado(s).` : "Exportar todos os produtos."}
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">🏷️ Prefixo SKU (opcional)</Label>
+              <p className="text-[11px] text-muted-foreground">Adiciona um prefixo aos SKUs que ainda não o tenham.</p>
+              <Input
+                placeholder="Ex: UD, PJ, LC..."
+                value={exportSkuPrefix}
+                onChange={e => setExportSkuPrefix(e.target.value.toUpperCase())}
+                className="h-8 text-sm w-32"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setShowExportDialog(false)}>Cancelar</Button>
+            <Button size="sm" onClick={() => {
+              const prods = exportTarget === "selected"
+                ? (products ?? []).filter(p => selected.has(p.id))
+                : (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
+              const prefix = exportSkuPrefix.trim() || undefined;
+              exportProductsToExcel(prods, exportTarget === "selected" ? "produtos-selecionados" : "produtos-otimizados", prefix);
+              if (exportTarget === "selected") setSelected(new Set());
+              setShowExportDialog(false);
+            }}>
+              <Download className="w-4 h-4 mr-1" />
+              Exportar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

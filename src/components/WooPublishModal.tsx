@@ -18,10 +18,15 @@ export interface PricingOptions {
   discountPercent: number;
 }
 
+export interface SkuPrefixOptions {
+  prefix: string;
+  onlyIfMissing: boolean;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  onConfirm: (fields: string[], pricing?: PricingOptions, scheduledFor?: string) => void;
+  onConfirm: (fields: string[], pricing?: PricingOptions, scheduledFor?: string, skuPrefix?: SkuPrefixOptions) => void;
   productCount: number;
   variableParentCount?: number;
   autoIncludedVariationsCount?: number;
@@ -34,6 +39,7 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [markupPercent, setMarkupPercent] = useState<string>("");
   const [discountPercent, setDiscountPercent] = useState<string>("");
+  const [skuPrefix, setSkuPrefix] = useState("");
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined);
   const [scheduleTime, setScheduleTime] = useState("09:00");
@@ -97,7 +103,8 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
       dt.setHours(hours, minutes, 0, 0);
       scheduledFor = dt.toISOString();
     }
-    onConfirm(Array.from(selectedFields), pricing, scheduledFor);
+    const skuPrefixOpt = skuPrefix.trim() ? { prefix: skuPrefix.trim().toUpperCase(), onlyIfMissing: true } : undefined;
+    onConfirm(Array.from(selectedFields), pricing, scheduledFor, skuPrefixOpt);
   };
 
   // Example price calculation for preview
@@ -217,6 +224,20 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
             )}
           </div>
         )}
+
+        {/* SKU Prefix */}
+        <div className="border border-border rounded-md p-3 space-y-2 bg-muted/30">
+          <div className="flex items-center gap-1.5 text-sm font-medium">
+            🏷️ Prefixo SKU (opcional)
+          </div>
+          <p className="text-[11px] text-muted-foreground">Adiciona um prefixo aos SKUs que ainda não o tenham. Ex: se colocar "UD", o SKU "12345" ficará "UD12345".</p>
+          <Input
+            placeholder="Ex: UD, PJ, LC..."
+            value={skuPrefix}
+            onChange={e => setSkuPrefix(e.target.value.toUpperCase())}
+            className="h-8 text-sm w-32"
+          />
+        </div>
 
         {/* Schedule */}
         <div className="border border-border rounded-md p-3 space-y-3 bg-muted/30">

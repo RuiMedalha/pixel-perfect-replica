@@ -357,9 +357,9 @@ const SettingsPage = () => {
         <CardHeader>
           <CardTitle className="text-base">🏭 Fornecedores (Auto-Scrape por SKU)</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+         <CardContent className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Configure o prefixo de SKU de cada fornecedor e o URL de pesquisa. Durante a otimização, o sistema remove o prefixo do SKU e pesquisa automaticamente no site do fornecedor. O URL deve terminar com <code className="bg-muted px-1 rounded">/</code> ou <code className="bg-muted px-1 rounded">=</code> (ex: <code className="bg-muted px-1 rounded">https://www.udex.pt/pt/pesquisa/</code>).
+            Configure os fornecedores e o URL de pesquisa. O prefixo SKU é <strong>opcional</strong> — se vazio, o sistema pesquisa com o SKU completo. Na exportação/publicação, poderá adicionar um prefixo aos SKUs que ainda não o tenham.
           </p>
           {suppliers.map((supplier, index) => (
             <div key={index} className="space-y-2 border rounded-lg p-3">
@@ -377,9 +377,9 @@ const SettingsPage = () => {
                   />
                 </div>
                 <div className="w-24 space-y-1">
-                  <Label className="text-xs">Prefixo SKU</Label>
+                  <Label className="text-xs">Prefixo SKU <span className="text-muted-foreground">(opcional)</span></Label>
                   <Input
-                    placeholder="UD"
+                    placeholder="ex: UD"
                     value={supplier.prefix}
                     onChange={(e) => {
                       const updated = [...suppliers];
@@ -410,10 +410,10 @@ const SettingsPage = () => {
                 </Button>
               </div>
               {/* Test scrape row */}
-              {supplier.prefix && supplier.url && (
+              {supplier.url && (
                 <div className="flex gap-2 items-center pt-1">
                   <Input
-                    placeholder={`SKU de teste (ex: ${supplier.prefix}12345)`}
+                    placeholder={`SKU de teste (ex: ${supplier.prefix ? supplier.prefix + "12345" : "12345"})`}
                     value={testingSku[index] ?? ""}
                     className="flex-1 h-8 text-xs"
                     onChange={(e) => setTestingSku((prev) => ({ ...prev, [index]: e.target.value }))}

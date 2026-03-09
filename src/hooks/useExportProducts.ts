@@ -29,7 +29,7 @@ const EXPORT_COLUMNS = [
   { key: "status", header: "Estado" },
 ];
 
-export function exportProductsToExcel(products: Product[], fileName = "produtos-otimizados") {
+export function exportProductsToExcel(products: Product[], fileName = "produtos-otimizados", skuPrefix?: string) {
   if (products.length === 0) {
     toast.error("Nenhum produto para exportar.");
     return;
@@ -38,7 +38,11 @@ export function exportProductsToExcel(products: Product[], fileName = "produtos-
   const rows = products.map((p) => {
     const row: Record<string, unknown> = {};
     for (const col of EXPORT_COLUMNS) {
-      const val = (p as any)[col.key];
+      let val = (p as any)[col.key];
+      // Apply SKU prefix if provided and SKU doesn't already start with it
+      if (col.key === "sku" && skuPrefix && val && !String(val).toUpperCase().startsWith(skuPrefix.toUpperCase())) {
+        val = skuPrefix + val;
+      }
       if (col.key === "faq" && Array.isArray(val)) {
         row[col.header] = val.map((f: any) => `Q: ${f.question} A: ${f.answer}`).join(" | ");
       } else if ((col.key === "upsell_skus" || col.key === "crosssell_skus") && Array.isArray(val)) {
