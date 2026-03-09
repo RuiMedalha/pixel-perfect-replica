@@ -22,6 +22,7 @@ interface Supplier {
   name: string;
   prefix: string;
   url: string;
+  scrapingInstructions?: string;
 }
 
 const SETTING_KEYS = {
@@ -408,6 +409,24 @@ const SettingsPage = () => {
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
+              </div>
+              {/* Scraping Instructions */}
+              <div className="space-y-1">
+                <Label className="text-xs">Instruções de Extração <span className="text-muted-foreground">(opcional)</span></Label>
+                <Textarea
+                  rows={3}
+                  className="text-xs font-mono"
+                  placeholder={`Ex: As variações estão na secção "Diámetro". Ignorar imagens depois de "Descubre la serie". Extrair especificações da tabela.`}
+                  value={supplier.scrapingInstructions ?? ""}
+                  onChange={(e) => {
+                    const updated = [...suppliers];
+                    updated[index] = { ...updated[index], scrapingInstructions: e.target.value };
+                    setSuppliers(updated);
+                  }}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Dicas para a IA sobre como interpretar a página deste fornecedor (ex: quais secções ignorar, onde estão as variações, etc.)
+                </p>
               </div>
               {/* Test scrape row */}
               {supplier.url && (

@@ -751,12 +751,30 @@ function SupplierDataSection({ product }: { product: Product }) {
   const sourceUrl = metadata?.source_url;
   const supplierName = metadata?.supplier;
   const imagesFound = metadata?.imagesFound ?? 0;
-  const isVariable = metadata?.isVariable ?? false;
+  const variations = metadata?.variations ?? [];
+  const specs = metadata?.specs ?? {};
+  const seriesName = metadata?.series_name;
+  const isVariable = variations.length > 0 || metadata?.isVariable;
+
+  // Try to parse technical_specs as JSON
+  let structuredSpecs: Record<string, string> = {};
+  let rawSpecs = '';
+  if (product.technical_specs) {
+    try {
+      structuredSpecs = JSON.parse(product.technical_specs);
+    } catch {
+      rawSpecs = product.technical_specs;
+    }
+  }
+  // Merge specs from metadata if product specs are empty
+  if (Object.keys(structuredSpecs).length === 0 && Object.keys(specs).length > 0) {
+    structuredSpecs = specs;
+  }
 
   return (
     <>
-      {/* Enrichment status badge */}
-      <div className="flex items-center gap-3">
+      {/* Enrichment status badges */}
+      <div className="flex items-center gap-3 flex-wrap">
         <Badge variant={isEnriched ? "default" : "secondary"} className="text-sm px-3 py-1">
           <Globe className="w-3.5 h-3.5 mr-1.5" />
           {isEnriched ? "Enriquecido via Web" : "Não enriquecido"}
@@ -769,6 +787,11 @@ function SupplierDataSection({ product }: { product: Product }) {
         {imagesFound > 0 && (
           <Badge variant="outline" className="text-sm px-3 py-1">
             {imagesFound} imagens extraídas
+          </Badge>
+        )}
+        {seriesName && (
+          <Badge variant="outline" className="text-sm px-3 py-1">
+            Série: {seriesName}
           </Badge>
         )}
       </div>
@@ -798,13 +821,48 @@ function SupplierDataSection({ product }: { product: Product }) {
         </Card>
       )}
 
+      {/* Variations detected */}
+      {variations.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <h4 className="text-sm font-semibold mb-3">Variações Detetadas</h4>
+            <div className="space-y-3">
+              {variations.map((v: any, i: number) => (
+                <div key={i}>
+                  <p className="text-xs font-medium text-muted-foreground mb-1.5">{v.name}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(v.values || []).map((val: string, j: number) => (
+                      <Badge key={j} variant="secondary" className="text-xs">
+                        {val}
+                        {v.skus?.[j] && (
+                          <span className="ml-1 text-muted-foreground font-mono">({v.skus[j]})</span>
+                        )}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Technical Specs */}
       <Card>
         <CardContent className="p-4">
           <h4 className="text-sm font-semibold mb-2">Especificações Técnicas</h4>
-          {product.technical_specs ? (
+          {Object.keys(structuredSpecs).length > 0 ? (
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {Object.entries(structuredSpecs).map(([key, value]) => (
+                <div key={key} className="flex items-baseline gap-2 py-1 border-b border-border/30">
+                  <span className="text-xs font-medium text-muted-foreground shrink-0">{key}</span>
+                  <span className="text-sm flex-1 text-right">{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : rawSpecs ? (
             <div className="p-3 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-              {product.technical_specs}
+              {rawSpecs}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Nenhuma especificação técnica extraída. Execute o enriquecimento web para obter dados do fornecedor.</p>
