@@ -1118,8 +1118,34 @@ async function publishVariableProduct(
     .select("*")
     .eq("parent_product_id", parent.id);
 
+  console.log(`[publish-variable] Parent ${parent.id} has ${(children || []).length} children, image_urls=${JSON.stringify(parent.image_urls)}, title=${parent.optimized_title}`);
+
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
+
+  // If the parent has no images, aggregate unique images from children for the gallery
+  if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children && children.length > 0) {
+    const childImages: Array<Record<string, unknown>> = [];
+    const seenUrls = new Set<string>();
+    for (const child of children) {
+      const urls: string[] = Array.isArray(child.image_urls) ? child.image_urls : [];
+      const altTexts = child.image_alt_texts || [];
+      for (let i = 0; i < urls.length; i++) {
+        if (urls[i] && !seenUrls.has(urls[i])) {
+          seenUrls.add(urls[i]);
+          const img: Record<string, unknown> = { src: urls[i], position: childImages.length };
+          if (has("image_alt_text") && altTexts[i]) {
+            img.alt = typeof altTexts[i] === "string" ? altTexts[i] : (altTexts[i] as any)?.alt || "";
+          }
+          childImages.push(img);
+        }
+      }
+    }
+    if (childImages.length > 0) {
+      parentPayload.images = childImages;
+      console.log(`[publish-variable] Aggregated ${childImages.length} images from children for parent`);
+    }
+  }
 
   const variationAttributes = buildAttributesForParent(parent, children || []);
   const staticAttributes = buildStaticAttributesForParent(parent, children || []);
@@ -1142,6 +1168,8 @@ async function publishVariableProduct(
     parentPayload.attributes = merged;
   }
 
+  console.log(`[publish-variable] Payload keys: ${Object.keys(parentPayload).join(", ")}, name=${parentPayload.name}, images=${Array.isArray(parentPayload.images) ? (parentPayload.images as any[]).length : 0}, attrs=${JSON.stringify(parentPayload.attributes)}`);
+
   if (has("upsells")) {
     const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, parent.upsell_skus || []);
     if (upsellIds.length > 0) parentPayload.upsell_ids = upsellIds;
@@ -1162,7 +1190,7 @@ async function publishVariableProduct(
 
   const parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
 
-  // Ao atualizar, preserva atributos já existentes no WooCommerce (ex.: Marca/Modelo/EAN) para não os “apagar”.
+  // Ao atualizar, preserva atributos já existentes no WooCommerce (ex.: Marca/Modelo/EAN) para não os "apagar".
   if (existingParentWooId && Array.isArray((parentPayload as any).attributes)) {
     try {
       const existingWoo = await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "GET");
@@ -1174,11 +1202,14 @@ async function publishVariableProduct(
     }
   }
 
+  console.log(`[publish-variable] Sending ${parentAction} to WC#${existingParentWooId || 'new'}, final payload: ${JSON.stringify(parentPayload).substring(0, 1500)}`);
+
   const parentWooData = existingParentWooId
     ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
     : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
 
   const parentWooId = parentWooData.id;
+  console.log(`[publish-variable] WC response: id=${parentWooId}, name=${parentWooData.name}, images=${parentWooData.images?.length || 0}, attrs=${parentWooData.attributes?.length || 0}`);
 
   await supabase
     .from("products")
@@ -1209,6 +1240,8 @@ async function publishVariation(
 
   if (parentWooId) {
     const variationPayload = await buildVariationPayload(variation, parentRow, has, markupPercent, discountPercent);
+    console.log(`[publish-variation] Variation ${variation.id} (sku=${variation.sku}), title=${variation.optimized_title}, image_urls=${JSON.stringify(variation.image_urls)}, attrs=${JSON.stringify(variation.attributes)}`);
+    console.log(`[publish-variation] Payload: ${JSON.stringify(variationPayload).substring(0, 1000)}`);
 
     let existingVarWooId = variation.woocommerce_id;
     if (!existingVarWooId && variation.sku) {
