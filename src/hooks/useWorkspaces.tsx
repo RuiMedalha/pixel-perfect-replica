@@ -188,6 +188,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           if (ws) updateMutation.mutate({ id, name: ws.name, description: ws.description || undefined, has_variable_products: value });
         },
         deleteWorkspace: (id) => deleteMutation.mutate(id),
+        mergeWorkspaces: (sourceId, targetId) => mergeMutation.mutate({ sourceId, targetId }),
         isCreating: createMutation.isPending,
       }}
     >
