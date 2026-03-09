@@ -275,6 +275,14 @@ function buildProductData(p: Record<string, unknown>, onlyMapped: boolean, mappe
     techSpecs = techSpecs ? `${techSpecs}\n${specParts.join(" | ")}` : specParts.join(" | ");
   }
 
+  // Collect extra technical attributes (Marca, EAN, Modelo) into the attributes array
+  const brandVal = toStr(p.brand, 200);
+  const eanVal = toStr(p.ean, 100);
+  const modeloVal = toStr(p.modelo, 200);
+  if (brandVal) attributes.push({ name: "Marca", value: brandVal, variation: false });
+  if (eanVal) attributes.push({ name: "EAN", value: eanVal, variation: false });
+  if (modeloVal) attributes.push({ name: "Modelo", value: modeloVal, variation: false });
+
   const fieldMap: Record<string, () => void> = {
     title: () => { data.original_title = toStr(p.title, 500); },
     description: () => { data.original_description = toStr(p.description, 5000); },
@@ -299,6 +307,9 @@ function buildProductData(p: Record<string, unknown>, onlyMapped: boolean, mappe
     seo_slug: () => { data.seo_slug = toStr(p.seo_slug, 200); },
     weight: () => { /* handled in technical_specs */ },
     woocommerce_id: () => { data.woocommerce_id = p.woocommerce_id ? parseInt(String(p.woocommerce_id), 10) || null : null; },
+    brand: () => { /* handled above as attribute */ },
+    ean: () => { /* handled above as attribute */ },
+    modelo: () => { /* handled above as attribute */ },
   };
 
   if (onlyMapped && hasMapping) {

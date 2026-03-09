@@ -1231,6 +1231,13 @@ async function finalizeJob(adminClient: any, jobId: string, job: any, userId: st
   const published = results.filter((r: WooResult) => r.status === "created" || r.status === "updated").length;
   const errors = results.filter((r: WooResult) => r.status === "error").length;
 
+  // ── Second pass: resolve upsell/crosssell now that all products are published ──
+  try {
+    await resolveUpsellCrosssellPass(adminClient, job, userId);
+  } catch (e) {
+    console.warn("Upsell/crosssell second pass failed:", e);
+  }
+
   await adminClient.from("publish_jobs").update({
     status: "completed",
     completed_at: new Date().toISOString(),
@@ -1248,4 +1255,76 @@ async function finalizeJob(adminClient: any, jobId: string, job: any, userId: st
       job_id: jobId,
     },
   });
+}
+
+async function resolveUpsellCrosssellPass(adminClient: any, job: any, userId: string) {
+  const productIds = job.product_ids as string[];
+  if (!productIds || productIds.length === 0) return;
+
+  // Get WooCommerce config
+  const { data: settings } = await adminClient
+    .from("settings")
+    .select("key, value")
+    .eq("user_id", userId)
+    .in("key", ["woocommerce_url", "woocommerce_consumer_key", "woocommerce_consumer_secret"]);
+
+  const settingsMap: Record<string, string> = {};
+  settings?.forEach((s: any) => { settingsMap[s.key] = s.value; });
+  const wooUrl = settingsMap["woocommerce_url"];
+  const wooKey = settingsMap["woocommerce_consumer_key"];
+  const wooSecret = settingsMap["woocommerce_consumer_secret"];
+  if (!wooUrl || !wooKey || !wooSecret) return;
+
+  const baseUrl = wooUrl.replace(/\/+$/, "");
+  const auth = btoa(`${wooKey}:${wooSecret}`);
+
+  // Fetch all products with upsell/crosssell skus that have a woocommerce_id
+  const { data: products } = await adminClient
+    .from("products")
+    .select("id, sku, woocommerce_id, upsell_skus, crosssell_skus, parent_product_id, product_type")
+    .in("id", productIds)
+    .not("woocommerce_id", "is", null);
+
+  if (!products || products.length === 0) return;
+
+  for (const product of products) {
+    const upsellSkus = product.upsell_skus || [];
+    const crosssellSkus = product.crosssell_skus || [];
+    if (upsellSkus.length === 0 && crosssellSkus.length === 0) continue;
+    // Only update parent/simple products (variations don't support upsell/crosssell in WooCommerce)
+    if (product.parent_product_id) continue;
+
+    const updates: Record<string, unknown> = {};
+
+    if (upsellSkus.length > 0) {
+      const skuList = upsellSkus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
+      const { data: found } = await adminClient
+        .from("products")
+        .select("woocommerce_id")
+        .in("sku", skuList)
+        .not("woocommerce_id", "is", null);
+      const ids = (found || []).map((f: any) => f.woocommerce_id).filter(Boolean);
+      if (ids.length > 0) updates.upsell_ids = ids;
+    }
+
+    if (crosssellSkus.length > 0) {
+      const skuList = crosssellSkus.map((s: any) => typeof s === "string" ? s : s.sku).filter(Boolean);
+      const { data: found } = await adminClient
+        .from("products")
+        .select("woocommerce_id")
+        .in("sku", skuList)
+        .not("woocommerce_id", "is", null);
+      const ids = (found || []).map((f: any) => f.woocommerce_id).filter(Boolean);
+      if (ids.length > 0) updates.cross_sell_ids = ids;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      try {
+        await wooFetch(baseUrl, auth, `/products/${product.woocommerce_id}`, "PUT", updates);
+        console.log(`✅ Updated upsell/crosssell for WC#${product.woocommerce_id}`);
+      } catch (e) {
+        console.warn(`Failed to update upsell/crosssell for WC#${product.woocommerce_id}:`, e);
+      }
+    }
+  }
 }
