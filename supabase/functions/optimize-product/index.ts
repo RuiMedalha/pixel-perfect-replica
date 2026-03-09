@@ -1199,6 +1199,124 @@ REGRAS GLOBAIS:
               propagated++;
             }
             console.log(`📦 Propagated optimization to ${propagated} variations of variable product ${product.sku}`);
+
+            // ── AI attribute extraction for variable products ──
+            // Check if children lack proper variation attributes
+            const childrenNeedAttrs = variations.filter((v: any) => {
+              const attrs = Array.isArray(v.attributes) ? v.attributes : [];
+              const TECH = new Set(["marca","brand","ean","ean13","gtin","barcode","modelo","model"]);
+              const varAttrs = attrs.filter((a: any) => a.variation !== false && !TECH.has((a.name || "").toLowerCase().trim()));
+              return varAttrs.length === 0;
+            });
+
+            if (childrenNeedAttrs.length > 0) {
+              console.log(`🤖 Attempting AI attribute extraction for ${childrenNeedAttrs.length} variations...`);
+              const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+              if (LOVABLE_API_KEY) {
+                try {
+                  const parentTitleForAI = updateData.optimized_title || product.optimized_title || product.original_title || "";
+                  const childTitles: Record<string, string> = {};
+                  for (const v of childrenNeedAttrs) {
+                    // Re-fetch updated title after propagation
+                    const { data: freshChild } = await supabase.from("products").select("optimized_title, original_title").eq("id", v.id).single();
+                    childTitles[v.id] = freshChild?.optimized_title || freshChild?.original_title || v.original_title || "";
+                  }
+
+                  const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      model: "google/gemini-2.5-flash-lite",
+                      messages: [
+                        {
+                          role: "system",
+                          content: "You extract variation attributes from product titles. Compare the parent title with each child title to identify the differentiating attribute (e.g. Color, Size, Material). Return structured data via the tool."
+                        },
+                        {
+                          role: "user",
+                          content: `Parent product title: "${parentTitleForAI}"\n\nChild variation titles:\n${Object.entries(childTitles).map(([id, t]) => `- ID ${id}: "${t}"`).join("\n")}\n\nExtract the variation attribute name and value for each child.`
+                        }
+                      ],
+                      tools: [{
+                        type: "function",
+                        function: {
+                          name: "extract_variation_attributes",
+                          description: "Extract the variation attribute name and per-child values from title differences",
+                          parameters: {
+                            type: "object",
+                            properties: {
+                              attribute_name: { type: "string", description: "Name of the variation attribute in Portuguese (e.g. Cor, Tamanho, Material, Capacidade)" },
+                              confident: { type: "boolean", description: "true if the extraction is clear and unambiguous" },
+                              variations: {
+                                type: "array",
+                                items: {
+                                  type: "object",
+                                  properties: {
+                                    child_id: { type: "string" },
+                                    value: { type: "string", description: "The attribute value for this variation" }
+                                  },
+                                  required: ["child_id", "value"],
+                                  additionalProperties: false
+                                }
+                              }
+                            },
+                            required: ["attribute_name", "confident", "variations"],
+                            additionalProperties: false
+                          }
+                        }
+                      }],
+                      tool_choice: { type: "function", function: { name: "extract_variation_attributes" } }
+                    }),
+                  });
+
+                  if (aiResponse.ok) {
+                    const aiData = await aiResponse.json();
+                    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+                    if (toolCall?.function?.arguments) {
+                      const extracted = JSON.parse(toolCall.function.arguments);
+                      console.log(`🤖 AI extracted: attr="${extracted.attribute_name}", confident=${extracted.confident}, ${extracted.variations?.length} values`);
+
+                      if (extracted.variations && Array.isArray(extracted.variations)) {
+                        const TECH = new Set(["marca","brand","ean","ean13","gtin","barcode","modelo","model"]);
+                        for (const v of extracted.variations) {
+                          if (!v.child_id || !v.value) continue;
+                          const child = variations.find((c: any) => c.id === v.child_id);
+                          if (!child) continue;
+                          const existingAttrs = Array.isArray(child.attributes) ? [...child.attributes as any[]] : [];
+                          const techOnly = existingAttrs.filter((a: any) => a.variation === false || TECH.has((a.name || "").toLowerCase().trim()));
+                          const newAttrs = [
+                            ...techOnly,
+                            { name: extracted.attribute_name, value: v.value, variation: true }
+                          ];
+                          await supabase.from("products").update({ attributes: newAttrs }).eq("id", v.child_id);
+                        }
+                      }
+
+                      // Set parent status based on confidence
+                      if (extracted.confident) {
+                        await supabase.from("products").update({ status: "optimized" }).eq("id", product.id);
+                        console.log(`✅ Variable product ${product.sku}: AI confident → status=optimized`);
+                      } else {
+                        await supabase.from("products").update({ status: "needs_review" }).eq("id", product.id);
+                        console.log(`⚠️ Variable product ${product.sku}: AI not confident → status=needs_review`);
+                      }
+                    }
+                  } else {
+                    console.error(`AI attribute extraction failed: ${aiResponse.status}`);
+                    await supabase.from("products").update({ status: "needs_review" }).eq("id", product.id);
+                  }
+                } catch (aiErr) {
+                  console.error("AI attribute extraction error:", aiErr);
+                  await supabase.from("products").update({ status: "needs_review" }).eq("id", product.id);
+                }
+              } else {
+                console.warn("LOVABLE_API_KEY not set, skipping AI attribute extraction");
+                await supabase.from("products").update({ status: "needs_review" }).eq("id", product.id);
+              }
+            }
           }
         }
 
