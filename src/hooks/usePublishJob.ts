@@ -134,12 +134,14 @@ export function usePublishJob() {
       pricing,
       scheduledFor,
       workspaceId,
+      skuPrefix,
     }: {
       productIds: string[];
       publishFields?: string[];
       pricing?: PricingOptions;
       scheduledFor?: string;
       workspaceId?: string;
+      skuPrefix?: SkuPrefixOptions;
     }) => {
       setIsCreating(true);
       const MAX_RETRIES = 3;
@@ -155,6 +157,7 @@ export function usePublishJob() {
                 pricing,
                 scheduledFor,
                 workspaceId,
+                skuPrefix,
               },
             });
 
