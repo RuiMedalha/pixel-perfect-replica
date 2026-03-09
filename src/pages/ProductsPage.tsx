@@ -676,8 +676,13 @@ const ProductsPage = () => {
               if (!activeWorkspace) return;
               // Parse supplier prefixes from settings
               try {
-                const raw = settings?.supplier_prefixes;
-                const prefixes = raw ? JSON.parse(raw) : [];
+                const raw = settings?.suppliers_json;
+                const suppliers = raw ? JSON.parse(raw) : [];
+                const prefixes = suppliers.map((s: any) => ({
+                  name: s.name || '',
+                  prefix: s.prefix || '',
+                  searchUrl: s.searchUrl || (s.url ? (s.url.includes('{sku}') ? s.url : s.url + '{sku}') : ''),
+                }));
                 enrich({
                   workspaceId: activeWorkspace.id,
                   supplierPrefixes: prefixes,

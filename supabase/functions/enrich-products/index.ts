@@ -104,31 +104,64 @@ Deno.serve(async (req) => {
         let searchUrl = '';
 
         if (supplierPrefixes.length > 0) {
-          for (const sp of supplierPrefixes) {
+          // Normalize: accept both searchUrl and url fields
+          const normalized = supplierPrefixes.map((sp: any) => ({
+            ...sp,
+            searchUrl: sp.searchUrl || (sp.url ? (sp.url.includes('{sku}') ? sp.url : sp.url + '{sku}') : ''),
+          }));
+
+          // Try to match by prefix
+          for (const sp of normalized) {
             if (sp.prefix && sku.toUpperCase().startsWith(sp.prefix.toUpperCase())) {
               matchedPrefix = sp;
               break;
             }
           }
-          // If no prefix matched but suppliers exist, try first supplier with full SKU
-          if (!matchedPrefix && supplierPrefixes.length > 0) {
-            // Use first supplier that has a searchUrl with {sku} placeholder
-            const fallback = supplierPrefixes.find((sp: any) => sp.searchUrl?.includes("{sku}"));
+
+          // If no prefix matched, use first supplier with full SKU
+          if (!matchedPrefix) {
+            const fallback = normalized.find((sp: any) => sp.searchUrl);
             if (fallback) {
-              searchUrl = fallback.searchUrl.replace("{sku}", sku);
               matchedPrefix = { ...fallback, prefix: '' };
             }
           }
         }
 
-        if (matchedPrefix && !searchUrl) {
+        if (matchedPrefix) {
           const productRef = matchedPrefix.prefix ? sku.substring(matchedPrefix.prefix.length) : sku;
           searchUrl = matchedPrefix.searchUrl.replace("{sku}", productRef);
         }
 
-        // If no URL could be built, skip
+        // Fallback: use Firecrawl search API if no supplier URL
         if (!searchUrl) {
-          return { sku, success: false, error: "No supplier URL configured" };
+          try {
+            const searchResp = await fetch('https://api.firecrawl.dev/v1/search', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                query: `${product.original_title || ''} ${sku}`.trim(),
+                limit: 1,
+                scrapeOptions: { formats: ['markdown', 'links'] },
+              }),
+            });
+            if (searchResp.ok) {
+              const searchData = await searchResp.json();
+              const firstResult = searchData.data?.[0];
+              if (firstResult?.url) {
+                searchUrl = firstResult.url;
+                matchedPrefix = { name: 'web-search', prefix: '' };
+              }
+            }
+          } catch (e) {
+            console.error(`Search fallback failed for ${sku}:`, e);
+          }
+        }
+
+        if (!searchUrl) {
+          return { sku, success: false, error: "No supplier URL and web search found nothing" };
         }
 
         try {
