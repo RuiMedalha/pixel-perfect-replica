@@ -1240,6 +1240,8 @@ async function publishVariation(
 
   if (parentWooId) {
     const variationPayload = await buildVariationPayload(variation, parentRow, has, markupPercent, discountPercent);
+    console.log(`[publish-variation] Variation ${variation.id} (sku=${variation.sku}), title=${variation.optimized_title}, image_urls=${JSON.stringify(variation.image_urls)}, attrs=${JSON.stringify(variation.attributes)}`);
+    console.log(`[publish-variation] Payload: ${JSON.stringify(variationPayload).substring(0, 1000)}`);
 
     let existingVarWooId = variation.woocommerce_id;
     if (!existingVarWooId && variation.sku) {
