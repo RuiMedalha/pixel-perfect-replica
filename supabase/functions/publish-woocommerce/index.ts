@@ -1169,18 +1169,17 @@ async function publishVariableProduct(
   // If the parent has no images, aggregate unique images from children for the gallery
   if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children && children.length > 0) {
     const childImages: Array<Record<string, unknown>> = [];
-    const seenUrls = new Set<string>();
+    const seenRefs = new Set<string>();
     for (const child of children) {
-      const urls: string[] = Array.isArray(child.image_urls) ? child.image_urls : [];
+      const refs: string[] = Array.isArray(child.image_urls) ? child.image_urls : [];
       const altTexts = child.image_alt_texts || [];
-      for (let i = 0; i < urls.length; i++) {
-        if (urls[i] && !seenUrls.has(urls[i])) {
-          seenUrls.add(urls[i]);
-          const img: Record<string, unknown> = { src: urls[i], position: childImages.length };
-          if (has("image_alt_text") && altTexts[i]) {
-            img.alt = typeof altTexts[i] === "string" ? altTexts[i] : (altTexts[i] as any)?.alt || "";
-          }
-          childImages.push(img);
+      for (let i = 0; i < refs.length; i++) {
+        const ref = String(refs[i] || "").trim();
+        if (ref && !seenRefs.has(ref)) {
+          seenRefs.add(ref);
+          const altRaw = altTexts[i];
+          const altStr = typeof altRaw === "string" ? altRaw : (altRaw as any)?.alt || "";
+          childImages.push(buildImageEntry(ref, childImages.length, altStr, has("image_alt_text") && !!altRaw));
         }
       }
     }
