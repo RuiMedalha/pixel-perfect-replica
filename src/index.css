@@ -6,6 +6,7 @@
 
 @layer base {
   :root {
+    color-scheme: light;
     --font-sans: 'Inter', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
 
