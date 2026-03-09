@@ -240,11 +240,54 @@ async function insertProducts(
     }
   }
 
+  // Pass 3: Match S3 images to products by SKU/filename pattern
+  try {
+    const allSkus = products.map((p) => toStr(p.sku, 100)).filter((s): s is string => !!s);
+    if (allSkus.length > 0) {
+      const { data: storageFiles } = await adminDb.storage.from("catalogs").list("images", { limit: 5000 });
+      if (storageFiles && storageFiles.length > 0) {
+        console.log(`🖼️ Found ${storageFiles.length} files in storage/images, matching by SKU...`);
+        const fileMap = new Map<string, string[]>();
+        for (const f of storageFiles) {
+          // Match by filename: SKU.jpg, SKU.png, SKU.webp, SKU_1.jpg, etc.
+          const baseName = f.name.replace(/\.[^.]+$/, "").replace(/_\d+$/, "").toLowerCase();
+          if (!fileMap.has(baseName)) fileMap.set(baseName, []);
+          fileMap.get(baseName)!.push(f.name);
+        }
+        
+        let matched = 0;
+        for (const sku of allSkus) {
+          const skuLower = sku.toLowerCase();
+          const matchedFiles = fileMap.get(skuLower);
+          if (matchedFiles && matchedFiles.length > 0) {
+            const imageUrls = matchedFiles.map((fn) => 
+              `${SUPABASE_URL}/storage/v1/object/public/catalogs/images/${fn}`
+            );
+            // Update the product with matched images (merge with existing)
+            const productId = existingSkuMap.get(sku);
+            if (productId) {
+              const existing = existingFullMap.get(sku);
+              const existImages: string[] = existing?.image_urls || [];
+              const combined = [...new Set([...existImages, ...imageUrls])];
+              if (combined.length > existImages.length) {
+                await adminDb.from("products").update({ image_urls: combined }).eq("id", productId);
+                matched++;
+              }
+            }
+          }
+        }
+        if (matched > 0) console.log(`🖼️ Matched ${matched} products with S3 images`);
+      }
+    }
+  } catch (imgErr) {
+    console.warn("⚠️ S3 image matching error:", imgErr);
+  }
+
   // Log activity
   await adminDb.from("activity_log").insert({
     user_id: userId,
     action: "upload",
-    details: { file: fileName, products_count: inserted, updated, skipped, woo_mode: isWooMode },
+    details: { file: fileName, products_count: inserted, updated, skipped, woo_mode: isWooMode, merged: updated > 0 },
   });
 
   console.log(`✅ Parse complete: ${inserted} inserted, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
