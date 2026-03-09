@@ -139,6 +139,7 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           {!collapsed && user && (
             <p className="text-sidebar-muted text-xs truncate px-3 py-1">{user.email}</p>
           )}
+          <ThemeToggle collapsed={collapsed} />
           <button
             onClick={signOut}
             className={cn(
