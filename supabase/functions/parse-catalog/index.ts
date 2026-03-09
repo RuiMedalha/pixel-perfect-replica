@@ -145,6 +145,19 @@ async function insertProducts(
     }
   }
 
+  // Fetch existing products for intelligent merge (need full data to compare)
+  const existingFullMap = new Map<string, Record<string, any>>();
+  if (existingSkuMap.size > 0) {
+    const existingIds = [...existingSkuMap.values()];
+    for (let i = 0; i < existingIds.length; i += 200) {
+      const batch = existingIds.slice(i, i + 200);
+      const { data: fullProducts } = await adminDb.from("products").select("*").in("id", batch);
+      (fullProducts || []).forEach((p: any) => {
+        if (p.sku) existingFullMap.set(p.sku, p);
+      });
+    }
+  }
+
   const isWooMode = products.some((p) => p.product_type || p.parent_sku);
   if (isWooMode) console.log("🛒 WooCommerce mode detected");
 
@@ -165,9 +178,11 @@ async function insertProducts(
       const existingId = sku ? existingSkuMap.get(sku) : null;
 
       if (existingId) {
-        const updateData = buildProductData(p, true, mappedFieldKeys, hasMapping);
-        if (Object.keys(updateData).length > 0) {
-          toUpdate.push({ id: existingId, data: updateData, product: p });
+        // ── Intelligent Merge: fill empty fields, combine arrays, pick best value ──
+        const existing = existingFullMap.get(sku!) || {};
+        const mergeData = buildMergedProductData(p, existing, mappedFieldKeys, hasMapping, fileName);
+        if (Object.keys(mergeData).length > 0) {
+          toUpdate.push({ id: existingId, data: mergeData, product: p });
         } else {
           skipped++;
         }
@@ -225,11 +240,54 @@ async function insertProducts(
     }
   }
 
+  // Pass 3: Match S3 images to products by SKU/filename pattern
+  try {
+    const allSkus = products.map((p) => toStr(p.sku, 100)).filter((s): s is string => !!s);
+    if (allSkus.length > 0) {
+      const { data: storageFiles } = await adminDb.storage.from("catalogs").list("images", { limit: 5000 });
+      if (storageFiles && storageFiles.length > 0) {
+        console.log(`🖼️ Found ${storageFiles.length} files in storage/images, matching by SKU...`);
+        const fileMap = new Map<string, string[]>();
+        for (const f of storageFiles) {
+          // Match by filename: SKU.jpg, SKU.png, SKU.webp, SKU_1.jpg, etc.
+          const baseName = f.name.replace(/\.[^.]+$/, "").replace(/_\d+$/, "").toLowerCase();
+          if (!fileMap.has(baseName)) fileMap.set(baseName, []);
+          fileMap.get(baseName)!.push(f.name);
+        }
+        
+        let matched = 0;
+        for (const sku of allSkus) {
+          const skuLower = sku.toLowerCase();
+          const matchedFiles = fileMap.get(skuLower);
+          if (matchedFiles && matchedFiles.length > 0) {
+            const imageUrls = matchedFiles.map((fn) => 
+              `${SUPABASE_URL}/storage/v1/object/public/catalogs/images/${fn}`
+            );
+            // Update the product with matched images (merge with existing)
+            const productId = existingSkuMap.get(sku);
+            if (productId) {
+              const existing = existingFullMap.get(sku);
+              const existImages: string[] = existing?.image_urls || [];
+              const combined = [...new Set([...existImages, ...imageUrls])];
+              if (combined.length > existImages.length) {
+                await adminDb.from("products").update({ image_urls: combined }).eq("id", productId);
+                matched++;
+              }
+            }
+          }
+        }
+        if (matched > 0) console.log(`🖼️ Matched ${matched} products with S3 images`);
+      }
+    }
+  } catch (imgErr) {
+    console.warn("⚠️ S3 image matching error:", imgErr);
+  }
+
   // Log activity
   await adminDb.from("activity_log").insert({
     user_id: userId,
     action: "upload",
-    details: { file: fileName, products_count: inserted, updated, skipped, woo_mode: isWooMode },
+    details: { file: fileName, products_count: inserted, updated, skipped, woo_mode: isWooMode, merged: updated > 0 },
   });
 
   console.log(`✅ Parse complete: ${inserted} inserted, ${updated} updated, ${skipped} skipped, ${errors.length} errors`);
@@ -327,7 +385,128 @@ function buildProductData(p: Record<string, unknown>, onlyMapped: boolean, mappe
   return data;
 }
 
-// ─── PDF background processing ───
+/**
+ * Intelligent merge: compare new data with existing product.
+ * - Text fields: pick the longer/more complete value, or fill if empty
+ * - Arrays (image_urls, attributes): combine unique entries
+ * - Price: pick the most recent non-null value
+ * - Technical specs: merge/append unique specs
+ * - Track source file for audit
+ */
+function buildMergedProductData(
+  newProduct: Record<string, unknown>,
+  existing: Record<string, any>,
+  mappedFieldKeys: Set<string>,
+  hasMapping: boolean,
+  sourceFile: string
+): Record<string, unknown> {
+  const newData = buildProductData(newProduct, false, mappedFieldKeys, hasMapping);
+  const merged: Record<string, unknown> = {};
+
+  // Text fields: use new value if existing is empty, or if new is longer/more complete
+  const textFields = [
+    "original_title", "original_description", "short_description", "category",
+    "supplier_ref", "meta_title", "meta_description", "seo_slug",
+  ];
+  for (const field of textFields) {
+    const newVal = newData[field] as string | null;
+    const existVal = existing[field] as string | null;
+    if (!newVal) continue;
+    if (!existVal || existVal.trim() === "") {
+      merged[field] = newVal; // fill empty
+    } else if (newVal.length > existVal.length * 1.5) {
+      merged[field] = newVal; // new is significantly more complete
+    }
+  }
+
+  // Technical specs: append unique specs
+  const newSpecs = newData.technical_specs as string | null;
+  const existSpecs = existing.technical_specs as string | null;
+  if (newSpecs && existSpecs) {
+    const existParts = new Set(existSpecs.split("|").map((s: string) => s.trim().toLowerCase()));
+    const newParts = newSpecs.split("|").map((s: string) => s.trim());
+    const toAdd = newParts.filter((p) => !existParts.has(p.toLowerCase()));
+    if (toAdd.length > 0) {
+      merged.technical_specs = existSpecs + " | " + toAdd.join(" | ");
+    }
+  } else if (newSpecs && !existSpecs) {
+    merged.technical_specs = newSpecs;
+  }
+
+  // Price: fill if empty, otherwise keep existing (user may have manually adjusted)
+  if (newData.original_price != null && existing.original_price == null) {
+    merged.original_price = newData.original_price;
+  }
+  if (newData.sale_price != null && existing.sale_price == null) {
+    merged.sale_price = newData.sale_price;
+  }
+
+  // Image URLs: combine unique
+  const existImages: string[] = existing.image_urls || [];
+  const newImages = (newData.image_urls as string[] | null) || [];
+  if (newImages.length > 0) {
+    const combined = [...new Set([...existImages, ...newImages])];
+    if (combined.length > existImages.length) {
+      merged.image_urls = combined;
+    }
+  }
+
+  // Attributes: merge by name, combine values
+  const existAttrs: any[] = existing.attributes || [];
+  const newAttrs = (newData.attributes as any[] | null) || [];
+  if (newAttrs.length > 0) {
+    const attrMap = new Map<string, any>();
+    for (const attr of existAttrs) {
+      attrMap.set(attr.name, { ...attr });
+    }
+    for (const attr of newAttrs) {
+      const existing = attrMap.get(attr.name);
+      if (existing) {
+        // Merge values arrays
+        if (existing.values && attr.values) {
+          existing.values = [...new Set([...existing.values, ...attr.values])];
+        } else if (!existing.value && attr.value) {
+          existing.value = attr.value;
+        }
+      } else {
+        attrMap.set(attr.name, { ...attr });
+      }
+    }
+    merged.attributes = [...attrMap.values()];
+  }
+
+  // Tags: combine unique
+  const existTags: string[] = existing.tags || [];
+  const newTags = (newData.focus_keyword as string[] | null) || [];
+  if (newTags.length > 0) {
+    const combined = [...new Set([...existTags, ...newTags])];
+    if (combined.length > existTags.length) {
+      merged.tags = combined;
+    }
+  }
+
+  // Product type: upgrade simple → variable if new data says so
+  if (newData.product_type === "variable" && existing.product_type === "simple") {
+    merged.product_type = "variable";
+  }
+
+  // Track source files for audit trail
+  const existSource = existing.source_file || "";
+  if (existSource && !existSource.includes(sourceFile)) {
+    merged.source_file = `${existSource} | ${sourceFile}`;
+  } else if (!existSource) {
+    merged.source_file = sourceFile;
+  }
+
+  // Remove null/empty values
+  for (const k of Object.keys(merged)) {
+    if (merged[k] === null || merged[k] === "" || merged[k] === undefined) delete merged[k];
+  }
+
+  return merged;
+}
+
+
 async function processPdfInBackground(supabase: any, userId: string, filePath: string, fileName: string, workspaceId?: string) {
   const adminDb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
