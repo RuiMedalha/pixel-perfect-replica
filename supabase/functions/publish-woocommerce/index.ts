@@ -923,8 +923,26 @@ async function publishVariableProduct(
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
 
-  const attributes = buildAttributesForParent(parent, children || []);
-  if (attributes.length > 0) parentPayload.attributes = attributes;
+  const variationAttributes = buildAttributesForParent(parent, children || []);
+  const staticAttributes = buildStaticAttributesForParent(parent, children || []);
+
+  if (variationAttributes.length > 0 || staticAttributes.length > 0) {
+    const merged: any[] = [...variationAttributes];
+    const byName = new Map<string, any>(merged.map((a) => [a.name, a]));
+
+    for (const s of staticAttributes) {
+      const existing = byName.get(s.name);
+      if (!existing) {
+        merged.push(s);
+        byName.set(s.name, s);
+      } else {
+        const set = new Set<string>([...(existing.options || []), ...(s.options || [])]);
+        existing.options = Array.from(set);
+      }
+    }
+
+    parentPayload.attributes = merged;
+  }
 
   if (has("upsells")) {
     const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, parent.upsell_skus || []);
@@ -935,6 +953,7 @@ async function publishVariableProduct(
     if (crosssellIds.length > 0) parentPayload.cross_sell_ids = crosssellIds;
   }
 
+  // Variable parents must not have prices; prices live on variations
   delete parentPayload.regular_price;
   delete parentPayload.sale_price;
 
@@ -955,66 +974,8 @@ async function publishVariableProduct(
     .update({ woocommerce_id: parentWooId, status: "published" as any })
     .eq("id", parent.id);
 
-  // Publish children
-  for (const child of (children || [])) {
-    try {
-      const variationPayload = await buildBasePayload(child, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parent);
-      
-      // Build variation attributes (e.g., Cor, Tamanho)
-      const variationAttrs = buildVariationAttributes(child, parent);
-      
-      // Build technical attributes (e.g., Marca, EAN)
-      const technicalAttrs = buildTechnicalAttributes(child);
-      
-      // Merge both types of attributes
-      const allAttrs = [...variationAttrs, ...technicalAttrs];
-      if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
-      
-      // Add upsells and crosssells for variations
-      if (has("upsells")) {
-        const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.upsell_skus || []);
-        if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
-      }
-      if (has("crosssells")) {
-        const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, child.crosssell_skus || []);
-        if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
-      }
-
-      let existingVarWooId = child.woocommerce_id;
-      // If no local woocommerce_id, try to find existing variation by SKU
-      if (!existingVarWooId && child.sku) {
-        existingVarWooId = await findWooVariationBySku(baseUrl, auth, parentWooId, child.sku);
-        if (existingVarWooId) {
-          // Persist the discovered woocommerce_id
-          await supabase
-            .from("products")
-            .update({ woocommerce_id: existingVarWooId })
-            .eq("id", child.id);
-        }
-      }
-
-      let varWooData;
-      try {
-        varWooData = existingVarWooId
-          ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
-          : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
-      } catch (skuErr) {
-        if (skuErr instanceof WooSkuConflictError) {
-          console.log(`SKU conflict for variation ${child.id}, handling properly`);
-          varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, child.id, child.sku || "", variationPayload, skuErr, supabase);
-        } else {
-          throw skuErr;
-        }
-      }
-
-      await supabase
-        .from("products")
-        .update({ woocommerce_id: varWooData.id, status: "published" as any })
-        .eq("id", child.id);
-    } catch (e) {
-      console.error(`Error publishing variation ${child.id}:`, (e as Error).message);
-    }
-  }
+  // Variations are processed separately (they are added to the job queue), to avoid duplicate creation and SKU conflicts.
+  return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
 
   return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
 }
