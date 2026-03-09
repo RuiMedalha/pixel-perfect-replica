@@ -1014,8 +1014,9 @@ async function buildVariationPayload(
   if (has("images")) {
     const urls: string[] = Array.isArray(variation.image_urls) ? variation.image_urls : [];
     if (urls.length > 0) {
-      // Variation supports only ONE image; use buildImageEntry for ID vs URL detection
-      payload.image = buildImageEntry(urls[0], 0);
+      // Variation supports only ONE image; use resolveImageRef for ID/URL/filename detection
+      const resolved = await resolveImageRef(urls[0], 0, baseUrl, auth);
+      if (resolved) payload.image = resolved;
     }
   }
 
