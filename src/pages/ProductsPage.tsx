@@ -178,6 +178,12 @@ const ProductsPage = () => {
     return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase && matchesWoo;
   });
 
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, categoryFilter, sourceFileFilter, seoScoreFilter, hasKeywordFilter, productTypeFilter, phaseFilter, wooFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginatedFiltered = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   // Build grouped view structure
   const groupedView = useMemo(() => {
     if (viewMode !== "grouped") return null;
