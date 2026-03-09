@@ -225,6 +225,20 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           </div>
         )}
 
+        {/* SKU Prefix */}
+        <div className="border border-border rounded-md p-3 space-y-2 bg-muted/30">
+          <div className="flex items-center gap-1.5 text-sm font-medium">
+            🏷️ Prefixo SKU (opcional)
+          </div>
+          <p className="text-[11px] text-muted-foreground">Adiciona um prefixo aos SKUs que ainda não o tenham. Ex: se colocar "UD", o SKU "12345" ficará "UD12345".</p>
+          <Input
+            placeholder="Ex: UD, PJ, LC..."
+            value={skuPrefix}
+            onChange={e => setSkuPrefix(e.target.value.toUpperCase())}
+            className="h-8 text-sm w-32"
+          />
+        </div>
+
         {/* Schedule */}
         <div className="border border-border rounded-md p-3 space-y-3 bg-muted/30">
           <div className="flex items-center justify-between">
