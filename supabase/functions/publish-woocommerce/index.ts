@@ -716,11 +716,44 @@ const TECHNICAL_ATTR_NAMES = new Set([
   "ean13",
   "gtin",
   "barcode",
+  "modelo",
+  "model",
 ]);
 
-const DEFAULT_VARIATION_ATTR_NAME = "Cor";
-
 const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
+
+// ── Smart attribute name inference ──
+const SIZE_PATTERN = /\b(\d+[\.,]?\d*)\s*(cm|mm|m|ml|cl|l|lt|kg|g|oz|"|''|pol)\b/i;
+const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
+const COLOR_WORDS = new Set([
+  "preto","branco","azul","vermelho","verde","amarelo","laranja","roxo","rosa",
+  "cinza","cinzento","castanho","dourado","prateado","violeta","bege","coral",
+  "turquesa","creme","bordeaux","borgonha","fucsia","magenta","caqui","salmon",
+  "salmão","marfim","champanhe","nude","terracota","índigo","indigo","lima",
+  "black","white","blue","red","green","yellow","orange","purple","pink",
+  "gray","grey","brown","gold","silver","beige","navy","teal","olive",
+  "inox","aço","cromado","natural","transparente","multicolor"
+]);
+
+function inferAttrNameFromOption(option: string): string {
+  const lower = option.toLowerCase().trim();
+  
+  // Check for size patterns first (more specific)
+  if (SIZE_PATTERN.test(lower)) return "Tamanho";
+  
+  // Check if it's a pure size word
+  const words = lower.split(/[\s\-\/]+/).map(w => w.trim()).filter(Boolean);
+  if (words.length <= 2 && words.some(w => SIZE_WORDS.has(w))) return "Tamanho";
+  
+  // Check for color words
+  if (words.some(w => COLOR_WORDS.has(w))) return "Cor";
+  
+  // If it looks like a dimension (just numbers), it's probably a size
+  if (/^\d+[\.,]?\d*$/.test(lower)) return "Tamanho";
+  
+  // Default fallback
+  return "Opção";
+}
 
 function tokenizeTitle(s: string): string[] {
   return String(s || "")
