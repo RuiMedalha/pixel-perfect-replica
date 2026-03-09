@@ -145,6 +145,19 @@ async function insertProducts(
     }
   }
 
+  // Fetch existing products for intelligent merge (need full data to compare)
+  const existingFullMap = new Map<string, Record<string, any>>();
+  if (existingSkuMap.size > 0) {
+    const existingIds = [...existingSkuMap.values()];
+    for (let i = 0; i < existingIds.length; i += 200) {
+      const batch = existingIds.slice(i, i + 200);
+      const { data: fullProducts } = await adminDb.from("products").select("*").in("id", batch);
+      (fullProducts || []).forEach((p: any) => {
+        if (p.sku) existingFullMap.set(p.sku, p);
+      });
+    }
+  }
+
   const isWooMode = products.some((p) => p.product_type || p.parent_sku);
   if (isWooMode) console.log("🛒 WooCommerce mode detected");
 
@@ -165,9 +178,11 @@ async function insertProducts(
       const existingId = sku ? existingSkuMap.get(sku) : null;
 
       if (existingId) {
-        const updateData = buildProductData(p, true, mappedFieldKeys, hasMapping);
-        if (Object.keys(updateData).length > 0) {
-          toUpdate.push({ id: existingId, data: updateData, product: p });
+        // ── Intelligent Merge: fill empty fields, combine arrays, pick best value ──
+        const existing = existingFullMap.get(sku!) || {};
+        const mergeData = buildMergedProductData(p, existing, mappedFieldKeys, hasMapping, fileName);
+        if (Object.keys(mergeData).length > 0) {
+          toUpdate.push({ id: existingId, data: mergeData, product: p });
         } else {
           skipped++;
         }
