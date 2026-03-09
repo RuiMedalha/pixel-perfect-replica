@@ -157,12 +157,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (data?.error) throw new Error(data.error);
       return { targetId, merged: data?.merged ?? 0, moved: data?.moved ?? 0 };
     },
-    onSuccess: (targetId) => {
+    onSuccess: ({ targetId, merged, moved }) => {
       qc.invalidateQueries({ queryKey: ["workspaces"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["uploaded-files"] });
       setActiveWorkspaceId(targetId);
-      toast.success("Workspaces fundidos com sucesso!");
+      toast.success(`Workspaces fundidos! ${merged} produtos enriquecidos, ${moved} movidos.`);
     },
     onError: (err: Error) => toast.error(err.message),
   });
