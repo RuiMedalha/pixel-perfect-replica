@@ -658,16 +658,25 @@ function extractTitleSuffix(parentTitle: string, childTitle: string): string {
 }
 
 function buildAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+  // Variation-defining attributes (Cor, Tamanho, etc.) for the *parent* product.
   const attrMap = new Map<string, Set<string>>();
+
+  const add = (name: string, value: string) => {
+    const n = String(name || "").trim();
+    const v = String(value || "").trim();
+    if (!n || !v) return;
+    const lower = n.toLowerCase();
+    if (TECHNICAL_ATTR_NAMES.has(lower)) return;
+    if (!attrMap.has(n)) attrMap.set(n, new Set());
+    attrMap.get(n)!.add(v);
+  };
 
   for (const v of variations) {
     const attrs = v.attributes || [];
     if (Array.isArray(attrs)) {
       for (const attr of attrs) {
-        if (attr.name && attr.value) {
-          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          attrMap.get(attr.name)!.add(attr.value);
-        }
+        if (attr?.variation === false) continue;
+        add(attr?.name, attr?.value);
       }
     }
   }
@@ -676,14 +685,19 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
     const parentAttrs = parent.attributes || [];
     if (Array.isArray(parentAttrs)) {
       for (const attr of parentAttrs) {
-        if (attr.name && Array.isArray(attr.values) && attr.values.length > 0) {
-          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          for (const val of attr.values) { if (val) attrMap.get(attr.name)!.add(val); }
-        }
-        if (attr.name && Array.isArray(attr.options) && attr.options.length > 0) {
-          if (!attrMap.has(attr.name)) attrMap.set(attr.name, new Set());
-          for (const val of attr.options) { if (val) attrMap.get(attr.name)!.add(val); }
-        }
+        const n = String(attr?.name || "").trim();
+        if (!n) continue;
+        const lower = n.toLowerCase();
+        if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
+        if (attr?.variation === false) continue;
+
+        const values: string[] = Array.isArray(attr.values)
+          ? attr.values
+          : Array.isArray(attr.options)
+            ? attr.options
+            : [];
+
+        for (const val of values) add(n, val);
       }
     }
   }
@@ -694,7 +708,12 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
     for (const v of variations) {
       const attrs = v.attributes || [];
       if (Array.isArray(attrs)) {
-        for (const attr of attrs) { if (attr.name) knownAttrNames.add(attr.name); }
+        for (const attr of attrs) {
+          const n = String(attr?.name || "").trim();
+          if (n && !TECHNICAL_ATTR_NAMES.has(n.toLowerCase()) && attr?.variation !== false) {
+            knownAttrNames.add(n);
+          }
+        }
       }
     }
     const parentTitle = parent.optimized_title || parent.original_title || "";
@@ -705,9 +724,9 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
       if (suffix) suffixes.push(suffix);
     }
     if (suffixes.length > 0) {
-      const attrName = knownAttrNames.size > 0 ? Array.from(knownAttrNames)[0] : "Variação";
-      attrMap.set(attrName, new Set(suffixes));
-      console.log(`Built attributes from title diffs: ${attrName} => [${suffixes.join(", ")}]`);
+      const fallbackName = knownAttrNames.size > 0 ? Array.from(knownAttrNames)[0] : "Variação";
+      attrMap.set(fallbackName, new Set(suffixes));
+      console.log(`Built attributes from title diffs: ${fallbackName} => [${suffixes.join(", ")}]`);
     }
   }
 
@@ -719,16 +738,56 @@ function buildAttributesForParent(parent: any, variations: any[]): Array<{ name:
   }));
 }
 
+function buildStaticAttributesForParent(parent: any, variations: any[]): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
+  // Technical/non-variation attributes (Marca/EAN/etc.) for the *parent* product.
+  const map = new Map<string, Set<string>>();
+
+  const add = (name: string, value: string) => {
+    const n = String(name || "").trim();
+    const v = String(value || "").trim();
+    if (!n || !v) return;
+    if (!map.has(n)) map.set(n, new Set());
+    map.get(n)!.add(v);
+  };
+
+  const collect = (attrs: any[]) => {
+    if (!Array.isArray(attrs)) return;
+    for (const attr of attrs) {
+      const n = String(attr?.name || "").trim();
+      if (!n) continue;
+      const lower = n.toLowerCase();
+      const isTechnical = attr?.variation === false || TECHNICAL_ATTR_NAMES.has(lower);
+      if (!isTechnical) continue;
+
+      if (attr?.value) add(n, attr.value);
+      if (Array.isArray(attr.values)) for (const v of attr.values) add(n, v);
+      if (Array.isArray(attr.options)) for (const v of attr.options) add(n, v);
+    }
+  };
+
+  collect(parent.attributes || []);
+  for (const v of variations) collect(v.attributes || []);
+
+  return Array.from(map.entries()).map(([name, values]) => ({
+    name,
+    options: Array.from(values),
+    variation: false,
+    visible: true,
+  }));
+}
+
 function buildVariationAttributes(product: any, parent?: any): Array<{ name: string; option: string }> {
   const attrs = product.attributes || [];
   const variationAttrs: Array<{ name: string; option: string }> = [];
-  
+
   if (Array.isArray(attrs)) {
-    // Only include attributes marked for variation (not technical attributes)
     for (const attr of attrs) {
-      if (attr.name && attr.value && attr.variation !== false) {
-        variationAttrs.push({ name: attr.name, option: attr.value });
-      }
+      const n = String(attr?.name || "").trim();
+      if (!n || !attr?.value) continue;
+      const lower = n.toLowerCase();
+      if (attr?.variation === false) continue;
+      if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
+      variationAttrs.push({ name: n, option: String(attr.value) });
     }
     if (variationAttrs.length > 0) return variationAttrs;
   }
@@ -739,11 +798,17 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
       const childTitle = (product.optimized_title || product.original_title || "").toLowerCase();
       if (childTitle) {
         for (const attr of parentAttrs) {
+          const n = String(attr?.name || "").trim();
+          if (!n) continue;
+          const lower = n.toLowerCase();
+          if (TECHNICAL_ATTR_NAMES.has(lower)) continue;
+          if (attr?.variation === false) continue;
+
           const values: string[] = attr.values || attr.options || [];
           const sorted = [...values].sort((a, b) => b.length - a.length);
           for (const val of sorted) {
-            if (val && childTitle.includes(val.toLowerCase())) {
-              variationAttrs.push({ name: attr.name, option: val });
+            if (val && childTitle.includes(String(val).toLowerCase())) {
+              variationAttrs.push({ name: n, option: val });
               break;
             }
           }
@@ -760,32 +825,16 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     const suffix = extractTitleSuffix(parentTitle, childTitle);
     if (suffix) {
       const childAttrs = product.attributes || [];
-      const attrName = (Array.isArray(childAttrs) && childAttrs.length > 0 && childAttrs[0].name)
-        ? childAttrs[0].name
+      let attrName = (Array.isArray(childAttrs) && childAttrs.length > 0 && childAttrs[0].name)
+        ? String(childAttrs[0].name)
         : "Variação";
+      if (TECHNICAL_ATTR_NAMES.has(attrName.toLowerCase())) attrName = "Variação";
       console.log(`Variation ${product.id}: inferred ${attrName}=${suffix} from title diff`);
       return [{ name: attrName, option: suffix }];
     }
   }
 
   return [];
-}
-
-function buildTechnicalAttributes(product: any): Array<{ name: string; option: string }> {
-  // Extract technical attributes like Marca, EAN that should be preserved on variations
-  const attrs = product.attributes || [];
-  const technicalAttrs: Array<{ name: string; option: string }> = [];
-  
-  if (Array.isArray(attrs)) {
-    for (const attr of attrs) {
-      // Include non-variation attributes (technical specs)
-      if (attr.name && attr.value && attr.variation === false) {
-        technicalAttrs.push({ name: attr.name, option: attr.value });
-      }
-    }
-  }
-  
-  return technicalAttrs;
 }
 
 async function publishSingleProduct(
