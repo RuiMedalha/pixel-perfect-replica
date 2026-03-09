@@ -1304,6 +1304,22 @@ const ProductsPage = () => {
         </CardContent>
       </Card>
 
+      {/* Pagination */}
+      {filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between px-2">
+          <span className="text-sm text-muted-foreground">
+            {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filtered.length)} de {filtered.length} produtos
+          </span>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" disabled={currentPage <= 1} onClick={() => setCurrentPage(1)}>«</Button>
+            <Button size="sm" variant="outline" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>‹</Button>
+            <span className="text-sm px-3">{currentPage} / {totalPages}</span>
+            <Button size="sm" variant="outline" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>›</Button>
+            <Button size="sm" variant="outline" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(totalPages)}>»</Button>
+          </div>
+        </div>
+      )}
+
       {/* Field Selector Dialog */}
       <Dialog open={showFieldSelector} onOpenChange={setShowFieldSelector}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
