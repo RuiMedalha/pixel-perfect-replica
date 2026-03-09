@@ -377,9 +377,9 @@ const SettingsPage = () => {
                   />
                 </div>
                 <div className="w-24 space-y-1">
-                  <Label className="text-xs">Prefixo SKU</Label>
+                  <Label className="text-xs">Prefixo SKU <span className="text-muted-foreground">(opcional)</span></Label>
                   <Input
-                    placeholder="UD"
+                    placeholder="ex: UD"
                     value={supplier.prefix}
                     onChange={(e) => {
                       const updated = [...suppliers];
