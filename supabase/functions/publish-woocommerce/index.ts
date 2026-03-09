@@ -754,11 +754,13 @@ async function buildBasePayload(
   if (has("images")) {
     if (product.image_urls && product.image_urls.length > 0) {
       const altTexts = product.image_alt_texts || [];
-      wooProduct.images = product.image_urls.map((ref: string, i: number) => {
+      const imagePromises = product.image_urls.map((ref: string, i: number) => {
         const altRaw = altTexts[i];
         const altStr = typeof altRaw === "string" ? altRaw : (altRaw as any)?.alt || "";
-        return buildImageEntry(ref, i, altStr, has("image_alt_text") && !!altRaw);
+        return resolveImageRef(ref, i, baseUrl, auth, altStr, has("image_alt_text") && !!altRaw);
       });
+      const resolved = await Promise.all(imagePromises);
+      wooProduct.images = resolved.filter(Boolean);
     }
   }
 
