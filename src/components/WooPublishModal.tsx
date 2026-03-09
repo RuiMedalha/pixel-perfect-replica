@@ -26,7 +26,7 @@ export interface SkuPrefixOptions {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onConfirm: (fields: string[], pricing?: PricingOptions, scheduledFor?: string) => void;
+  onConfirm: (fields: string[], pricing?: PricingOptions, scheduledFor?: string, skuPrefix?: SkuPrefixOptions) => void;
   productCount: number;
   variableParentCount?: number;
   autoIncludedVariationsCount?: number;
