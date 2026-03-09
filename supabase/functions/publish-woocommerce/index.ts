@@ -996,27 +996,7 @@ async function publishVariation(
   const parentWooId = parentRow?.woocommerce_id;
 
   if (parentWooId) {
-    const variationPayload = await buildBasePayload(variation, supabase, baseUrl, auth, has, markupPercent, discountPercent, true, parentRow);
-    
-    // Build variation attributes (e.g., Cor, Tamanho)
-    const variationAttrs = buildVariationAttributes(variation, parentRow);
-    
-    // Build technical attributes (e.g., Marca, EAN)
-    const technicalAttrs = buildTechnicalAttributes(variation);
-    
-    // Merge both types of attributes
-    const allAttrs = [...variationAttrs, ...technicalAttrs];
-    if (allAttrs.length > 0) variationPayload.attributes = allAttrs;
-    
-    // Add upsells and crosssells for variations
-    if (has("upsells")) {
-      const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, variation.upsell_skus || []);
-      if (upsellIds.length > 0) variationPayload.upsell_ids = upsellIds;
-    }
-    if (has("crosssells")) {
-      const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, variation.crosssell_skus || []);
-      if (crosssellIds.length > 0) variationPayload.cross_sell_ids = crosssellIds;
-    }
+    const variationPayload = await buildVariationPayload(variation, parentRow, has, markupPercent, discountPercent);
 
     let existingVarWooId = variation.woocommerce_id;
     if (!existingVarWooId && variation.sku) {
@@ -1031,6 +1011,7 @@ async function publishVariation(
 
     let action: "created" | "updated" = existingVarWooId ? "updated" : "created";
     let varWooData;
+
     try {
       varWooData = existingVarWooId
         ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
@@ -1038,7 +1019,16 @@ async function publishVariation(
     } catch (skuErr) {
       if (skuErr instanceof WooSkuConflictError) {
         console.log(`SKU conflict for standalone variation ${variation.id}, handling properly`);
-        varWooData = await handleVariationSkuConflict(baseUrl, auth, parentWooId, variation.id, variation.sku || "", variationPayload, skuErr, supabase);
+        varWooData = await handleVariationSkuConflict(
+          baseUrl,
+          auth,
+          parentWooId,
+          variation.id,
+          variation.sku || "",
+          variationPayload,
+          skuErr,
+          supabase
+        );
         action = "updated";
       } else {
         throw skuErr;
