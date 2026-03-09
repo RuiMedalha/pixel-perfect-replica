@@ -97,9 +97,12 @@ const ProductsPage = () => {
   const [viewMode, setViewMode] = useState<"list" | "grouped">("list");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [showPublishModal, setShowPublishModal] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportSkuPrefix, setExportSkuPrefix] = useState("");
+  const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 100;
-  
+
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
