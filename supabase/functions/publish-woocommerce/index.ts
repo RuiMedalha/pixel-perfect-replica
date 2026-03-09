@@ -576,19 +576,132 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
   return resolvedIds;
 }
 
-// Helper to determine if an image reference is a numeric WooCommerce media ID or a URL
+// ── Image reference resolution ──
+const IMAGE_EXTENSIONS = /\.(webp|jpeg|jpg|png|gif|svg|bmp|avif|tiff|tif)$/i;
+const imageCache = new Map<string, Record<string, unknown>>();
+
+function resetImageCache() {
+  imageCache.clear();
+}
+
+async function searchWPMediaByFilename(baseUrl: string, auth: string, filename: string): Promise<number | null> {
+  // Strip extension for search (WP media search works on title which usually omits extension)
+  const nameWithoutExt = filename.replace(/\.[^.]+$/, "");
+  if (!nameWithoutExt) return null;
+
+  try {
+    const resp = await fetch(
+      `${baseUrl}/wp-json/wp/v2/media?search=${encodeURIComponent(nameWithoutExt)}&per_page=20`,
+      { headers: { Authorization: `Basic ${auth}` } }
+    );
+    if (!resp.ok) {
+      console.warn(`WP Media search failed: ${resp.status}`);
+      return null;
+    }
+    const items = await resp.json();
+    if (!Array.isArray(items) || items.length === 0) return null;
+
+    // Try exact match on source_url filename first
+    const filenameLower = filename.toLowerCase();
+    for (const item of items) {
+      const srcUrl = String(item.source_url || "");
+      const srcFilename = srcUrl.split("/").pop()?.toLowerCase() || "";
+      if (srcFilename === filenameLower) return item.id;
+    }
+
+    // Try match without extension (slug-based)
+    const nameWithoutExtLower = nameWithoutExt.toLowerCase();
+    for (const item of items) {
+      const slug = String(item.slug || "").toLowerCase();
+      if (slug === nameWithoutExtLower) return item.id;
+      // Also check title
+      const title = String(item.title?.rendered || "").toLowerCase().replace(/<[^>]*>/g, "").trim();
+      if (title === nameWithoutExtLower) return item.id;
+    }
+
+    // Fallback: first result if search term matches closely
+    if (items.length === 1) return items[0].id;
+
+    return null;
+  } catch (e) {
+    console.warn(`WP Media search exception for "${filename}":`, e);
+    return null;
+  }
+}
+
+async function resolveImageRef(
+  ref: string,
+  position: number,
+  baseUrl: string,
+  auth: string,
+  altText?: string,
+  hasAlt?: boolean
+): Promise<Record<string, unknown> | null> {
+  const trimmed = String(ref || "").trim();
+  if (!trimmed) return null;
+
+  const img: Record<string, unknown> = { position };
+
+  // 1. Purely numeric → WooCommerce media ID
+  if (/^\d+$/.test(trimmed)) {
+    img.id = parseInt(trimmed, 10);
+    if (hasAlt && altText) img.alt = altText;
+    return img;
+  }
+
+  // 2. Full URL → send as src
+  if (trimmed.startsWith("http")) {
+    img.src = trimmed;
+    if (hasAlt && altText) img.alt = altText;
+    return img;
+  }
+
+  // 3. Filename with image extension → search WP Media Library
+  if (IMAGE_EXTENSIONS.test(trimmed)) {
+    // Check cache first
+    const cached = imageCache.get(trimmed);
+    if (cached) {
+      const result = { ...cached, position };
+      if (hasAlt && altText) result.alt = altText;
+      return result;
+    }
+
+    const mediaId = await searchWPMediaByFilename(baseUrl, auth, trimmed);
+    if (mediaId) {
+      const entry: Record<string, unknown> = { id: mediaId };
+      imageCache.set(trimmed, entry);
+      img.id = mediaId;
+      if (hasAlt && altText) img.alt = altText;
+      console.log(`✅ Resolved image "${trimmed}" → WP Media ID ${mediaId}`);
+      return img;
+    }
+
+    // Fallback: construct probable URL
+    const fallbackUrl = `${baseUrl}/wp-content/uploads/${trimmed}`;
+    const entry: Record<string, unknown> = { src: fallbackUrl };
+    imageCache.set(trimmed, entry);
+    img.src = fallbackUrl;
+    if (hasAlt && altText) img.alt = altText;
+    console.warn(`⚠️ Image "${trimmed}" not found in Media Library, using fallback: ${fallbackUrl}`);
+    return img;
+  }
+
+  // 4. Unknown format → send as-is (src)
+  img.src = trimmed;
+  if (hasAlt && altText) img.alt = altText;
+  return img;
+}
+
+// Sync fallback for backward compat (used nowhere now, kept for safety)
 function buildImageEntry(ref: string, position: number, altText?: string, hasAlt?: boolean): Record<string, unknown> {
   const trimmed = String(ref || "").trim();
   const img: Record<string, unknown> = { position };
-  // If it's purely numeric, treat as WooCommerce media library ID
   if (/^\d+$/.test(trimmed)) {
     img.id = parseInt(trimmed, 10);
   } else {
     img.src = trimmed;
   }
-  if (hasAlt && altText) {
-    img.alt = altText;
-  }
+  if (hasAlt && altText) img.alt = altText;
   return img;
 }
 
