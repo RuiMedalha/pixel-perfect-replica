@@ -391,6 +391,7 @@ const ProductsPage = () => {
     { value: "pending", label: "Pendente" },
     { value: "processing", label: "A Processar" },
     { value: "optimized", label: "Otimizado" },
+    { value: "needs_review", label: "Revisão Necessária" },
     { value: "published", label: "Publicado" },
     { value: "error", label: "Erro" },
   ];
