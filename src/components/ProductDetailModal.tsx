@@ -140,6 +140,9 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 <GitBranch className="w-3.5 h-3.5 mr-1" /> Variações
               </TabsTrigger>
             )}
+            <TabsTrigger value="fornecedor">
+              <PackageSearch className="w-3.5 h-3.5 mr-1" /> Fornecedor
+            </TabsTrigger>
             <TabsTrigger value="ai-log">
               <Brain className="w-3.5 h-3.5 mr-1" /> Log IA
             </TabsTrigger>
