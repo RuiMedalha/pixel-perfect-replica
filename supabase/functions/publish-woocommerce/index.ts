@@ -250,6 +250,28 @@ Deno.serve(async (req) => {
       allIds = [...new Set([...allIds, ...childIds])];
     }
 
+    // Ensure parents are processed before variations to avoid "pai não publicado" errors
+    const { data: allRows } = await supabase
+      .from("products")
+      .select("id, parent_product_id, product_type")
+      .in("id", allIds);
+
+    const rowById = new Map<string, any>((allRows || []).map((r: any) => [r.id, r]));
+    const rank = (id: string) => {
+      const r = rowById.get(id);
+      if (!r) return 3;
+      if (!r.parent_product_id && r.product_type === "variable") return 0; // variable parent
+      if (!r.parent_product_id) return 1; // simple/parentless
+      return 2; // variation
+    };
+
+    allIds = [...allIds].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    });
+
     const isScheduled = scheduledFor && new Date(scheduledFor) > new Date();
     const status = isScheduled ? "scheduled" : "queued";
 
