@@ -874,7 +874,7 @@ async function buildVariationPayload(
     const parentTitle = parent?.optimized_title || parent?.original_title || "";
     const childTitle = variation.optimized_title || variation.original_title || "";
     const option = inferVariationOptionFromTitle(parentTitle, childTitle);
-    if (option) variationAttrs = [{ name: DEFAULT_VARIATION_ATTR_NAME, option }];
+    if (option) variationAttrs = [{ name: inferAttrNameFromOption(option), option }];
   }
 
   if (variationAttrs.length > 0) payload.attributes = variationAttrs;
