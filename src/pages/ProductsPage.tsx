@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
@@ -28,6 +28,8 @@ import type { Enums } from "@/integrations/supabase/types";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
 import { useRepairAttributes } from "@/hooks/useRepairAttributes";
+import { useEnrichProducts } from "@/hooks/useEnrichProducts";
+import { useSettings } from "@/hooks/useSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
@@ -56,6 +58,8 @@ const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
+  const { enrich, isEnriching } = useEnrichProducts();
+  const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
@@ -651,6 +655,34 @@ const ProductsPage = () => {
             exportProductsToExcel(selectedProducts);
           }}>
             <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" /> <span className="hidden sm:inline">Exportar </span>Excel
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-8"
+            onClick={() => {
+              if (!activeWorkspace) return;
+              // Parse supplier prefixes from settings
+              try {
+                const raw = settings?.supplier_prefixes;
+                const prefixes = raw ? JSON.parse(raw) : [];
+                if (!prefixes.length) {
+                  toast.error("Configure os prefixos de fornecedor nas Definições primeiro.");
+                  return;
+                }
+                enrich({
+                  workspaceId: activeWorkspace.id,
+                  supplierPrefixes: prefixes,
+                  productIds: selected.size > 0 ? Array.from(selected) : undefined,
+                });
+              } catch {
+                toast.error("Erro ao ler prefixos de fornecedor. Verifique as Definições.");
+              }
+            }}
+            disabled={isEnriching}
+          >
+            {isEnriching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Globe className="w-3.5 h-3.5 mr-1" />}
+            <span className="hidden sm:inline">Enriquecer </span>Web{selected.size > 0 ? ` (${selected.size})` : ""}
           </Button>
           {activeWorkspace?.has_variable_products && (
             <Button
