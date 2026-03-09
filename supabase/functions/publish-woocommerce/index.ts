@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
       }
 
       const { baseUrl, auth } = wooConfig;
-      const fields = job.publish_fields && Array.isArray(job.publish_fields) ? new Set(job.publish_fields) : null;
+      const fields = job.publish_fields && Array.isArray(job.publish_fields) && job.publish_fields.length > 0 ? new Set(job.publish_fields) : null;
       const has = (key: string) => !fields || fields.has(key);
       const pricing = job.pricing || {};
       const markupPercent = pricing?.markupPercent ?? 0;
