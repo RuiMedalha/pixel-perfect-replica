@@ -984,7 +984,9 @@ async function buildVariationPayload(
   parent: any,
   has: (k: string) => boolean,
   markupPercent: number,
-  discountPercent: number
+  discountPercent: number,
+  baseUrl: string,
+  auth: string
 ): Promise<Record<string, unknown>> {
   // WooCommerce variations do NOT support many product fields (name, categories, tags, upsells/cross-sells, images[])
   const payload: Record<string, unknown> = {};
