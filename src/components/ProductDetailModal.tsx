@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns, GitBranch } from "lucide-react";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns, GitBranch, PackageSearch } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { VariationsPanel } from "@/components/VariationsPanel";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
 import { useProducts } from "@/hooks/useProducts";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
 import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
@@ -138,6 +140,9 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 <GitBranch className="w-3.5 h-3.5 mr-1" /> Variações
               </TabsTrigger>
             )}
+            <TabsTrigger value="fornecedor">
+              <PackageSearch className="w-3.5 h-3.5 mr-1" /> Fornecedor
+            </TabsTrigger>
             <TabsTrigger value="ai-log">
               <Brain className="w-3.5 h-3.5 mr-1" /> Log IA
             </TabsTrigger>
@@ -626,6 +631,11 @@ export function ProductDetailModal({ product, onClose }: Props) {
             </TabsContent>
           )}
 
+          {/* SUPPLIER DATA TAB */}
+          <TabsContent value="fornecedor" className="mt-4 space-y-4">
+            <SupplierDataSection product={product} />
+          </TabsContent>
+
           {/* RAW DATA TAB */}
           <TabsContent value="brutos" className="mt-4">
             <Card>
@@ -717,5 +727,106 @@ function EditableComparison({
         </div>
       </div>
     </div>
+  );
+}
+
+function SupplierDataSection({ product }: { product: Product }) {
+  const { data: enrichmentFile, isLoading } = useQuery({
+    queryKey: ["enrichment-file", product.sku],
+    enabled: !!product.sku,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("uploaded_files")
+        .select("file_name, metadata, created_at")
+        .eq("file_name", `🌐 SKU: ${product.sku}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+      return data;
+    },
+  });
+
+  const metadata = enrichmentFile?.metadata as Record<string, any> | null;
+  const isEnriched = !!enrichmentFile;
+  const sourceUrl = metadata?.source_url;
+  const supplierName = metadata?.supplier;
+  const imagesFound = metadata?.imagesFound ?? 0;
+  const isVariable = metadata?.isVariable ?? false;
+
+  return (
+    <>
+      {/* Enrichment status badge */}
+      <div className="flex items-center gap-3">
+        <Badge variant={isEnriched ? "default" : "secondary"} className="text-sm px-3 py-1">
+          <Globe className="w-3.5 h-3.5 mr-1.5" />
+          {isEnriched ? "Enriquecido via Web" : "Não enriquecido"}
+        </Badge>
+        {isVariable && (
+          <Badge variant="outline" className="text-sm px-3 py-1">
+            <GitBranch className="w-3.5 h-3.5 mr-1.5" /> Variações detetadas
+          </Badge>
+        )}
+        {imagesFound > 0 && (
+          <Badge variant="outline" className="text-sm px-3 py-1">
+            {imagesFound} imagens extraídas
+          </Badge>
+        )}
+      </div>
+
+      {/* Source URL */}
+      {sourceUrl && (
+        <Card>
+          <CardContent className="p-4">
+            <h4 className="text-sm font-semibold mb-2">Fonte Web</h4>
+            <div className="flex items-center gap-2">
+              {supplierName && <Badge variant="outline" className="text-xs">{supplierName}</Badge>}
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline inline-flex items-center gap-1 break-all"
+              >
+                {sourceUrl} <ExternalLink className="w-3 h-3 shrink-0" />
+              </a>
+            </div>
+            {enrichmentFile?.created_at && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Extraído em {format(new Date(enrichmentFile.created_at), "dd MMM yyyy HH:mm", { locale: pt })}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Technical Specs */}
+      <Card>
+        <CardContent className="p-4">
+          <h4 className="text-sm font-semibold mb-2">Especificações Técnicas</h4>
+          {product.technical_specs ? (
+            <div className="p-3 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+              {product.technical_specs}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Nenhuma especificação técnica extraída. Execute o enriquecimento web para obter dados do fornecedor.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex justify-center py-4">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {!isLoading && !isEnriched && (
+        <Alert>
+          <PackageSearch className="h-4 w-4" />
+          <AlertDescription>
+            Este produto ainda não foi enriquecido via web. Use o botão "Enriquecer Web" na barra de ferramentas para extrair dados do fornecedor.
+          </AlertDescription>
+        </Alert>
+      )}
+    </>
   );
 }
