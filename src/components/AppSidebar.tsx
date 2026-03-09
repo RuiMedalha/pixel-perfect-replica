@@ -237,6 +237,75 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Workspace Dialog */}
+      <Dialog open={!!editWs} onOpenChange={(open) => !open && setEditWs(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Renomear Workspace</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Nome</Label>
+              <Input
+                value={editWs?.name ?? ""}
+                onChange={(e) => setEditWs((prev) => prev ? { ...prev, name: e.target.value } : null)}
+                onKeyDown={(e) => e.key === "Enter" && handleEditWorkspace()}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditWs(null)}>Cancelar</Button>
+            <Button onClick={handleEditWorkspace} disabled={!editWs?.name.trim()}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Workspace Dialog */}
+      <Dialog open={!!deleteWs} onOpenChange={(open) => !open && setDeleteWs(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Eliminar Workspace</DialogTitle>
+            <DialogDescription>
+              Tem a certeza que deseja eliminar o workspace <strong>"{deleteWs?.name}"</strong>? Todos os produtos, ficheiros e dados associados serão eliminados permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteWs(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteWorkspace}>Eliminar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Merge Workspace Dialog */}
+      <Dialog open={!!mergeWs} onOpenChange={(open) => !open && setMergeWs(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Fundir Workspaces</DialogTitle>
+            <DialogDescription>
+              Mover todos os produtos e dados de <strong>"{mergeWs?.sourceName}"</strong> para outro workspace. O workspace de origem será eliminado após a fusão.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Workspace destino</Label>
+              <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                <SelectTrigger><SelectValue placeholder="Selecionar workspace..." /></SelectTrigger>
+                <SelectContent>
+                  {workspaces.filter((w) => w.id !== mergeWs?.sourceId).map((w) => (
+                    <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMergeWs(null)}>Cancelar</Button>
+            <Button onClick={handleMergeWorkspaces} disabled={!mergeTargetId}>Fundir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
