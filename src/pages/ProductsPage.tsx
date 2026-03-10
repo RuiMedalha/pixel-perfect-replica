@@ -681,7 +681,7 @@ const ProductsPage = () => {
             size="sm"
             variant="outline"
             className={cn("text-xs h-8", duplicateGroups.length > 0 && "border-warning text-warning")}
-            onClick={() => setShowDuplicates(true)}
+            onClick={() => { runDuplicateDetection(); setShowDuplicates(true); }}
           >
             <Copy className="w-3.5 h-3.5 mr-1" />
             Duplicados{duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ""}
