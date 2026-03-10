@@ -46,19 +46,9 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
     }
   };
 
-  // Auto-reject all title similar duplicates (keep first of each group)
-  const handleAutoDeleteTitleDuplicates = () => {
-    const idsToDelete: string[] = [];
-    for (const group of titleGroups) {
-      group.products.forEach((p, i) => {
-        if (i !== 0) idsToDelete.push(p.id);
-      });
-    }
-    if (idsToDelete.length === 0) return;
-    if (confirm(`Eliminar automaticamente ${idsToDelete.length} produto(s) com título similar? (mantém o primeiro de cada grupo)`)) {
-      onDelete(idsToDelete);
-      titleGroups.forEach(g => setGroupDecision(g.key, "rejected", 0));
-    }
+  // Auto-approve all title similar groups (different SKUs = unique/variable products)
+  const handleAutoApproveTitleSimilar = () => {
+    titleGroups.forEach(g => setGroupDecision(g.key, "approved", 0));
   };
 
   const handleApplySelected = () => {
@@ -122,11 +112,11 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
                   <Button
                     size="sm"
                     variant="outline"
-                    className="text-xs h-8 border-warning/40 text-warning hover:bg-warning/10"
-                    onClick={handleAutoDeleteTitleDuplicates}
+                    className="text-xs h-8 border-success/40 text-success hover:bg-success/10"
+                    onClick={handleAutoApproveTitleSimilar}
                   >
-                    <Zap className="w-3 h-3 mr-1" />
-                    Eliminar títulos similares ({titleGroups.reduce((s, g) => s + g.products.length - 1, 0)})
+                    <Check className="w-3 h-3 mr-1" />
+                    Aprovar similares — são únicos ({titleGroups.length} grupos)
                   </Button>
                 )}
                 <Badge variant="outline" className="text-xs ml-auto">
