@@ -124,7 +124,7 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
                   </Button>
                 )}
                 <Badge variant="outline" className="text-xs ml-auto">
-                  {reviewedCount}/{groups.length} revistos
+                  {approvedCount} aprovados · {visibleGroups.length} pendentes
                 </Badge>
               </div>
             </div>
