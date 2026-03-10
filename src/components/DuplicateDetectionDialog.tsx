@@ -46,19 +46,9 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
     }
   };
 
-  // Auto-reject all title similar duplicates (keep first of each group)
-  const handleAutoDeleteTitleDuplicates = () => {
-    const idsToDelete: string[] = [];
-    for (const group of titleGroups) {
-      group.products.forEach((p, i) => {
-        if (i !== 0) idsToDelete.push(p.id);
-      });
-    }
-    if (idsToDelete.length === 0) return;
-    if (confirm(`Eliminar automaticamente ${idsToDelete.length} produto(s) com título similar? (mantém o primeiro de cada grupo)`)) {
-      onDelete(idsToDelete);
-      titleGroups.forEach(g => setGroupDecision(g.key, "rejected", 0));
-    }
+  // Auto-approve all title similar groups (different SKUs = unique/variable products)
+  const handleAutoApproveTitleSimilar = () => {
+    titleGroups.forEach(g => setGroupDecision(g.key, "approved", 0));
   };
 
   const handleApplySelected = () => {
