@@ -1778,6 +1778,13 @@ const ProductsPage = () => {
           deleteProducts.mutate(ids);
           setShowDuplicates(false);
         }}
+        onOpenProduct={(id) => {
+          const p = (products ?? []).find(pr => pr.id === id);
+          if (p) {
+            setShowDuplicates(false);
+            setDetailProduct(p);
+          }
+        }}
       />
     </div>
   );
