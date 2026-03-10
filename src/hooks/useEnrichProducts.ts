@@ -51,6 +51,7 @@ export function useEnrichProducts() {
       setResult(res);
 
       if (res.enriched > 0) {
+        qc.invalidateQueries({ queryKey: ["products"] });
         toast.success(`${res.enriched} produto(s) enriquecidos via web!${res.skipped > 0 ? ` (${res.skipped} já tinham dados)` : ""}`);
       } else if (res.skipped > 0) {
         toast.info(`Todos os ${res.skipped} produtos já tinham dados de enriquecimento.`);
