@@ -103,7 +103,15 @@ const ProductsPage = () => {
   const [exportSkuPrefix, setExportSkuPrefix] = useState("");
   const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const PAGE_SIZE = 100;
+
+  // Workspace-scoped products for duplicate detection
+  const workspaceProducts = useMemo(() => {
+    if (!activeWorkspace || !products) return [];
+    return products.filter(p => p.workspace_id === activeWorkspace.id);
+  }, [products, activeWorkspace]);
+  const duplicateGroups = useDuplicateDetection(workspaceProducts);
 
 
   // Inline editing state
