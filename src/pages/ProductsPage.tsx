@@ -31,6 +31,8 @@ import { useRepairAttributes } from "@/hooks/useRepairAttributes";
 import { useEnrichProducts } from "@/hooks/useEnrichProducts";
 import { useSettings } from "@/hooks/useSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
+import { DuplicateDetectionDialog } from "@/components/DuplicateDetectionDialog";
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
   processing: "A Processar",
