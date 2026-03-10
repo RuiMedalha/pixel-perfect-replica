@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, Merge, AlertTriangle, Check, X, Eye } from "lucide-react";
+import { Trash2, AlertTriangle, Check, X, Eye, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DuplicateGroup } from "@/hooks/useDuplicateDetection";
 
@@ -18,7 +18,6 @@ interface Props {
 }
 
 export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete, onOpenProduct }: Props) {
-  // Track decision per group + which product to keep (index)
   const [decisions, setDecisions] = useState<Map<string, { decision: GroupDecision; keepIndex: number }>>(new Map());
 
   const setGroupDecision = (key: string, decision: GroupDecision, keepIndex = 0) => {
@@ -29,12 +28,44 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
     });
   };
 
-  const handleApplyAll = () => {
+  const skuGroups = groups.filter(g => g.reason === "sku");
+  const titleGroups = groups.filter(g => g.reason === "title");
+
+  // Auto-reject all SKU duplicates (keep first of each group)
+  const handleAutoDeleteSkuDuplicates = () => {
+    const idsToDelete: string[] = [];
+    for (const group of skuGroups) {
+      group.products.forEach((p, i) => {
+        if (i !== 0) idsToDelete.push(p.id);
+      });
+    }
+    if (idsToDelete.length === 0) return;
+    if (confirm(`Eliminar automaticamente ${idsToDelete.length} produto(s) com SKU duplicado? (mantém o primeiro de cada grupo)`)) {
+      onDelete(idsToDelete);
+      skuGroups.forEach(g => setGroupDecision(g.key, "rejected", 0));
+    }
+  };
+
+  // Auto-reject all title similar duplicates (keep first of each group)
+  const handleAutoDeleteTitleDuplicates = () => {
+    const idsToDelete: string[] = [];
+    for (const group of titleGroups) {
+      group.products.forEach((p, i) => {
+        if (i !== 0) idsToDelete.push(p.id);
+      });
+    }
+    if (idsToDelete.length === 0) return;
+    if (confirm(`Eliminar automaticamente ${idsToDelete.length} produto(s) com título similar? (mantém o primeiro de cada grupo)`)) {
+      onDelete(idsToDelete);
+      titleGroups.forEach(g => setGroupDecision(g.key, "rejected", 0));
+    }
+  };
+
+  const handleApplySelected = () => {
     const idsToDelete: string[] = [];
     for (const group of groups) {
       const d = decisions.get(group.key);
       if (d?.decision === "rejected") {
-        // Delete all except the kept one
         group.products.forEach((p, i) => {
           if (i !== d.keepIndex) idsToDelete.push(p.id);
         });
@@ -68,34 +99,43 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between">
+            <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 <strong>{groups.length}</strong> grupo(s), <strong>{totalDuplicates}</strong> produtos.
-                Reveja cada grupo: <strong className="text-success">Aprovar</strong> (manter todos) ou <strong className="text-destructive">Rejeitar</strong> (eliminar duplicados).
               </p>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs">
+
+              {/* Quick action buttons */}
+              <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-muted/30">
+                <span className="text-xs font-medium text-muted-foreground mr-1">Ações rápidas:</span>
+                {skuGroups.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="text-xs h-8"
+                    onClick={handleAutoDeleteSkuDuplicates}
+                  >
+                    <Zap className="w-3 h-3 mr-1" />
+                    Eliminar SKU duplicados ({skuGroups.reduce((s, g) => s + g.products.length - 1, 0)})
+                  </Button>
+                )}
+                {titleGroups.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-8 border-warning/40 text-warning hover:bg-warning/10"
+                    onClick={handleAutoDeleteTitleDuplicates}
+                  >
+                    <Zap className="w-3 h-3 mr-1" />
+                    Eliminar títulos similares ({titleGroups.reduce((s, g) => s + g.products.length - 1, 0)})
+                  </Button>
+                )}
+                <Badge variant="outline" className="text-xs ml-auto">
                   {reviewedCount}/{groups.length} revistos
                 </Badge>
-                {/* Quick: reject all */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-xs h-7"
-                  onClick={() => {
-                    groups.forEach(g => {
-                      if (!decisions.has(g.key)) {
-                        setGroupDecision(g.key, "rejected", 0);
-                      }
-                    });
-                  }}
-                >
-                  <Merge className="w-3 h-3 mr-1" /> Rejeitar todos pendentes
-                </Button>
               </div>
             </div>
 
-            <ScrollArea className="max-h-[55vh]">
+            <ScrollArea className="max-h-[50vh]">
               <div className="space-y-3 pr-3">
                 {groups.map((group) => {
                   const d = decisions.get(group.key);
@@ -144,7 +184,7 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
                             className="text-xs h-7 px-2"
                             onClick={() => setGroupDecision(group.key, "rejected", keepIndex)}
                           >
-                            <X className="w-3 h-3 mr-1" /> Eliminar duplicados
+                            <X className="w-3 h-3 mr-1" /> Rejeitar
                           </Button>
                         </div>
                       </div>
@@ -203,7 +243,7 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
           {rejectedCount > 0 && (
-            <Button variant="destructive" onClick={handleApplyAll}>
+            <Button variant="destructive" onClick={handleApplySelected}>
               <Trash2 className="w-4 h-4 mr-1" />
               Aplicar {rejectedCount} rejeição(ões)
             </Button>
