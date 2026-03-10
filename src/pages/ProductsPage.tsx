@@ -111,7 +111,7 @@ const ProductsPage = () => {
     if (!activeWorkspace || !products) return [];
     return products.filter(p => p.workspace_id === activeWorkspace.id);
   }, [products, activeWorkspace]);
-  const duplicateGroups = useDuplicateDetection(workspaceProducts);
+  const { groups: duplicateGroups, run: runDuplicateDetection, isRunning: isDetectingDuplicates } = useDuplicateDetection(workspaceProducts);
 
 
   // Inline editing state
