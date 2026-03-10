@@ -19,6 +19,7 @@ interface EnrichResult {
 export function useEnrichProducts() {
   const [isEnriching, setIsEnriching] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
+  const qc = useQueryClient();
 
   const enrich = async ({
     workspaceId,
