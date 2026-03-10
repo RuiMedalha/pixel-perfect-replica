@@ -68,8 +68,12 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
     }
   };
 
+  const visibleGroups = groups.filter(g => {
+    const d = decisions.get(g.key);
+    return !d || d.decision !== "approved";
+  });
   const totalDuplicates = groups.reduce((sum, g) => sum + g.products.length, 0);
-  const reviewedCount = Array.from(decisions.values()).filter(d => d.decision !== "pending").length;
+  const approvedCount = Array.from(decisions.values()).filter(d => d.decision === "approved").length;
   const rejectedCount = Array.from(decisions.values()).filter(d => d.decision === "rejected").length;
 
   return (
