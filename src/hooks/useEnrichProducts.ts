@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -18,6 +19,7 @@ interface EnrichResult {
 export function useEnrichProducts() {
   const [isEnriching, setIsEnriching] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
+  const qc = useQueryClient();
 
   const enrich = async ({
     workspaceId,
@@ -49,6 +51,7 @@ export function useEnrichProducts() {
       setResult(res);
 
       if (res.enriched > 0) {
+        qc.invalidateQueries({ queryKey: ["products"] });
         toast.success(`${res.enriched} produto(s) enriquecidos via web!${res.skipped > 0 ? ` (${res.skipped} já tinham dados)` : ""}`);
       } else if (res.skipped > 0) {
         toast.info(`Todos os ${res.skipped} produtos já tinham dados de enriquecimento.`);

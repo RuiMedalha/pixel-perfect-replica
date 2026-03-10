@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
@@ -31,6 +31,8 @@ import { useRepairAttributes } from "@/hooks/useRepairAttributes";
 import { useEnrichProducts } from "@/hooks/useEnrichProducts";
 import { useSettings } from "@/hooks/useSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
+import { DuplicateDetectionDialog } from "@/components/DuplicateDetectionDialog";
 const statusLabels: Record<Enums<"product_status">, string> = {
   pending: "Pendente",
   processing: "A Processar",
@@ -101,7 +103,15 @@ const ProductsPage = () => {
   const [exportSkuPrefix, setExportSkuPrefix] = useState("");
   const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showDuplicates, setShowDuplicates] = useState(false);
   const PAGE_SIZE = 100;
+
+  // Workspace-scoped products for duplicate detection
+  const workspaceProducts = useMemo(() => {
+    if (!activeWorkspace || !products) return [];
+    return products.filter(p => p.workspace_id === activeWorkspace.id);
+  }, [products, activeWorkspace]);
+  const duplicateGroups = useDuplicateDetection(workspaceProducts);
 
 
   // Inline editing state
@@ -661,6 +671,15 @@ const ProductsPage = () => {
               <Network className="w-3.5 h-3.5 mr-1" /> Agrupado
             </Button>
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className={cn("text-xs h-8", duplicateGroups.length > 0 && "border-warning text-warning")}
+            onClick={() => setShowDuplicates(true)}
+          >
+            <Copy className="w-3.5 h-3.5 mr-1" />
+            Duplicados{duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ""}
+          </Button>
           <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => {
             setExportTarget("all");
             setExportSkuPrefix("");
@@ -1745,6 +1764,15 @@ const ProductsPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <DuplicateDetectionDialog
+        open={showDuplicates}
+        onOpenChange={setShowDuplicates}
+        groups={duplicateGroups}
+        onDelete={(ids) => {
+          deleteProducts.mutate(ids);
+          setShowDuplicates(false);
+        }}
+      />
     </div>
   );
 };
