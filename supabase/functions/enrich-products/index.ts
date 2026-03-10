@@ -242,7 +242,26 @@ Deno.serve(async (req) => {
 
           // Variations
           if (aiParsed.variations && aiParsed.variations.length > 0) {
-            updateData.attributes = aiParsed.variations;
+            // Sort variation values by numeric size/diameter order
+            const sortedVariations = aiParsed.variations.map((v: any) => ({
+              ...v,
+              values: [...(v.values || [])].sort((a: string, b: string) => {
+                const numA = parseFloat(a.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                const numB = parseFloat(b.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                return a.localeCompare(b);
+              }),
+              skus: v.skus ? [...v.skus] : undefined, // preserve SKU order alignment handled below
+            }));
+            // If skus exist, re-sort them to match the new values order
+            for (const v of sortedVariations) {
+              if (v.skus && v.skus.length === aiParsed.variations.find((ov: any) => ov.name === v.name)?.values?.length) {
+                const original = aiParsed.variations.find((ov: any) => ov.name === v.name);
+                const indexMap = v.values.map((val: string) => original.values.indexOf(val));
+                v.skus = indexMap.map((i: number) => original.skus[i]);
+              }
+            }
+            updateData.attributes = sortedVariations;
             if (product.product_type === 'simple') {
               updateData.product_type = 'variable';
             }

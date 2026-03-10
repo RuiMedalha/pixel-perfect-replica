@@ -2,43 +2,58 @@ import React, { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, Merge, AlertTriangle } from "lucide-react";
+import { Trash2, Merge, AlertTriangle, Check, X, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DuplicateGroup } from "@/hooks/useDuplicateDetection";
+
+type GroupDecision = "pending" | "approved" | "rejected";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   groups: DuplicateGroup[];
   onDelete: (ids: string[]) => void;
+  onOpenProduct?: (productId: string) => void;
 }
 
-export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete }: Props) {
-  const [selectedToDelete, setSelectedToDelete] = useState<Set<string>>(new Set());
+export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete, onOpenProduct }: Props) {
+  // Track decision per group + which product to keep (index)
+  const [decisions, setDecisions] = useState<Map<string, { decision: GroupDecision; keepIndex: number }>>(new Map());
 
-  const toggleDelete = (id: string) => {
-    setSelectedToDelete(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+  const setGroupDecision = (key: string, decision: GroupDecision, keepIndex = 0) => {
+    setDecisions(prev => {
+      const next = new Map(prev);
+      next.set(key, { decision, keepIndex });
       return next;
     });
   };
 
-  const handleDelete = () => {
-    if (selectedToDelete.size === 0) return;
-    if (confirm(`Eliminar ${selectedToDelete.size} produto(s) duplicado(s)?`)) {
-      onDelete(Array.from(selectedToDelete));
-      setSelectedToDelete(new Set());
+  const handleApplyAll = () => {
+    const idsToDelete: string[] = [];
+    for (const group of groups) {
+      const d = decisions.get(group.key);
+      if (d?.decision === "rejected") {
+        // Delete all except the kept one
+        group.products.forEach((p, i) => {
+          if (i !== d.keepIndex) idsToDelete.push(p.id);
+        });
+      }
+    }
+    if (idsToDelete.length === 0) return;
+    if (confirm(`Eliminar ${idsToDelete.length} produto(s) duplicado(s) dos grupos rejeitados?`)) {
+      onDelete(idsToDelete);
+      setDecisions(new Map());
     }
   };
 
   const totalDuplicates = groups.reduce((sum, g) => sum + g.products.length, 0);
+  const reviewedCount = Array.from(decisions.values()).filter(d => d.decision !== "pending").length;
+  const rejectedCount = Array.from(decisions.values()).filter(d => d.decision === "rejected").length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh]">
+      <DialogContent className="max-w-3xl max-h-[85vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-warning" />
@@ -53,78 +68,144 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete 
           </div>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
-              Encontrados <strong>{groups.length}</strong> grupo(s) com <strong>{totalDuplicates}</strong> produtos potencialmente duplicados.
-              Selecione os que deseja eliminar.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                <strong>{groups.length}</strong> grupo(s), <strong>{totalDuplicates}</strong> produtos.
+                Reveja cada grupo: <strong className="text-success">Aprovar</strong> (manter todos) ou <strong className="text-destructive">Rejeitar</strong> (eliminar duplicados).
+              </p>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">
+                  {reviewedCount}/{groups.length} revistos
+                </Badge>
+                {/* Quick: reject all */}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs h-7"
+                  onClick={() => {
+                    groups.forEach(g => {
+                      if (!decisions.has(g.key)) {
+                        setGroupDecision(g.key, "rejected", 0);
+                      }
+                    });
+                  }}
+                >
+                  <Merge className="w-3 h-3 mr-1" /> Rejeitar todos pendentes
+                </Button>
+              </div>
+            </div>
 
-            <ScrollArea className="max-h-[50vh]">
-              <div className="space-y-4 pr-3">
-                {groups.map((group, gi) => (
-                  <div key={group.key} className="border rounded-lg p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={cn(
-                        "text-xs",
-                        group.reason === "sku" ? "bg-destructive/10 text-destructive border-destructive/20" :
-                        group.reason === "title" ? "bg-warning/10 text-warning border-warning/20" :
-                        "bg-primary/10 text-primary border-primary/20"
-                      )}>
-                        {group.reason === "sku" ? "SKU Idêntico" : group.reason === "title" ? "Título Similar" : "SKU + Título"}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{group.products.length} produtos</span>
-                    </div>
+            <ScrollArea className="max-h-[55vh]">
+              <div className="space-y-3 pr-3">
+                {groups.map((group) => {
+                  const d = decisions.get(group.key);
+                  const decision = d?.decision || "pending";
+                  const keepIndex = d?.keepIndex ?? 0;
 
-                    <div className="space-y-1">
-                      {group.products.map((p, pi) => (
-                        <div
-                          key={p.id}
-                          className={cn(
-                            "flex items-center gap-2 p-2 rounded text-sm",
-                            pi === 0 ? "bg-muted/50" : "bg-background",
-                            selectedToDelete.has(p.id) && "bg-destructive/5 border border-destructive/20"
-                          )}
-                        >
-                          <Checkbox
-                            checked={selectedToDelete.has(p.id)}
-                            onCheckedChange={() => toggleDelete(p.id)}
-                          />
-                          <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{p.sku || "—"}</span>
-                          <span className="truncate flex-1">{p.optimized_title || p.original_title || "Sem título"}</span>
-                          <Badge variant="outline" className="text-[10px] shrink-0">{p.product_type}</Badge>
-                          {pi === 0 && <Badge variant="secondary" className="text-[10px]">Original</Badge>}
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Quick select: keep first, delete rest */}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-xs h-6"
-                      onClick={() => {
-                        setSelectedToDelete(prev => {
-                          const next = new Set(prev);
-                          group.products.slice(1).forEach(p => next.add(p.id));
-                          next.delete(group.products[0].id); // keep first
-                          return next;
-                        });
-                      }}
+                  return (
+                    <div
+                      key={group.key}
+                      className={cn(
+                        "border rounded-lg p-3 space-y-2 transition-colors",
+                        decision === "approved" && "border-success/40 bg-success/5",
+                        decision === "rejected" && "border-destructive/40 bg-destructive/5",
+                      )}
                     >
-                      <Merge className="w-3 h-3 mr-1" /> Manter primeiro, selecionar restantes
-                    </Button>
-                  </div>
-                ))}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className={cn(
+                            "text-xs",
+                            group.reason === "sku" ? "bg-destructive/10 text-destructive border-destructive/20" :
+                            "bg-warning/10 text-warning border-warning/20"
+                          )}>
+                            {group.reason === "sku" ? "SKU Idêntico" : "Título Similar"}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">{group.products.length} produtos</span>
+                          {decision !== "pending" && (
+                            <Badge variant="outline" className={cn("text-[10px]",
+                              decision === "approved" ? "bg-success/10 text-success border-success/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                            )}>
+                              {decision === "approved" ? "✓ Aprovado" : "✗ Rejeitado"}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="sm"
+                            variant={decision === "approved" ? "default" : "outline"}
+                            className={cn("text-xs h-7 px-2", decision === "approved" && "bg-success hover:bg-success/90")}
+                            onClick={() => setGroupDecision(group.key, "approved", 0)}
+                          >
+                            <Check className="w-3 h-3 mr-1" /> Manter todos
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={decision === "rejected" ? "destructive" : "outline"}
+                            className="text-xs h-7 px-2"
+                            onClick={() => setGroupDecision(group.key, "rejected", keepIndex)}
+                          >
+                            <X className="w-3 h-3 mr-1" /> Eliminar duplicados
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        {group.products.map((p, pi) => (
+                          <div
+                            key={p.id}
+                            className={cn(
+                              "flex items-center gap-2 p-2 rounded text-sm",
+                              decision === "rejected" && pi === keepIndex && "bg-success/10 border border-success/20",
+                              decision === "rejected" && pi !== keepIndex && "bg-destructive/5 border border-destructive/20 opacity-60 line-through",
+                              decision !== "rejected" && pi === 0 && "bg-muted/50",
+                            )}
+                          >
+                            {decision === "rejected" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 shrink-0"
+                                title="Manter este produto"
+                                onClick={() => setGroupDecision(group.key, "rejected", pi)}
+                              >
+                                {pi === keepIndex ? <Check className="w-3 h-3 text-success" /> : <span className="w-3 h-3" />}
+                              </Button>
+                            )}
+                            <span className="font-mono text-xs text-muted-foreground w-20 shrink-0">{p.sku || "—"}</span>
+                            <span className="truncate flex-1">{p.optimized_title || p.original_title || "Sem título"}</span>
+                            <Badge variant="outline" className="text-[10px] shrink-0">{p.product_type}</Badge>
+                            {p.technical_specs && (
+                              <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 shrink-0">
+                                Web
+                              </Badge>
+                            )}
+                            {onOpenProduct && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0 shrink-0"
+                                onClick={() => onOpenProduct(p.id)}
+                              >
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </ScrollArea>
           </>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-          {selectedToDelete.size > 0 && (
-            <Button variant="destructive" onClick={handleDelete}>
+          {rejectedCount > 0 && (
+            <Button variant="destructive" onClick={handleApplyAll}>
               <Trash2 className="w-4 h-4 mr-1" />
-              Eliminar {selectedToDelete.size} duplicado(s)
+              Aplicar {rejectedCount} rejeição(ões)
             </Button>
           )}
         </DialogFooter>
