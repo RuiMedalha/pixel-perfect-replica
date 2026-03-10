@@ -1764,6 +1764,15 @@ const ProductsPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <DuplicateDetectionDialog
+        open={showDuplicates}
+        onOpenChange={setShowDuplicates}
+        groups={duplicateGroups}
+        onDelete={(ids) => {
+          deleteProducts.mutate(ids);
+          setShowDuplicates(false);
+        }}
+      />
     </div>
   );
 };
