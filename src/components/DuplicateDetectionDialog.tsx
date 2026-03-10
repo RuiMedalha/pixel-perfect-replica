@@ -127,7 +127,11 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
 
             <ScrollArea className="max-h-[50vh]">
               <div className="space-y-3 pr-3">
-                {groups.map((group) => {
+                {visibleGroups.length === 0 ? (
+                  <div className="py-6 text-center text-muted-foreground">
+                    <p className="text-sm">Todos os grupos foram revistos ✓</p>
+                  </div>
+                ) : visibleGroups.map((group) => {
                   const d = decisions.get(group.key);
                   const decision = d?.decision || "pending";
                   const keepIndex = d?.keepIndex ?? 0;
@@ -137,7 +141,6 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
                       key={group.key}
                       className={cn(
                         "border rounded-lg p-3 space-y-2 transition-colors",
-                        decision === "approved" && "border-success/40 bg-success/5",
                         decision === "rejected" && "border-destructive/40 bg-destructive/5",
                       )}
                     >
@@ -151,22 +154,15 @@ export function DuplicateDetectionDialog({ open, onOpenChange, groups, onDelete,
                             {group.reason === "sku" ? "SKU Idêntico" : "Título Similar"}
                           </Badge>
                           <span className="text-xs text-muted-foreground">{group.products.length} produtos</span>
-                          {decision !== "pending" && (
-                            <Badge variant="outline" className={cn("text-[10px]",
-                              decision === "approved" ? "bg-success/10 text-success border-success/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                            )}>
-                              {decision === "approved" ? "✓ Aprovado" : "✗ Rejeitado"}
-                            </Badge>
-                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           <Button
                             size="sm"
-                            variant={decision === "approved" ? "default" : "outline"}
-                            className={cn("text-xs h-7 px-2", decision === "approved" && "bg-success hover:bg-success/90")}
+                            variant="outline"
+                            className="text-xs h-7 px-2 border-success/40 text-success hover:bg-success/10"
                             onClick={() => setGroupDecision(group.key, "approved", 0)}
                           >
-                            <Check className="w-3 h-3 mr-1" /> Manter todos
+                            <Check className="w-3 h-3 mr-1" /> Aprovar
                           </Button>
                           <Button
                             size="sm"
