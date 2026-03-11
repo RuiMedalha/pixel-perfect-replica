@@ -130,7 +130,7 @@ Deno.serve(async (req) => {
         // Create new
         const { data: newCat, error: insertErr } = await supabase.from("categories").insert({
           user_id: user.id,
-          workspace_id: workspaceId,
+          workspace_id: null, // Global — shared across all workspaces
           woocommerce_id: wooCat.id,
           name: wooCat.name,
           slug: wooCat.slug,
