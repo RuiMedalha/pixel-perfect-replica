@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
               url: searchUrl,
-              formats: ['markdown', 'links'],
+              formats: ['markdown', 'html'],
               onlyMainContent: true,
             }),
           });
@@ -192,8 +192,9 @@ Deno.serve(async (req) => {
 
           const data = await response.json();
           const markdown = data.data?.markdown || data.markdown || '';
+          const html = data.data?.html || data.html || '';
           
-          if (!markdown || markdown.length < 50) {
+          if ((!markdown || markdown.length < 50) && (!html || html.length < 50)) {
             return { sku, success: false, url: searchUrl, error: "No content found" };
           }
 
