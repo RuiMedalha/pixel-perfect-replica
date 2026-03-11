@@ -180,15 +180,54 @@ async function insertProducts(
       const existingId = sku ? existingSkuMap.get(sku) : null;
 
       if (existingId) {
-        // ── Intelligent Merge: fill empty fields, combine arrays, pick best value ──
-        const existing = existingFullMap.get(sku!) || {};
-        const mergeData = buildMergedProductData(p, existing, mappedFieldKeys, hasMapping, fileName);
-        if (Object.keys(mergeData).length > 0) {
-          toUpdate.push({ id: existingId, data: mergeData, product: p });
+        if (updateMode && updateFields && updateFields.length > 0) {
+          // ── Update Mode: only overwrite specified fields ──
+          const newData = buildProductData(p, false, mappedFieldKeys, hasMapping);
+          const updateData: Record<string, unknown> = {};
+          
+          // Map updateFields to DB column names
+          const fieldToCol: Record<string, string> = {
+            title: "original_title", optimized_title: "optimized_title",
+            description: "original_description", optimized_description: "optimized_description",
+            short_description: "short_description", optimized_short_description: "optimized_short_description",
+            price: "original_price", optimized_price: "optimized_price",
+            sale_price: "sale_price", optimized_sale_price: "optimized_sale_price",
+            category: "category", supplier_ref: "supplier_ref",
+            meta_title: "meta_title", meta_description: "meta_description",
+            seo_slug: "seo_slug", tags: "tags", focus_keyword: "focus_keyword",
+            image_urls: "image_urls", attributes: "attributes",
+            technical_specs: "technical_specs", sku: "sku",
+            product_type: "product_type", woocommerce_id: "woocommerce_id",
+          };
+          
+          for (const field of updateFields) {
+            const col = fieldToCol[field] || field;
+            if (newData[col] !== undefined) {
+              updateData[col] = newData[col];
+            }
+          }
+          
+          if (Object.keys(updateData).length > 0) {
+            toUpdate.push({ id: existingId, data: updateData, product: p });
+          } else {
+            skipped++;
+          }
         } else {
-          skipped++;
+          // ── Intelligent Merge: fill empty fields, combine arrays, pick best value ──
+          const existing = existingFullMap.get(sku!) || {};
+          const mergeData = buildMergedProductData(p, existing, mappedFieldKeys, hasMapping, fileName);
+          if (Object.keys(mergeData).length > 0) {
+            toUpdate.push({ id: existingId, data: mergeData, product: p });
+          } else {
+            skipped++;
+          }
         }
       } else {
+        if (updateMode) {
+          // In update mode, skip new products (only update existing)
+          skipped++;
+          continue;
+        }
         const productData = buildProductData(p, false, mappedFieldKeys, hasMapping);
         productData.user_id = userId;
         productData.workspace_id = workspaceId || null;
