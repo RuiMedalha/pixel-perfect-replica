@@ -26,19 +26,31 @@ async function getWooConfig(supabase: any) {
   return { baseUrl, auth };
 }
 
-async function wooFetch(baseUrl: string, auth: string, endpoint: string) {
-  const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
-    method: "GET",
-    headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
-  });
-  if (!resp.ok) {
-    const errBody = await resp.text();
-    throw new Error(`WooCommerce ${resp.status}: ${errBody.substring(0, 300)}`);
+async function wooFetch(baseUrl: string, auth: string, endpoint: string, timeoutMs = 30000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
+      method: "GET",
+      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      const errBody = await resp.text();
+      throw new Error(`WooCommerce ${resp.status}: ${errBody.substring(0, 300)}`);
+    }
+    const totalPages = parseInt(resp.headers.get("X-WP-TotalPages") || "1");
+    const total = parseInt(resp.headers.get("X-WP-Total") || "0");
+    const data = await resp.json();
+    return { data, totalPages, total };
+  } catch (e: any) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') {
+      throw new Error(`WooCommerce request timeout after ${timeoutMs}ms for ${endpoint}`);
+    }
+    throw e;
   }
-  const totalPages = parseInt(resp.headers.get("X-WP-TotalPages") || "1");
-  const total = parseInt(resp.headers.get("X-WP-Total") || "0");
-  const data = await resp.json();
-  return { data, totalPages, total };
 }
 
 Deno.serve(async (req) => {
@@ -88,6 +100,7 @@ Deno.serve(async (req) => {
         allCats.push(...data);
         if (data.length < 100) break;
         page++;
+        if (page > 20) break; // safety limit
       }
       return new Response(JSON.stringify({ categories: allCats }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -97,23 +110,38 @@ Deno.serve(async (req) => {
     // ── ACTION: List product attributes (brands, etc.) ──
     if (action === "list_attributes") {
       const { data: attributes } = await wooFetch(baseUrl, auth, `/products/attributes?per_page=100`);
-      // For each attribute, get its terms
-      const withTerms = [];
-      for (const attr of attributes) {
-        try {
-          const allTerms: any[] = [];
-          let page = 1;
-          while (true) {
-            const { data: terms } = await wooFetch(baseUrl, auth, `/products/attributes/${attr.id}/terms?per_page=100&page=${page}`);
-            allTerms.push(...terms);
-            if (terms.length < 100) break;
-            page++;
+      
+      // Fetch terms for all attributes IN PARALLEL (max 5 concurrent)
+      const CONCURRENCY = 5;
+      const withTerms: any[] = [];
+      
+      for (let i = 0; i < attributes.length; i += CONCURRENCY) {
+        const batch = attributes.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map(async (attr: any) => {
+            const allTerms: any[] = [];
+            let page = 1;
+            while (true) {
+              const { data: terms } = await wooFetch(baseUrl, auth, `/products/attributes/${attr.id}/terms?per_page=100&page=${page}`, 15000);
+              allTerms.push(...terms);
+              if (terms.length < 100) break;
+              page++;
+              if (page > 10) break; // safety limit
+            }
+            return { ...attr, terms: allTerms };
+          })
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            withTerms.push(r.value);
+          } else {
+            // On failure, still include attribute but with empty terms
+            const idx = results.indexOf(r);
+            withTerms.push({ ...batch[idx], terms: [] });
           }
-          withTerms.push({ ...attr, terms: allTerms });
-        } catch (e) {
-          withTerms.push({ ...attr, terms: [] });
         }
       }
+      
       return new Response(JSON.stringify({ attributes: withTerms }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -174,23 +202,29 @@ Deno.serve(async (req) => {
 
       console.log(`Total products fetched from WooCommerce: ${allProducts.length}`);
 
-      // For variable products, also fetch their variations
+      // For variable products, also fetch their variations — in parallel batches
       const variableProducts = allProducts.filter((p: any) => p.type === "variable");
       const variationMap: Record<number, any[]> = {};
 
-      for (const vp of variableProducts) {
-        try {
-          const allVars: any[] = [];
-          let vPage = 1;
-          while (true) {
-            const { data: vars } = await wooFetch(baseUrl, auth, `/products/${vp.id}/variations?per_page=100&page=${vPage}`);
-            allVars.push(...vars);
-            if (vars.length < 100) break;
-            vPage++;
+      for (let i = 0; i < variableProducts.length; i += 5) {
+        const batch = variableProducts.slice(i, i + 5);
+        const results = await Promise.allSettled(
+          batch.map(async (vp: any) => {
+            const allVars: any[] = [];
+            let vPage = 1;
+            while (true) {
+              const { data: vars } = await wooFetch(baseUrl, auth, `/products/${vp.id}/variations?per_page=100&page=${vPage}`);
+              allVars.push(...vars);
+              if (vars.length < 100) break;
+              vPage++;
+            }
+            return { id: vp.id, vars: allVars };
+          })
+        );
+        for (const r of results) {
+          if (r.status === 'fulfilled') {
+            variationMap[r.value.id] = r.value.vars;
           }
-          variationMap[vp.id] = allVars;
-        } catch (e) {
-          console.error(`Failed to fetch variations for product ${vp.id}:`, e);
         }
       }
 
@@ -261,11 +295,11 @@ Deno.serve(async (req) => {
         };
 
         toInsert.push(product);
-        existingSkus.add(sku); // prevent duplicates within this import
+        existingSkus.add(sku);
       }
 
       // Batch insert products
-      const parentIdMap: Record<string, string> = {}; // woo_id -> our_id
+      const parentIdMap: Record<string, string> = {};
 
       for (let i = 0; i < toInsert.length; i += 50) {
         const batch = toInsert.slice(i, i + 50);
@@ -281,7 +315,6 @@ Deno.serve(async (req) => {
 
         inserted += (insertedData?.length || 0);
         
-        // Map woo IDs to our IDs for variation linking
         for (const row of (insertedData || [])) {
           if (row.woocommerce_id) {
             parentIdMap[String(row.woocommerce_id)] = row.id;
@@ -326,7 +359,6 @@ Deno.serve(async (req) => {
           });
         }
 
-        // Batch insert variations
         for (let i = 0; i < varInserts.length; i += 50) {
           const batch = varInserts.slice(i, i + 50);
           const { data: vData, error: vErr } = await supabase.from("products").insert(batch).select("id");
