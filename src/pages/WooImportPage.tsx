@@ -245,13 +245,13 @@ const WooImportPage = () => {
 
       {/* Result Card */}
       {result && (
-        <Card className={result.imported > 0 ? "border-green-500/30 bg-green-500/5" : "border-amber-500/30 bg-amber-500/5"}>
+        <Card className="border-primary/30 bg-primary/5">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">
               {result.imported > 0 ? (
-                <CheckCircle className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
+                <CheckCircle className="w-6 h-6 text-primary shrink-0 mt-0.5" />
               ) : (
-                <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+                <AlertTriangle className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
               )}
               <div className="space-y-2">
                 <p className="font-semibold text-sm">
