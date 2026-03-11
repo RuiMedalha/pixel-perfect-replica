@@ -185,15 +185,15 @@ const WooImportPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                {brandAttr && brandAttr.terms.length > 0 && (
+                {hasBrands && (
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Marca</Label>
                     <Select value={selectedBrand || "all"} onValueChange={(v) => setSelectedBrand(v === "all" ? "" : v)}>
                       <SelectTrigger><SelectValue placeholder="Todas as marcas" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas as marcas</SelectItem>
-                        {brandAttr.terms.sort((a, b) => a.name.localeCompare(b.name)).map((term) => (
-                          <SelectItem key={term.id} value={String(term.id)}>
+                        {allBrandTerms.map((term) => (
+                          <SelectItem key={`${term.attrId}-${term.id}`} value={String(term.id)}>
                             {term.name} ({term.count})
                           </SelectItem>
                         ))}
