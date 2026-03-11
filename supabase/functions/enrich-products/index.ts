@@ -373,14 +373,20 @@ Deno.serve(async (req) => {
                 const existing = existingMap.get(varSku);
 
                 if (existing) {
-                  // If it exists as simple, convert to variation under this parent
+                  // Only convert simple→variation if the parent is ALREADY a variable product
+                  // (i.e., it was imported from WooCommerce or explicitly set via Variations page)
                   if (existing.product_type === 'simple' && !existing.parent_product_id && existing.id !== product.id) {
-                    await supabase.from("products").update({
-                      product_type: 'variation',
-                      parent_product_id: product.id,
-                      attributes: [{ name: mainVariation.name, value: varValue }],
-                    }).eq("id", existing.id);
-                    variationsCreated++;
+                    if (product.product_type === 'variable' || updateData.product_type === 'variable') {
+                      await supabase.from("products").update({
+                        product_type: 'variation',
+                        parent_product_id: product.id,
+                        attributes: [{ name: mainVariation.name, value: varValue }],
+                      }).eq("id", existing.id);
+                      variationsCreated++;
+                    } else {
+                      // Parent is still simple — don't convert children, just log
+                      console.log(`⏭️ Skipping conversion of ${varSku} — parent ${sku} is still simple`);
+                    }
                   }
                 } else if (varSku !== sku) {
                   // SKU not found in workspace — flag as missing, do NOT auto-create
