@@ -332,7 +332,22 @@ export function ProductDetailModal({ product, onClose }: Props) {
                       </div>
                     ))}
                   </div>
-                   {/* Focus keywords input */}
+                  {/* Auto-fix suggestions when score < 70 */}
+                  {score < 70 && (() => {
+                    const suggestions = getSeoFixSuggestions(checks);
+                    if (suggestions.length === 0) return null;
+                    return (
+                      <Alert className="border-yellow-500/30 bg-yellow-500/5">
+                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                        <AlertDescription className="space-y-1">
+                          <p className="text-sm font-medium">Sugestões para melhorar o SEO:</p>
+                          <ul className="text-xs space-y-0.5 list-disc list-inside text-muted-foreground">
+                            {suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  })()}
                    <div className="border border-border/50 rounded-lg p-4">
                      <h4 className="text-sm font-semibold mb-2">Focus Keywords (RankMath)</h4>
                      <Input
