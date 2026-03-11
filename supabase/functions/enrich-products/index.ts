@@ -427,6 +427,7 @@ Deno.serve(async (req) => {
             sku, success: true, url: searchUrl, 
             images: productImages.length, 
             variations: aiParsed.variations?.length || 0,
+            variationsCreated,
             specs: Object.keys(aiParsed.specs || {}).length,
             isVariable: (aiParsed.variations?.length || 0) > 0,
             aiParsed: !!lovableApiKey,
