@@ -1469,9 +1469,13 @@ const ProductsPage = () => {
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
                 <div>
-                  <Label className="text-xs font-medium cursor-pointer" htmlFor="skip-scraping">Desativar Scraping do Fornecedor</Label>
-                  <p className="text-[10px] text-muted-foreground">Não consulta páginas do fornecedor. Elimina ~2s por produto.</p>
-                </div>
+                   <Label className="text-xs font-medium cursor-pointer" htmlFor="skip-scraping">Desativar Scraping do Fornecedor</Label>
+                   <p className="text-[10px] text-muted-foreground">
+                     {skipScraping 
+                       ? "🌐 Dados já enriquecidos via web — scraping desativado automaticamente." 
+                       : "Não consulta páginas do fornecedor. Elimina ~2s por produto."}
+                   </p>
+                 </div>
                 <Switch id="skip-scraping" checked={skipScraping} onCheckedChange={setSkipScraping} />
               </div>
               <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30">
