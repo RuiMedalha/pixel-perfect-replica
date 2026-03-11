@@ -307,10 +307,12 @@ Deno.serve(async (req) => {
             await supabase.from("products").update(updateData).eq("id", product.id);
           }
 
-          // --- Expand variations: create child products ---
+          // --- Expand variations: link existing products, flag missing ones ---
           let variationsCreated = 0;
+          const missingVariations: { sku: string; value: string; url?: string }[] = [];
+          
           if (aiParsed.variations && aiParsed.variations.length > 0) {
-            const mainVariation = aiParsed.variations[0]; // primary variation attribute
+            const mainVariation = aiParsed.variations[0];
             const rawSkus = mainVariation.skus || [];
             const values = mainVariation.values || [];
             const variationUrls = aiParsed.variation_urls || [];
@@ -319,11 +321,9 @@ Deno.serve(async (req) => {
               // Clean SKUs: if AI returned URLs instead of SKUs, extract the numeric part
               const skus = rawSkus.map((s: string) => {
                 if (!s) return s;
-                // If it looks like a URL, extract the last numeric segment
                 if (s.startsWith('http://') || s.startsWith('https://') || s.includes('/')) {
                   const numMatch = s.match(/\/(\d{3,})(?:[/?#]|$)/);
                   if (numMatch) return numMatch[1];
-                  // Fallback: last path segment
                   const parts = s.replace(/[?#].*$/, '').split('/').filter(Boolean);
                   const last = parts[parts.length - 1];
                   if (last && /^\d+$/.test(last)) return last;
@@ -331,7 +331,22 @@ Deno.serve(async (req) => {
                 return s;
               });
               
-              console.log(`Expanding ${values.length} variations for ${sku} (SKUs: ${skus.join(', ')})`);
+              console.log(`Checking ${values.length} variations for ${sku} (SKUs: ${skus.join(', ')})`);
+              
+              // Load ALL existing SKUs in workspace at once to avoid per-variation queries
+              const allSkusToCheck = skus.filter((s: string) => s !== sku);
+              const existingMap = new Map<string, any>();
+              
+              for (let ci = 0; ci < allSkusToCheck.length; ci += 100) {
+                const chunk = allSkusToCheck.slice(ci, ci + 100);
+                const { data: found } = await supabase.from("products")
+                  .select("id, sku, product_type, parent_product_id")
+                  .eq("workspace_id", workspaceId)
+                  .in("sku", chunk);
+                if (found) {
+                  for (const f of found) existingMap.set(f.sku, f);
+                }
+              }
               
               const maxVariations = Math.min(skus.length, 10);
               
@@ -344,12 +359,7 @@ Deno.serve(async (req) => {
                   convertedVariationSkus.add(varSku);
                 }
 
-                // Check if this SKU already exists in workspace
-                const { data: existing } = await supabase.from("products")
-                  .select("id, product_type, parent_product_id")
-                  .eq("sku", varSku)
-                  .eq("workspace_id", workspaceId)
-                  .maybeSingle();
+                const existing = existingMap.get(varSku);
 
                 if (existing) {
                   // If it exists as simple, convert to variation under this parent
@@ -361,88 +371,19 @@ Deno.serve(async (req) => {
                     }).eq("id", existing.id);
                     variationsCreated++;
                   }
-                  continue;
+                } else if (varSku !== sku) {
+                  // SKU not found in workspace — flag as missing, do NOT auto-create
+                  const varUrlEntry = variationUrls.find((vu: any) => vu.sku === varSku || vu.value === varValue);
+                  missingVariations.push({ 
+                    sku: varSku, 
+                    value: varValue,
+                    url: varUrlEntry?.url || undefined,
+                  });
+                  console.log(`⚠️ Missing variation SKU ${varSku} (${varValue}) for parent ${sku} — not in workspace`);
                 }
-
-                // Try to scrape individual variation page for specific data
-                let varImages: string[] = [];
-                let varSpecs: any = null;
-                let varPrice: number | null = null;
-
-                const hasRealSku = rawSkus.length === values.length;
-                const varUrlEntry = variationUrls.find((vu: any) => vu.sku === varSku || vu.value === varValue);
-                let varScrapeUrl = varUrlEntry?.url || '';
-
-                // Only build scrape URL if we have real SKUs (not generated ones)
-                if (!varScrapeUrl && hasRealSku && matchedPrefix?.searchUrl) {
-                  const varRef = matchedPrefix.prefix ? varSku.substring(matchedPrefix.prefix.length) : varSku;
-                  varScrapeUrl = matchedPrefix.searchUrl.replace("{sku}", varRef);
-                }
-
-                if (varScrapeUrl) {
-                  try {
-                    const varResp = await fetch('https://api.firecrawl.dev/v1/scrape', {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({
-                     url: varScrapeUrl,
-                        formats: ['markdown', 'html'],
-                        onlyMainContent: false,
-                      }),
-                    });
-
-                    if (varResp.ok) {
-                      const varData = await varResp.json();
-                      const varMd = varData.data?.markdown || varData.markdown || '';
-                      const varHtml = varData.data?.html || varData.html || '';
-                      if (varMd.length > 50 && lovableApiKey) {
-                        const supplierInstr = matchedPrefix?.scrapingInstructions || scrapingInstructions[matchedPrefix?.name] || Object.values(scrapingInstructions)[0] || '';
-                        const varParsed = await parseWithAI(lovableApiKey, varMd, varSku, `${product.original_title} - ${varValue}`, supplierInstr, varHtml);
-                        if (varParsed) {
-                          varImages = varParsed.product_images || [];
-                          varSpecs = varParsed.specs && Object.keys(varParsed.specs).length > 0 ? varParsed.specs : null;
-                        }
-                      }
-                    }
-                  } catch (e) {
-                    console.error(`Failed to scrape variation ${varSku}:`, e);
-                  }
-                }
-
-                // Create child product
-                const childData: any = {
-                  user_id: userId,
-                  workspace_id: workspaceId,
-                  sku: varSku,
-                  original_title: `${product.original_title || ''} - ${varValue}`.trim(),
-                  product_type: 'variation',
-                  parent_product_id: product.id,
-                  attributes: [{ name: mainVariation.name, value: varValue }],
-                  status: 'pending',
-                  source_file: product.source_file || null,
-                  supplier_ref: product.supplier_ref || null,
-                };
-
-                if (varImages.length > 0) {
-                  childData.image_urls = varImages;
-                } else if (product.image_urls && product.image_urls.length > 0) {
-                  childData.image_urls = product.image_urls; // inherit parent images
-                }
-
-                if (varSpecs) {
-                  childData.technical_specs = JSON.stringify(varSpecs);
-                } else if (product.technical_specs) {
-                  childData.technical_specs = product.technical_specs;
-                }
-
-                await supabase.from("products").insert(childData);
-                variationsCreated++;
               }
 
-              console.log(`Created ${variationsCreated} variation children for parent ${sku}`);
+              console.log(`Linked ${variationsCreated} existing variations for parent ${sku}, ${missingVariations.length} missing`);
             }
           }
 
