@@ -15,6 +15,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import VariationsPage from "./pages/VariationsPage";
+import WooImportPage from "./pages/WooImportPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
