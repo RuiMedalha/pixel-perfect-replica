@@ -997,7 +997,7 @@ const ProductsPage = () => {
             {activePublishJob.status === "completed" && activePublishJob.results && (activePublishJob.results as any[]).length > 0 && (
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {(activePublishJob.results as any[]).map((r: any, i: number) => {
-                  const product = (products ?? []).find(p => p.id === r.id);
+                  const product = products.find(p => p.id === r.id);
                   const label = product?.optimized_title || product?.original_title || product?.sku || r.id?.slice(0, 8);
                   return (
                     <div key={i} className={cn(
