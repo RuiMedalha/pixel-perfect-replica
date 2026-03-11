@@ -568,7 +568,7 @@ ${truncatedMd}${variationHtml}`;
                 product_images: {
                   type: "array",
                   items: { type: "string" },
-                  description: "ALL image URLs of this product: main photo, gallery images, alternate angles, zoom views, detail shots. Include every product image found. Exclude only icons, logos, banners, and decorative elements."
+                  description: "ONLY images of THIS product from the product gallery/carousel/slider. Include main photo, alternate angles, zoom views, detail shots. EXCLUDE: related products, recommended items, category images, logos, icons, banners, footer images, social media icons. Max 8-10 images."
                 },
                 variations: {
                   type: "array",
