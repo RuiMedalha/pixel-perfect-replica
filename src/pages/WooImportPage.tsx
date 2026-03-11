@@ -81,6 +81,7 @@ const WooImportPage = () => {
     filters.category,
     filters.stock_status && filters.stock_status !== "all",
     filters.search,
+    selectedBrand,
     selectedAttribute && selectedTerm,
   ].filter(Boolean).length;
 
