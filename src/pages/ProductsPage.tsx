@@ -1573,15 +1573,16 @@ const ProductsPage = () => {
             </div>
           </div>
           {/* Background Mode Toggle */}
-          <div className="flex items-center justify-between mt-3 pt-3 border-t p-3 rounded-lg bg-muted/30">
+          <div className="flex items-center justify-between mt-3 pt-3 border-t p-3 rounded-lg bg-primary/5 border-primary/20">
             <div className="flex items-center gap-2">
               <Rocket className="w-4 h-4 text-primary" />
               <div>
                 <Label className="text-xs font-medium cursor-pointer" htmlFor="bg-mode">
-                  Modo Background {pendingOptimizeIds.length >= 50 && <Badge variant="secondary" className="text-[10px] ml-1">Recomendado</Badge>}
+                  Processamento em Background
+                  <Badge variant="secondary" className="text-[10px] ml-1.5">Recomendado</Badge>
                 </Label>
                 <p className="text-[10px] text-muted-foreground">
-                  Processa em segundo plano com 5x paralelismo. Pode fechar o browser.
+                  Processa em segundo plano com paralelismo. Pode fechar o browser — o progresso é guardado automaticamente.
                 </p>
               </div>
             </div>
@@ -1589,8 +1590,15 @@ const ProductsPage = () => {
               id="bg-mode"
               checked={backgroundMode}
               onCheckedChange={setBackgroundMode}
+              disabled={pendingOptimizeIds.length >= 10}
             />
           </div>
+          {!backgroundMode && (
+            <p className="text-[10px] text-amber-600 flex items-center gap-1 mt-1">
+              <AlertTriangle className="w-3 h-3" />
+              Modo direto: a UI ficará bloqueada durante o processamento. Recomendado apenas para 1-2 produtos.
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
             {(() => {
