@@ -29,13 +29,15 @@ REGRAS OBRIGATÓRIAS:
     label: "Descrição Completa",
     settingKey: "prompt_field_description",
     defaultPrompt: `Gera uma descrição otimizada com ESTRUTURA OBRIGATÓRIA:
-1. PARÁGRAFO COMERCIAL (150-250 chars): Benefícios, aplicações, diferenciais. Sem dados técnicos.
+CONTEXTO: Estes são equipamentos PROFISSIONAIS para hotelaria, restauração, cozinhas industriais e bares.
+1. PARÁGRAFO COMERCIAL (150-250 chars): Benefícios, aplicações, diferenciais. Sem dados técnicos. NÃO menciones a marca.
 2. TABELA HTML de specs: <table> com TODAS as características técnicas (dimensões, peso, material, potência, voltagem, etc.)
 3. FAQ HTML: 3-5 perguntas frequentes em <details><summary>Pergunta</summary><p>Resposta</p></details>
 
 REGRAS OBRIGATÓRIAS:
+- NÃO incluas o nome da marca no texto comercial — foca no equipamento e nas suas capacidades
 - NÃO mistures dados técnicos no texto comercial
-- Menciona aplicações práticas (restaurante, hotel, pastelaria, etc.)
+- Menciona aplicações práticas (restaurante, hotel, pastelaria, bar, etc.)
 - Inclui benefícios de eficiência energética se aplicável
 - Menciona conformidade com normas (CE, HACCP) se relevante`,
   },
