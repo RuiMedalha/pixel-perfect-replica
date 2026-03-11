@@ -666,6 +666,7 @@ export function useUploadCatalog() {
     processFile,
     processAllFiles,
     setColumnMapping,
+    setUpdateFields,
     confirmMapping,
     selectSheet,
     allFields,
