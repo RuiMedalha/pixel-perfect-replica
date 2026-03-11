@@ -57,7 +57,6 @@ const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
 const ALL_PHASES = OPTIMIZATION_PHASES.map(p => p.phase);
 
 const ProductsPage = () => {
-  const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
   const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
@@ -72,6 +71,7 @@ const ProductsPage = () => {
   const detectVariations = useDetectVariations();
   const applyVariations = useApplyVariations();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sourceFileFilter, setSourceFileFilter] = useState<string>("all");
@@ -107,13 +107,39 @@ const ProductsPage = () => {
   const [showDuplicates, setShowDuplicates] = useState(false);
   const PAGE_SIZE = 100;
 
-  // Workspace-scoped products for duplicate detection
-  const workspaceProducts = useMemo(() => {
-    if (!activeWorkspace || !products) return [];
-    return products.filter(p => p.workspace_id === activeWorkspace.id);
-  }, [products, activeWorkspace]);
-  const { groups: duplicateGroups, run: runDuplicateDetection, isRunning: isDetectingDuplicates } = useDuplicateDetection(workspaceProducts);
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
+  // Server-side paginated products
+  const serverFilters: ProductFilters = {
+    search: debouncedSearch,
+    status: statusFilter,
+    category: categoryFilter,
+    productType: productTypeFilter,
+    sourceFile: sourceFileFilter,
+    wooFilter,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+  };
+  const { data: paginatedData, isLoading } = useProducts(serverFilters);
+  const products = paginatedData?.products ?? [];
+  const totalCount = paginatedData?.totalCount ?? 0;
+  const totalPages = paginatedData?.totalPages ?? 1;
+
+  // Lightweight all-products for bulk operations (optimize family expansion, export, etc.)
+  const { data: allProductsLight } = useAllProductIds();
+
+  // Filter options from server
+  const { data: filterOptions } = useProductFilterOptions();
+  const uniqueCategories = filterOptions?.categories ?? [];
+  const uniqueSourceFiles = filterOptions?.sourceFiles ?? [];
+
+  // Workspace-scoped products for duplicate detection
+  const workspaceProducts = useMemo(() => allProductsLight ?? [], [allProductsLight]);
+  const { groups: duplicateGroups, run: runDuplicateDetection, isRunning: isDetectingDuplicates } = useDuplicateDetection(workspaceProducts as any);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -130,16 +156,6 @@ const ProductsPage = () => {
     }
   }, [pendingOptimizeIds.length]);
 
-  // Extract unique categories for filter
-  const uniqueCategories = Array.from(
-    new Set((products ?? []).map((p) => p.category).filter(Boolean) as string[])
-  ).sort();
-
-  // Extract unique source files for filter
-  const uniqueSourceFiles = Array.from(
-    new Set((products ?? []).map((p) => p.source_file).filter(Boolean) as string[])
-  ).sort();
-
   const getProductPhases = useCallback((p: Product) => {
     const p1 = !!(p.optimized_title || p.optimized_description || p.optimized_short_description);
     const p2 = !!(p.meta_title || p.meta_description || p.seo_slug || (p.faq && (Array.isArray(p.faq) ? (p.faq as any[]).length > 0 : true)));
@@ -147,15 +163,9 @@ const ProductsPage = () => {
     return { p1, p2, p3 };
   }, []);
 
-  const filtered = (products ?? []).filter((p) => {
-    const matchesSearch =
-      (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.original_title ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesCategory = categoryFilter === "all" || (p.category ?? "") === categoryFilter;
-    const matchesSourceFile = sourceFileFilter === "all" || (p.source_file ?? "") === sourceFileFilter;
-    
-    // SEO score filter
+  // Client-side filters applied to already server-filtered data (for filters not in SQL)
+  const filtered = products.filter((p) => {
+    // SEO score filter (computed, not in DB)
     let matchesSeoScore = true;
     if (seoScoreFilter !== "all") {
       const { score } = calculateSeoScore(p);
@@ -169,10 +179,6 @@ const ProductsPage = () => {
     if (hasKeywordFilter === "yes") matchesKeyword = Array.isArray(p.focus_keyword) && p.focus_keyword.length > 0;
     else if (hasKeywordFilter === "no") matchesKeyword = !p.focus_keyword || (Array.isArray(p.focus_keyword) && p.focus_keyword.length === 0);
 
-    // Product type filter
-    let matchesType = true;
-    if (productTypeFilter !== "all") matchesType = (p.product_type ?? "simple") === productTypeFilter;
-
     // Phase filter
     let matchesPhase = true;
     if (phaseFilter !== "all") {
@@ -184,20 +190,14 @@ const ProductsPage = () => {
       else if (phaseFilter === "none") matchesPhase = !phases.p1 && !phases.p2 && !phases.p3;
     }
 
-    // WooCommerce filter
-    let matchesWoo = true;
-    if (wooFilter === "published") matchesWoo = !!p.woocommerce_id;
-    else if (wooFilter === "not_published") matchesWoo = !p.woocommerce_id;
-
-    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase && matchesWoo;
+    return matchesSeoScore && matchesKeyword && matchesPhase;
   });
 
-  // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, categoryFilter, sourceFileFilter, seoScoreFilter, hasKeywordFilter, productTypeFilter, phaseFilter, wooFilter]);
+  // Reset page when server filters change
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, statusFilter, categoryFilter, sourceFileFilter, productTypeFilter, wooFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginatedFiltered = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
+  // paginatedFiltered is the same as filtered since pagination is server-side now
+  const paginatedFiltered = filtered;
   // Build grouped view structure
   const groupedView = useMemo(() => {
     if (viewMode !== "grouped") return null;
