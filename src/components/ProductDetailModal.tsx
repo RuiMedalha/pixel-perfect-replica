@@ -20,7 +20,7 @@ import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useProductOptimizationLogs } from "@/hooks/useOptimizationLogs";
-import { calculateSeoScore, getSeoScoreColor, getSeoScoreBg } from "@/lib/seoScore";
+import { calculateSeoScore, getSeoScoreColor, getSeoScoreBg, getSeoFixSuggestions } from "@/lib/seoScore";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
