@@ -59,10 +59,11 @@ REGRAS OBRIGATÓRIAS:
     label: "Meta Title (SEO)",
     settingKey: "prompt_field_meta_title",
     defaultPrompt: `Gera meta title SEO (máx 60 chars).
+CONTEXTO: Equipamento profissional para hotelaria, restauração e bares.
 REGRAS OBRIGATÓRIAS:
 - Keyword principal no início
 - Inclui "Comprar" ou "Preço" para intenção comercial
-- Inclui marca/linha se couber
+- NÃO incluas o nome da marca — foca na linha/série e tipo de equipamento
 - Termina com separador e nome da loja se couber`,
   },
   {
