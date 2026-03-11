@@ -430,6 +430,7 @@ Deno.serve(async (req) => {
             images: productImages.length, 
             variations: aiParsed.variations?.length || 0,
             variationsCreated,
+            missingVariations: missingVariations.length > 0 ? missingVariations : undefined,
             specs: Object.keys(aiParsed.specs || {}).length,
             isVariable: (aiParsed.variations?.length || 0) > 0,
             aiParsed: !!lovableApiKey,
