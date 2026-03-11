@@ -21,6 +21,105 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
+const UPDATE_FIELD_OPTIONS = [
+  { key: "price", label: "Preço Original", group: "Preços" },
+  { key: "optimized_price", label: "Preço Otimizado", group: "Preços" },
+  { key: "sale_price", label: "Preço Promocional", group: "Preços" },
+  { key: "optimized_sale_price", label: "Preço Promocional Otimizado", group: "Preços" },
+  { key: "title", label: "Título Original", group: "Conteúdo" },
+  { key: "optimized_title", label: "Título Otimizado", group: "Conteúdo" },
+  { key: "description", label: "Descrição Original", group: "Conteúdo" },
+  { key: "optimized_description", label: "Descrição Otimizada", group: "Conteúdo" },
+  { key: "short_description", label: "Descrição Curta", group: "Conteúdo" },
+  { key: "optimized_short_description", label: "Descrição Curta Otimizada", group: "Conteúdo" },
+  { key: "category", label: "Categoria", group: "Classificação" },
+  { key: "tags", label: "Tags", group: "Classificação" },
+  { key: "meta_title", label: "Meta Title SEO", group: "SEO" },
+  { key: "meta_description", label: "Meta Description SEO", group: "SEO" },
+  { key: "seo_slug", label: "SEO Slug", group: "SEO" },
+  { key: "focus_keyword", label: "Focus Keyword", group: "SEO" },
+  { key: "image_urls", label: "Imagens", group: "Media" },
+  { key: "attributes", label: "Atributos", group: "Classificação" },
+  { key: "technical_specs", label: "Especificações Técnicas", group: "Conteúdo" },
+  { key: "supplier_ref", label: "Ref. Fornecedor", group: "Classificação" },
+];
+
+function UpdateFieldsSelector({ selectedFields, onChange }: { selectedFields: string[]; onChange: (fields: string[]) => void }) {
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof UPDATE_FIELD_OPTIONS>();
+    UPDATE_FIELD_OPTIONS.forEach((f) => {
+      if (!map.has(f.group)) map.set(f.group, []);
+      map.get(f.group)!.push(f);
+    });
+    return map;
+  }, []);
+
+  const toggle = (key: string) => {
+    onChange(selectedFields.includes(key) ? selectedFields.filter((f) => f !== key) : [...selectedFields, key]);
+  };
+
+  const selectGroup = (group: string) => {
+    const groupKeys = UPDATE_FIELD_OPTIONS.filter((f) => f.group === group).map((f) => f.key);
+    const allSelected = groupKeys.every((k) => selectedFields.includes(k));
+    if (allSelected) {
+      onChange(selectedFields.filter((f) => !groupKeys.includes(f)));
+    } else {
+      onChange([...new Set([...selectedFields, ...groupKeys])]);
+    }
+  };
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 text-primary" />
+          Campos a Atualizar
+          {selectedFields.length > 0 && (
+            <Badge variant="secondary" className="text-[10px]">{selectedFields.length} selecionado(s)</Badge>
+          )}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Apenas os campos selecionados serão sobrescritos nos produtos existentes (identificados pelo SKU).
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {Array.from(groups.entries()).map(([group, fields]) => (
+            <div key={group}>
+              <button
+                onClick={() => selectGroup(group)}
+                className="text-xs font-semibold text-muted-foreground mb-1.5 hover:text-foreground transition-colors cursor-pointer"
+              >
+                {group}
+              </button>
+              <div className="flex flex-wrap gap-2">
+                {fields.map((f) => (
+                  <label
+                    key={f.key}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-all",
+                      selectedFields.includes(f.key)
+                        ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                        : "bg-muted/30 border-border text-muted-foreground hover:border-primary/20"
+                    )}
+                  >
+                    <Checkbox
+                      checked={selectedFields.includes(f.key)}
+                      onCheckedChange={() => toggle(f.key)}
+                      className="w-3.5 h-3.5"
+                    />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const UploadPage = () => {
   const {
     files, addFiles, processAllFiles: processAll, processFile, removeFile,
