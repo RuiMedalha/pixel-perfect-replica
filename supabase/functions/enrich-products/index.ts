@@ -335,9 +335,9 @@ Deno.serve(async (req) => {
                         'Content-Type': 'application/json',
                       },
                       body: JSON.stringify({
-                        url: varScrapeUrl,
+                     url: varScrapeUrl,
                         formats: ['markdown', 'html'],
-                        onlyMainContent: true,
+                        onlyMainContent: false,
                       }),
                     });
 
