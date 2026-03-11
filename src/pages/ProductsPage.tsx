@@ -1016,8 +1016,7 @@ const ProductsPage = () => {
                 size="sm"
                 variant="ghost"
                 onClick={() => {
-                  // Clear by calling with empty - need a dismiss function
-                  // For now just hide via a local state workaround
+                  setDismissedMissing(true);
                 }}
                 className="text-muted-foreground"
               >
