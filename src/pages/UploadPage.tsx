@@ -422,8 +422,8 @@ const UploadPage = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{file.name}</p>
-                        <Badge variant={file.uploadType === "knowledge" ? "outline" : "secondary"} className="text-[10px]">
-                          {file.uploadType === "knowledge" ? "Conhecimento" : "Produtos"}
+                        <Badge variant={file.uploadType === "knowledge" ? "outline" : file.uploadType === "update" ? "default" : "secondary"} className="text-[10px]">
+                          {file.uploadType === "knowledge" ? "Conhecimento" : file.uploadType === "update" ? "Atualização" : "Produtos"}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">
