@@ -60,7 +60,7 @@ const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
-  const { enrich, isEnriching, missingVariations, createMissingVariations } = useEnrichProducts();
+  const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
   const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
