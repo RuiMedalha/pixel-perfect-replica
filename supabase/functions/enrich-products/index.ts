@@ -316,7 +316,20 @@ Deno.serve(async (req) => {
             const variationUrls = aiParsed.variation_urls || [];
 
             if (values.length > 0 && rawSkus.length === values.length) {
-              const skus = rawSkus;
+              // Clean SKUs: if AI returned URLs instead of SKUs, extract the numeric part
+              const skus = rawSkus.map((s: string) => {
+                if (!s) return s;
+                // If it looks like a URL, extract the last numeric segment
+                if (s.startsWith('http://') || s.startsWith('https://') || s.includes('/')) {
+                  const numMatch = s.match(/\/(\d{3,})(?:[/?#]|$)/);
+                  if (numMatch) return numMatch[1];
+                  // Fallback: last path segment
+                  const parts = s.replace(/[?#].*$/, '').split('/').filter(Boolean);
+                  const last = parts[parts.length - 1];
+                  if (last && /^\d+$/.test(last)) return last;
+                }
+                return s;
+              });
               
               console.log(`Expanding ${values.length} variations for ${sku} (SKUs: ${skus.join(', ')})`);
               
