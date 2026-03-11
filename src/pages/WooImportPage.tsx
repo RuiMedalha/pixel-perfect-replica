@@ -157,8 +157,8 @@ const WooImportPage = () => {
                 </div>
               </div>
 
-              {/* Row 2: Category + Stock */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Row 2: Category + Brand + Stock */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Categoria</Label>
                   <Select value={filters.category || "all"} onValueChange={(v) => setFilters(f => ({ ...f, category: v === "all" ? undefined : v }))}>
@@ -173,6 +173,22 @@ const WooImportPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                {brandAttr && brandAttr.terms.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Marca</Label>
+                    <Select value={selectedBrand || "all"} onValueChange={(v) => setSelectedBrand(v === "all" ? "" : v)}>
+                      <SelectTrigger><SelectValue placeholder="Todas as marcas" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas as marcas</SelectItem>
+                        {brandAttr.terms.sort((a, b) => a.name.localeCompare(b.name)).map((term) => (
+                          <SelectItem key={term.id} value={String(term.id)}>
+                            {term.name} ({term.count})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Stock</Label>
                   <Select value={filters.stock_status || "all"} onValueChange={(v) => setFilters(f => ({ ...f, stock_status: v }))}>
@@ -187,16 +203,16 @@ const WooImportPage = () => {
                 </div>
               </div>
 
-              {/* Row 3: Attribute (Brand) filter */}
-              {attributes && attributes.length > 0 && (
+              {/* Row 3: Other attributes filter */}
+              {otherAttributes.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Atributo (Marca, etc.)</Label>
+                    <Label className="text-xs font-medium">Outro Atributo</Label>
                     <Select value={selectedAttribute || "none"} onValueChange={(v) => { setSelectedAttribute(v === "none" ? "" : v); setSelectedTerm(""); }}>
                       <SelectTrigger><SelectValue placeholder="Selecionar atributo..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">Nenhum</SelectItem>
-                        {attributes.map((attr) => (
+                        {otherAttributes.map((attr) => (
                           <SelectItem key={attr.id} value={String(attr.id)}>
                             {attr.name} ({attr.terms.length} valores)
                           </SelectItem>
