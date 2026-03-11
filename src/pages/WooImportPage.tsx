@@ -35,7 +35,8 @@ const WooImportPage = () => {
   const hasBrands = allBrandTerms.length > 0;
   
   // Non-brand attributes for generic filter
-  const otherAttributes = attributes?.filter(a => a.id !== brandAttr?.id) || [];
+  const brandAttrIds = new Set(brandAttrs.map(a => a.id));
+  const otherAttributes = attributes?.filter(a => !brandAttrIds.has(a.id)) || [];
 
   // Find the selected attribute object (non-brand)
   const attrObj = otherAttributes.find(a => String(a.id) === selectedAttribute);
