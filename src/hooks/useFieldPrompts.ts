@@ -46,8 +46,10 @@ REGRAS OBRIGATÓRIAS:
     label: "Descrição Curta",
     settingKey: "prompt_field_short_description",
     defaultPrompt: `Gera uma descrição curta (máx 160 chars) para listagens.
+CONTEXTO: Equipamento profissional para hotelaria, restauração, cozinhas industriais e bares.
 REGRAS OBRIGATÓRIAS:
 - Resumo conciso focado no benefício principal
+- NÃO incluas o nome da marca
 - Inclui 1-2 specs chave (dimensão ou capacidade)
 - Inclui tipo de energia se aplicável
 - Tom profissional e direto`,
