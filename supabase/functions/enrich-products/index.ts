@@ -373,8 +373,8 @@ Deno.serve(async (req) => {
                 const varSku = skus[vi];
                 const varValue = values[vi];
                 
-                // Mark this SKU so it won't be enriched independently later in this run
-                if (varSku !== sku) {
+                // Only mark as converted if it actually exists in the workspace
+                if (varSku !== sku && existingMap.has(varSku)) {
                   convertedVariationSkus.add(varSku);
                 }
 
