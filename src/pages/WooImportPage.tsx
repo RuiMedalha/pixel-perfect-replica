@@ -22,10 +22,17 @@ const WooImportPage = () => {
 
   const isLoading = loadingCats || loadingAttrs;
 
-  // Find the brand attribute (common names: marca, brand, pa_marca, pa_brand)
-  const brandAttr = attributes?.find(a => 
-    ['marca', 'brand', 'marcas', 'brands'].includes(a.name.toLowerCase())
-  );
+  // Find brand attributes (common names: marca, brand, xstore brand, etc.)
+  const brandAttrs = attributes?.filter(a => 
+    ['marca', 'brand', 'marcas', 'brands', 'xstore brand', 'xstore-brand'].includes(a.name.toLowerCase())
+  ) || [];
+  
+  // Merge all brand terms from all brand attributes
+  const allBrandTerms = brandAttrs.flatMap(a => 
+    a.terms.map(t => ({ ...t, attrId: a.id, attrName: a.name }))
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  
+  const hasBrands = allBrandTerms.length > 0;
   
   // Non-brand attributes for generic filter
   const otherAttributes = attributes?.filter(a => a.id !== brandAttr?.id) || [];
