@@ -25,6 +25,7 @@ export interface UploadedFile {
   excelHeaders?: string[];
   previewRows?: Record<string, unknown>[];
   columnMapping?: ColumnMapping;
+  updateFields?: string[];
 }
 
 export interface ProductField {
