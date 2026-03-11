@@ -151,7 +151,32 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
 
         <p className="text-xs text-muted-foreground">Escolha os campos a enviar. O processamento é feito em background — pode fechar o browser.</p>
 
-        {variableParentCount > 0 && (
+        {/* Pre-publish validation checklist */}
+        {products.length > 0 && (() => {
+          const { items, passRate } = validateProducts(products);
+          const hasIssues = passRate < 100;
+          return (
+            <div className={cn("border rounded-md p-3 space-y-2", hasIssues ? "border-yellow-500/50 bg-yellow-500/5" : "border-green-500/50 bg-green-500/5")}>
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                {hasIssues ? <AlertTriangle className="w-4 h-4 text-yellow-500" /> : <Check className="w-4 h-4 text-green-500" />}
+                Validação pré-publicação ({passRate}%)
+              </div>
+              <div className="space-y-1">
+                {items.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs">
+                    {item.passed ? <Check className="w-3 h-3 text-green-500 shrink-0" /> : <X className="w-3 h-3 text-yellow-500 shrink-0" />}
+                    <span className={cn(!item.passed && "text-yellow-600 dark:text-yellow-400")}>{item.label}</span>
+                    <span className="ml-auto text-muted-foreground">{item.detail}</span>
+                  </div>
+                ))}
+              </div>
+              {hasIssues && (
+                <p className="text-[10px] text-yellow-600 dark:text-yellow-400">⚠️ Produtos com campos em falta serão publicados, mas podem ter informação incompleta.</p>
+              )}
+            </div>
+          );
+        })()}
+
           <div className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
             <p className="font-medium">🔗 {variableParentCount} produto(s) variável(eis) detetado(s)</p>
             {autoIncludedVariationsCount > 0 && (
