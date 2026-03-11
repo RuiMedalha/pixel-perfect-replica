@@ -253,7 +253,9 @@ async function sendParsedRowsInBatches(
   columnMapping: ColumnMapping | undefined,
   fileName: string,
   workspaceId: string | undefined,
-  maxRetries = 3
+  maxRetries = 3,
+  updateMode?: boolean,
+  updateFields?: string[]
 ): Promise<{ count: number; updated: number; total: number; skipped: number; errors: string[] }> {
   const BATCH_SIZE = 500; // rows per request
   let totalCount = 0;
