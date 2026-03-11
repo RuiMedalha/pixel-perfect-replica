@@ -13,7 +13,41 @@ const MAX_PROCESSING_MS = 95_000; // keep safe headroom before timeout
 const CONCURRENCY = 2; // lower concurrency to reduce function rate limiting
 const SELF_INVOKE_RETRIES = 5;
 
+const TELEGRAM_GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function sendTelegramNotification(chatId: string, message: string) {
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY");
+    if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) {
+      console.warn("Telegram keys not configured, skipping notification");
+      return;
+    }
+    const response = await fetch(`${TELEGRAM_GATEWAY_URL}/sendMessage`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": TELEGRAM_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: "HTML",
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn(`Telegram notification failed [${response.status}]: ${errText}`);
+    } else {
+      console.log("📨 Telegram notification sent");
+    }
+  } catch (err) {
+    console.warn("Telegram notification error (non-fatal):", err);
+  }
+}
 
 async function selfInvokeWithRetry(authHeader: string, jobId: string, startIndex: number) {
   const payload = JSON.stringify({ jobId, startIndex });
@@ -200,6 +234,16 @@ serve(async (req) => {
     let currentIndex = Math.max(requestedStartIndex ?? (job.processed_products || 0), 0);
     let totalProcessed = job.processed_products || 0;
     let totalFailed = job.failed_products || 0;
+    let halfNotified = totalProcessed >= Math.floor(allProductIds.length / 2); // skip if already past 50%
+
+    // Fetch Telegram chat_id for notifications
+    const { data: telegramSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "telegram_chat_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const telegramChatId = telegramSetting?.value || null;
 
     console.log(`📦 Processing from index ${currentIndex}, ${allProductIds.length - currentIndex} remaining`);
 
@@ -367,6 +411,16 @@ serve(async (req) => {
         .eq("id", job.id);
 
       console.log(`✅ Batch done: ${totalProcessed}/${allProductIds.length} (${totalFailed} failed)`);
+
+      // === 50% Telegram notification ===
+      if (!halfNotified && telegramChatId && totalProcessed >= Math.floor(allProductIds.length / 2)) {
+        halfNotified = true;
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        await sendTelegramNotification(
+          telegramChatId,
+          `⏳ <b>Otimização a 50%</b>\n\n📦 ${totalProcessed}/${allProductIds.length} produtos\n❌ ${totalFailed} erro(s)\n⏱️ ${elapsed}s decorridos`
+        );
+      }
     }
 
     // Check final status
@@ -390,7 +444,19 @@ serve(async (req) => {
 
     console.log(`🏁 Job ${job.id} ${finalStatus}: ${totalProcessed} processed, ${totalFailed} failed`);
 
-    // === WhatsApp Notification ===
+    // === Notifications (Telegram + WhatsApp) ===
+    const ok = totalProcessed - totalFailed;
+    const elapsedSec = Math.round((Date.now() - startTime) / 1000);
+
+    // Telegram
+    if (telegramChatId) {
+      const msg = finalStatus === "completed"
+        ? `✅ <b>Otimização concluída!</b>\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${elapsedSec}s`
+        : `⚠️ <b>Job cancelado</b>\n\n${totalProcessed} de ${job.total_products} processados`;
+      await sendTelegramNotification(telegramChatId, msg);
+    }
+
+    // WhatsApp webhook
     try {
       const { data: whatsappSetting } = await supabase
         .from("settings")
@@ -400,9 +466,8 @@ serve(async (req) => {
         .maybeSingle();
 
       if (whatsappSetting?.value) {
-        const ok = totalProcessed - totalFailed;
         const message = finalStatus === "completed"
-          ? `✅ *Otimização concluída!*\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${Math.round((Date.now() - startTime) / 1000)}s`
+          ? `✅ *Otimização concluída!*\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${elapsedSec}s`
           : `⚠️ *Job cancelado*\n\n${totalProcessed} de ${job.total_products} processados`;
 
         await fetch(whatsappSetting.value, {

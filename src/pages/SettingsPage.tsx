@@ -43,6 +43,7 @@ const SETTING_KEYS = {
   optimization_prompt: "optimization_prompt",
   knowledge_urls: "knowledge_urls_json",
   whatsapp_webhook: "whatsapp_webhook_url",
+  telegram_chat_id: "telegram_chat_id",
 };
 
 const DEFAULT_OPTIMIZATION_PROMPT = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
@@ -185,16 +186,28 @@ const SettingsPage = () => {
       {/* Per-field prompts */}
       <FieldPromptsSettings />
 
-      {/* WhatsApp Notification */}
+      {/* Notifications */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">📱 Notificações WhatsApp</CardTitle>
+          <CardTitle className="text-base">📱 Notificações</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Webhook URL (Zapier, Make, n8n, etc.)</Label>
+            <Label>Telegram Chat ID</Label>
             <p className="text-xs text-muted-foreground">
-              Cole o URL do webhook que recebe os dados e envia para o WhatsApp. O sistema envia uma notificação quando um job de otimização em background termina.
+              O bot Telegram envia notificações a 50% e ao concluir jobs de background. Para obter o chat ID, envie <code>/start</code> ao bot e depois use <code>/chatid</code> ou consulte o @userinfobot.
+            </p>
+            <Input
+              placeholder="123456789"
+              value={form[SETTING_KEYS.telegram_chat_id] ?? ""}
+              onChange={(e) => updateField(SETTING_KEYS.telegram_chat_id, e.target.value)}
+            />
+          </div>
+          <Separator />
+          <div className="space-y-2">
+            <Label>Webhook WhatsApp (Zapier, Make, n8n)</Label>
+            <p className="text-xs text-muted-foreground">
+              Alternativa: webhook que envia para WhatsApp ao concluir jobs.
             </p>
             <Input
               placeholder="https://hooks.zapier.com/hooks/catch/..."
