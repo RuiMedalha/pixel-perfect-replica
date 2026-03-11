@@ -444,7 +444,19 @@ serve(async (req) => {
 
     console.log(`🏁 Job ${job.id} ${finalStatus}: ${totalProcessed} processed, ${totalFailed} failed`);
 
-    // === WhatsApp Notification ===
+    // === Notifications (Telegram + WhatsApp) ===
+    const ok = totalProcessed - totalFailed;
+    const elapsedSec = Math.round((Date.now() - startTime) / 1000);
+
+    // Telegram
+    if (telegramChatId) {
+      const msg = finalStatus === "completed"
+        ? `✅ <b>Otimização concluída!</b>\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${elapsedSec}s`
+        : `⚠️ <b>Job cancelado</b>\n\n${totalProcessed} de ${job.total_products} processados`;
+      await sendTelegramNotification(telegramChatId, msg);
+    }
+
+    // WhatsApp webhook
     try {
       const { data: whatsappSetting } = await supabase
         .from("settings")
@@ -454,9 +466,8 @@ serve(async (req) => {
         .maybeSingle();
 
       if (whatsappSetting?.value) {
-        const ok = totalProcessed - totalFailed;
         const message = finalStatus === "completed"
-          ? `✅ *Otimização concluída!*\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${Math.round((Date.now() - startTime) / 1000)}s`
+          ? `✅ *Otimização concluída!*\n\n📦 ${ok} produto(s) otimizado(s)\n❌ ${totalFailed} erro(s)\n⏱️ Tempo: ${elapsedSec}s`
           : `⚠️ *Job cancelado*\n\n${totalProcessed} de ${job.total_products} processados`;
 
         await fetch(whatsappSetting.value, {
