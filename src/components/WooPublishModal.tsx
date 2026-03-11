@@ -13,6 +13,7 @@ import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent, Calendar
 import { cn } from "@/lib/utils";
 import { WOO_PUBLISH_GROUPS, ALL_WOO_FIELD_KEYS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { useSettings } from "@/hooks/useSettings";
+import { WooSiteSelector } from "@/components/WooSiteSelector";
 import type { Product } from "@/hooks/useProducts";
 
 export interface PricingOptions {
@@ -148,6 +149,10 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
         <DialogHeader>
           <DialogTitle className="text-base">Publicar {productCount} produto(s) no WooCommerce</DialogTitle>
         </DialogHeader>
+
+        <div className="flex items-center gap-2">
+          <WooSiteSelector setGlobal className="h-8 text-xs flex-1" />
+        </div>
 
         <p className="text-xs text-muted-foreground">Escolha os campos a enviar. O processamento é feito em background — pode fechar o browser.</p>
 
