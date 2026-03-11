@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search, Eye } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
