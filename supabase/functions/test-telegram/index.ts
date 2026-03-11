@@ -114,6 +114,17 @@ serve(async (req) => {
         );
       }
 
+      if (typeof description === "string" && description.toLowerCase().includes("bots can't send messages to bots")) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "O Chat ID que introduziste pertence a outro bot. Bots não podem enviar mensagens entre si. Usa o teu Chat ID pessoal — envia /start ao @userinfobot no Telegram para o obteres.",
+            details: data,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ error: `Telegram API failed [${response.status}]`, details: data }),
         { status: response.status || 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
