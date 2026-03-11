@@ -76,6 +76,28 @@ export class CancellationToken {
   get isCancelled() { return this._cancelled; }
 }
 
+// Retry helper with exponential backoff
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 2, baseDelayMs = 2000): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      const msg = err?.message || '';
+      // Only retry on network/timeout/429 errors
+      if (attempt < maxRetries && (msg.includes('429') || msg.includes('timeout') || msg.includes('FunctionsFetchError') || msg.includes('Failed to fetch'))) {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        console.log(`Retry ${attempt + 1}/${maxRetries} after ${delay}ms for: ${msg}`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 // Process ONE product, ONE phase at a time
 async function optimizeSingle(
   productId: string,
@@ -85,12 +107,14 @@ async function optimizeSingle(
   phase?: number,
   speedFlags?: { skipKnowledge?: boolean; skipScraping?: boolean; skipReranking?: boolean },
 ) {
-  const { data, error } = await supabase.functions.invoke("optimize-product", {
-    body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId, phase, ...speedFlags },
+  return withRetry(async () => {
+    const { data, error } = await supabase.functions.invoke("optimize-product", {
+      body: { productIds: [productId], fieldsToOptimize, modelOverride, workspaceId, phase, ...speedFlags },
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
   });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data;
 }
 
 export function useOptimizeProducts() {
