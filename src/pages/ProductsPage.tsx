@@ -1601,8 +1601,8 @@ const ProductsPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
             {(() => {
-              const hasAlreadyOptimized = (products ?? []).some(
-                p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+              const hasAlreadyOptimized = (allProductsLight ?? []).some(
+                (p: any) => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
               );
               return (
                 <Button
