@@ -18,7 +18,7 @@ export function useProducts() {
       while (true) {
         let query = supabase
           .from("products")
-          .select("*")
+          .select("id, sku, original_title, optimized_title, original_price, optimized_price, sale_price, optimized_sale_price, status, product_type, parent_product_id, category, category_id, image_urls, technical_specs, attributes, meta_title, meta_description, seo_slug, optimized_description, optimized_short_description, short_description, original_description, tags, faq, focus_keyword, image_alt_texts, seo_score, woocommerce_id, source_file, supplier_ref, workspace_id, user_id, created_at, updated_at, upsell_skus, crosssell_skus")
           .order("updated_at", { ascending: false })
           .range(from, from + pageSize - 1);
         if (activeWorkspace) {
