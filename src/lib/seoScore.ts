@@ -119,6 +119,47 @@ export function calculateSeoScore(product: Product): { score: number; checks: Se
   return { score, checks };
 }
 
+export function getSeoFixSuggestions(checks: SeoCheck[]): string[] {
+  const suggestions: string[] = [];
+  for (const check of checks) {
+    if (check.passed) continue;
+    switch (check.label) {
+      case "Meta Title":
+        suggestions.push("Otimize o produto para gerar um Meta Title com 20-60 caracteres.");
+        break;
+      case "Meta Description":
+        suggestions.push("Otimize a Fase 2 (SEO) para gerar uma Meta Description com 50-160 caracteres.");
+        break;
+      case "SEO Slug":
+        suggestions.push("Execute a otimização SEO para gerar automaticamente o slug.");
+        break;
+      case "Focus Keywords":
+      case "Keyword no Meta Title":
+        suggestions.push("Otimize o produto para gerar Focus Keywords e garantir que aparecem no título.");
+        break;
+      case "Título Otimizado":
+        suggestions.push("Execute a Fase 1 (Conteúdo Base) para gerar um título otimizado.");
+        break;
+      case "Descrição Otimizada":
+        suggestions.push("Otimize a Fase 1 para gerar uma descrição detalhada (>100 caracteres).");
+        break;
+      case "Descrição Curta":
+        suggestions.push("Otimize a Fase 1 para gerar uma descrição curta para o WooCommerce.");
+        break;
+      case "FAQ":
+        suggestions.push("Otimize a Fase 2 (SEO) para gerar pelo menos 3 perguntas FAQ.");
+        break;
+      case "Alt Text Imagens":
+        suggestions.push("Otimize a Fase 2 para gerar alt text para todas as imagens do produto.");
+        break;
+      case "Categoria":
+        suggestions.push("Defina manualmente ou otimize com Fase 1 para sugerir uma categoria.");
+        break;
+    }
+  }
+  return suggestions;
+}
+
 export function getSeoScoreColor(score: number): string {
   if (score >= 80) return "text-green-600";
   if (score >= 50) return "text-yellow-600";

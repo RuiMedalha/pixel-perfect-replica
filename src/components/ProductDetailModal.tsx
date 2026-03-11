@@ -20,7 +20,7 @@ import { useUpdateProductStatus } from "@/hooks/useProducts";
 import { useProductVersions, useRestoreVersion, type ProductVersion } from "@/hooks/useProductVersions";
 import { usePublishWooCommerce } from "@/hooks/usePublishWooCommerce";
 import { useProductOptimizationLogs } from "@/hooks/useOptimizationLogs";
-import { calculateSeoScore, getSeoScoreColor, getSeoScoreBg } from "@/lib/seoScore";
+import { calculateSeoScore, getSeoScoreColor, getSeoScoreBg, getSeoFixSuggestions } from "@/lib/seoScore";
 import { format } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -332,7 +332,22 @@ export function ProductDetailModal({ product, onClose }: Props) {
                       </div>
                     ))}
                   </div>
-                   {/* Focus keywords input */}
+                  {/* Auto-fix suggestions when score < 70 */}
+                  {score < 70 && (() => {
+                    const suggestions = getSeoFixSuggestions(checks);
+                    if (suggestions.length === 0) return null;
+                    return (
+                      <Alert className="border-yellow-500/30 bg-yellow-500/5">
+                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                        <AlertDescription className="space-y-1">
+                          <p className="text-sm font-medium">Sugestões para melhorar o SEO:</p>
+                          <ul className="text-xs space-y-0.5 list-disc list-inside text-muted-foreground">
+                            {suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                          </ul>
+                        </AlertDescription>
+                      </Alert>
+                    );
+                  })()}
                    <div className="border border-border/50 rounded-lg p-4">
                      <h4 className="text-sm font-semibold mb-2">Focus Keywords (RankMath)</h4>
                      <Input
@@ -488,48 +503,75 @@ export function ProductDetailModal({ product, onClose }: Props) {
                 <p className="text-sm text-muted-foreground">
                   {versions.length} versão(ões) anteriore(s) disponíve(is) (máx. 3)
                 </p>
-                {versions.map((v) => (
-                  <Card key={v.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            v{v.version_number}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {format(new Date(v.created_at), "dd MMM yyyy HH:mm", { locale: pt })}
-                          </span>
+                {versions.map((v) => {
+                  const diffFields = [
+                    { label: "Título", current: product.optimized_title, old: v.optimized_title },
+                    { label: "Slug", current: product.seo_slug, old: v.seo_slug },
+                    { label: "Meta Title", current: product.meta_title, old: v.meta_title },
+                    { label: "Meta Desc.", current: product.meta_description, old: v.meta_description },
+                    { label: "Desc. Curta", current: product.optimized_short_description, old: v.optimized_short_description },
+                    { label: "Preço", current: product.optimized_price?.toString(), old: v.optimized_price?.toString() },
+                  ];
+                  const changedFields = diffFields.filter(f => (f.current ?? '') !== (f.old ?? ''));
+                  
+                  return (
+                    <Card key={v.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              v{v.version_number}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {format(new Date(v.created_at), "dd MMM yyyy HH:mm", { locale: pt })}
+                            </span>
+                            {changedFields.length > 0 && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {changedFields.length} alteração(ões)
+                              </Badge>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleRestore(v)}
+                            disabled={restoreVersion.isPending}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 mr-1" /> Restaurar
+                          </Button>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleRestore(v)}
-                          disabled={restoreVersion.isPending}
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 mr-1" /> Restaurar
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-muted-foreground">Título:</span>
-                          <p className="truncate">{v.optimized_title ?? "—"}</p>
+                        {/* Diff comparison */}
+                        <div className="space-y-2">
+                          {diffFields.map((field, idx) => {
+                            const changed = (field.current ?? '') !== (field.old ?? '');
+                            return (
+                              <div key={idx} className={cn("text-xs rounded-md p-2", changed ? "bg-yellow-500/5 border border-yellow-500/20" : "bg-muted/30")}>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="font-medium">{field.label}</span>
+                                  {changed && <Badge variant="outline" className="text-[9px] h-4 px-1 border-yellow-500/40 text-yellow-600">alterado</Badge>}
+                                </div>
+                                {changed ? (
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Versão anterior:</span>
+                                      <p className="line-through opacity-60 truncate">{field.old || "—"}</p>
+                                    </div>
+                                    <div>
+                                      <span className="text-[10px] text-muted-foreground block mb-0.5">Atual:</span>
+                                      <p className="truncate font-medium">{field.current || "—"}</p>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="truncate text-muted-foreground">{field.current || "—"}</p>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div>
-                          <span className="text-muted-foreground">Slug:</span>
-                          <p className="truncate">{v.seo_slug ?? "—"}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Desc. Curta:</span>
-                          <p className="truncate">{v.optimized_short_description ?? "—"}</p>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Preço:</span>
-                          <p>{v.optimized_price ?? "—"}€</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </TabsContent>

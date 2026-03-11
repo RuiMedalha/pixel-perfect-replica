@@ -60,7 +60,7 @@ const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
-  const { enrich, isEnriching, missingVariations, createMissingVariations } = useEnrichProducts();
+  const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
   const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
@@ -282,7 +282,13 @@ const ProductsPage = () => {
         allProducts.filter(c => c.parent_product_id === p.parent_product_id).forEach(c => expandedIds.add(c.id));
       }
     });
-    const finalIds = Array.from(expandedIds);
+    // Sort: variable parents first, then simple, then variations
+    const finalIds = Array.from(expandedIds).sort((a, b) => {
+      const pa = allProducts.find(pr => pr.id === a);
+      const pb = allProducts.find(pr => pr.id === b);
+      const order = (p: any) => p?.product_type === 'variable' ? 0 : p?.product_type === 'simple' ? 1 : 2;
+      return order(pa) - order(pb);
+    });
     if (finalIds.length > ids.length) {
       toast.info(`${finalIds.length - ids.length} produto(s) da mesma família incluído(s) automaticamente para otimização em grupo.`);
     }
@@ -835,7 +841,35 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      {/* Background Job Progress Bar */}
+      {/* Enrichment Progress Bar */}
+      {enrichProgress && enrichProgress.done < enrichProgress.total && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                <span className="text-sm font-medium">
+                  A enriquecer: {enrichProgress.currentSku}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {enrichProgress.estimatedSecondsLeft != null && (
+                  <span className="text-xs text-muted-foreground">
+                    ~{enrichProgress.estimatedSecondsLeft > 60
+                      ? `${Math.round(enrichProgress.estimatedSecondsLeft / 60)}min`
+                      : `${enrichProgress.estimatedSecondsLeft}s`} restantes
+                  </span>
+                )}
+                <span className="text-sm font-mono text-muted-foreground">
+                  {enrichProgress.done}/{enrichProgress.total}
+                </span>
+              </div>
+            </div>
+            <Progress value={(enrichProgress.done / enrichProgress.total) * 100} className="h-2" />
+          </CardContent>
+        </Card>
+      )}
+
       {activeJob && activeJob.status !== "completed" && activeJob.status !== "cancelled" && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4">
@@ -1772,6 +1806,7 @@ const ProductsPage = () => {
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={isCreatingPublish}
+            products={(products ?? []).filter(p => allPublishIds.includes(p.id))}
             onConfirm={async (fields, pricing, scheduledFor, skuPrefix) => {
               try {
                 await createPublishJob({

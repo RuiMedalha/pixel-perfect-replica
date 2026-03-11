@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent, CalendarIcon, Clock } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent, CalendarIcon, Clock, AlertTriangle, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WOO_PUBLISH_GROUPS, ALL_WOO_FIELD_KEYS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { useSettings } from "@/hooks/useSettings";
+import type { Product } from "@/hooks/useProducts";
 
 export interface PricingOptions {
   markupPercent: number;
@@ -23,6 +25,33 @@ export interface SkuPrefixOptions {
   onlyIfMissing: boolean;
 }
 
+interface ValidationItem {
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+function validateProducts(products: Product[]): { items: ValidationItem[]; passRate: number } {
+  const items: ValidationItem[] = [];
+  const withTitle = products.filter(p => (p.optimized_title ?? '').length > 5);
+  items.push({ label: "Título otimizado", passed: withTitle.length === products.length, detail: `${withTitle.length}/${products.length}` });
+  
+  const withDesc = products.filter(p => (p.optimized_description ?? '').length > 20);
+  items.push({ label: "Descrição otimizada", passed: withDesc.length === products.length, detail: `${withDesc.length}/${products.length}` });
+  
+  const withPrice = products.filter(p => p.optimized_price != null || p.original_price != null);
+  items.push({ label: "Preço definido", passed: withPrice.length === products.length, detail: `${withPrice.length}/${products.length}` });
+  
+  const withImages = products.filter(p => (p.image_urls ?? []).length > 0);
+  items.push({ label: "Pelo menos 1 imagem", passed: withImages.length === products.length, detail: `${withImages.length}/${products.length}` });
+  
+  const withSku = products.filter(p => (p.sku ?? '').length > 0);
+  items.push({ label: "SKU definido", passed: withSku.length === products.length, detail: `${withSku.length}/${products.length}` });
+
+  const passRate = Math.round((items.filter(i => i.passed).length / items.length) * 100);
+  return { items, passRate };
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -31,9 +60,10 @@ interface Props {
   variableParentCount?: number;
   autoIncludedVariationsCount?: number;
   isPending: boolean;
+  products?: Product[];
 }
 
-export function WooPublishModal({ open, onClose, onConfirm, productCount, variableParentCount = 0, autoIncludedVariationsCount = 0, isPending }: Props) {
+export function WooPublishModal({ open, onClose, onConfirm, productCount, variableParentCount = 0, autoIncludedVariationsCount = 0, isPending, products = [] }: Props) {
   const { data: settings } = useSettings();
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -121,6 +151,31 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
 
         <p className="text-xs text-muted-foreground">Escolha os campos a enviar. O processamento é feito em background — pode fechar o browser.</p>
 
+        {/* Pre-publish validation checklist */}
+        {products.length > 0 && (() => {
+          const { items, passRate } = validateProducts(products);
+          const hasIssues = passRate < 100;
+          return (
+            <div className={cn("border rounded-md p-3 space-y-2", hasIssues ? "border-yellow-500/50 bg-yellow-500/5" : "border-green-500/50 bg-green-500/5")}>
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                {hasIssues ? <AlertTriangle className="w-4 h-4 text-yellow-500" /> : <Check className="w-4 h-4 text-green-500" />}
+                Validação pré-publicação ({passRate}%)
+              </div>
+              <div className="space-y-1">
+                {items.map((item, idx) => (
+                  <div key={idx} className="flex items-center gap-2 text-xs">
+                    {item.passed ? <Check className="w-3 h-3 text-green-500 shrink-0" /> : <X className="w-3 h-3 text-yellow-500 shrink-0" />}
+                    <span className={cn(!item.passed && "text-yellow-600 dark:text-yellow-400")}>{item.label}</span>
+                    <span className="ml-auto text-muted-foreground">{item.detail}</span>
+                  </div>
+                ))}
+              </div>
+              {hasIssues && (
+                <p className="text-[10px] text-yellow-600 dark:text-yellow-400">⚠️ Produtos com campos em falta serão publicados, mas podem ter informação incompleta.</p>
+              )}
+            </div>
+          );
+        })()}
         {variableParentCount > 0 && (
           <div className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
             <p className="font-medium">🔗 {variableParentCount} produto(s) variável(eis) detetado(s)</p>

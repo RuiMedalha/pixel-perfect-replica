@@ -406,7 +406,27 @@ Deno.serve(async (req) => {
             }
           }
 
-          // --- Save knowledge chunks ---
+          // --- Deduplicate images: remove variation images that are identical to parent ---
+          if (updateData.product_type === 'variable' || product.product_type === 'variable') {
+            const parentImages = new Set((updateData.image_urls || product.image_urls || []).map((u: string) => u.toLowerCase()));
+            if (parentImages.size > 0) {
+              const { data: children } = await supabase.from("products")
+                .select("id, image_urls")
+                .eq("parent_product_id", product.id)
+                .eq("workspace_id", workspaceId);
+              if (children) {
+                for (const child of children) {
+                  const childImages = child.image_urls || [];
+                  const unique = childImages.filter((u: string) => !parentImages.has(u.toLowerCase()));
+                  if (unique.length !== childImages.length) {
+                    await supabase.from("products").update({ image_urls: unique.length > 0 ? unique : null }).eq("id", child.id);
+                    console.log(`Deduped ${childImages.length - unique.length} images from variation ${child.id}`);
+                  }
+                }
+              }
+            }
+          }
+
           const extractedText = markdown.substring(0, 30000);
 
           const { data: fileRecord } = await supabase.from("uploaded_files").insert({
