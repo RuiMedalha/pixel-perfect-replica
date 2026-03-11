@@ -275,6 +275,8 @@ async function sendParsedRowsInBatches(
             parsedRows: batch,
             columnMapping: columnMapping || undefined,
             workspaceId: workspaceId || undefined,
+            updateMode: updateMode || undefined,
+            updateFields: updateFields || undefined,
           },
         });
 
