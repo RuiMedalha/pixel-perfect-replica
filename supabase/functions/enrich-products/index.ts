@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               url: searchUrl,
               formats: ['markdown', 'html'],
-              onlyMainContent: true,
+              onlyMainContent: false,
             }),
           });
 
