@@ -1453,8 +1453,8 @@ const ProductsPage = () => {
             </DialogTitle>
           </DialogHeader>
           {(() => {
-            const alreadyOptimized = (products ?? []).filter(
-              p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+            const alreadyOptimized = (allProductsLight ?? []).filter(
+              (p: any) => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
             ).length;
             const pendingCount = pendingOptimizeIds.length - alreadyOptimized;
             return (
