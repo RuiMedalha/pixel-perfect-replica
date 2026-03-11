@@ -71,7 +71,6 @@ function CategoryTreeItem({
 }
 
 const CategoriesPage = () => {
-  const { activeWorkspace } = useWorkspaceContext();
   const { data: tree, flat, isLoading } = useCategoryTree();
   const { data: products } = useProducts();
   const createCategory = useCreateCategory();
