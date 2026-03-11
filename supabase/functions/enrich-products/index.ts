@@ -278,6 +278,10 @@ Deno.serve(async (req) => {
 
           // Variations
           if (aiParsed.variations && aiParsed.variations.length > 0) {
+            // Only set as variable if there are real SKUs detected
+            const mainVar = aiParsed.variations[0];
+            const hasRealSkus = mainVar.skus && mainVar.skus.length > 0 && mainVar.skus.length === mainVar.values?.length;
+            
             // Sort variation values by numeric size/diameter order
             const sortedVariations = aiParsed.variations.map((v: any) => ({
               ...v,
@@ -287,9 +291,9 @@ Deno.serve(async (req) => {
                 if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
                 return a.localeCompare(b);
               }),
-              skus: v.skus ? [...v.skus] : undefined, // preserve SKU order alignment handled below
+              skus: v.skus ? [...v.skus] : undefined,
             }));
-            // If skus exist, re-sort them to match the new values order
+            // Re-sort SKUs to match the new values order
             for (const v of sortedVariations) {
               if (v.skus && v.skus.length === aiParsed.variations.find((ov: any) => ov.name === v.name)?.values?.length) {
                 const original = aiParsed.variations.find((ov: any) => ov.name === v.name);
@@ -298,8 +302,23 @@ Deno.serve(async (req) => {
               }
             }
             updateData.attributes = sortedVariations;
-            if (product.product_type === 'simple') {
-              updateData.product_type = 'variable';
+            
+            // Only convert to variable if we have real SKUs AND at least one exists in the workspace
+            if (hasRealSkus && product.product_type === 'simple') {
+              // Check if any of these SKUs actually exist in the workspace before converting
+              const skusToCheck = mainVar.skus.filter((s: string) => s !== sku);
+              let anyExist = false;
+              for (let ci = 0; ci < skusToCheck.length; ci += 100) {
+                const chunk = skusToCheck.slice(ci, ci + 100);
+                const { data: found, count } = await supabase.from("products")
+                  .select("id", { count: 'exact', head: true })
+                  .eq("workspace_id", workspaceId)
+                  .in("sku", chunk);
+                if (count && count > 0) { anyExist = true; break; }
+              }
+              if (anyExist) {
+                updateData.product_type = 'variable';
+              }
             }
           }
 
