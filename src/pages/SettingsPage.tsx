@@ -17,6 +17,7 @@ import { FieldPromptsSettings } from "@/components/FieldPromptsSettings";
 import { DescriptionTemplateEditor } from "@/components/DescriptionTemplateEditor";
 import { AI_MODELS } from "@/hooks/useOptimizeProducts";
 import { WOO_PUBLISH_GROUPS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
+import { WooSitesManager } from "@/components/WooSitesManager";
 
 interface Supplier {
   name: string;
