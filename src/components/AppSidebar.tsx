@@ -20,6 +20,7 @@ const navItems = [
   { to: "/produtos", icon: Package, label: "Produtos" },
   { to: "/variacoes", icon: GitBranch, label: "Variações" },
   { to: "/categorias", icon: FolderTree, label: "Categorias" },
+  { to: "/importar-woo", icon: ShoppingCart, label: "Importar WooCommerce" },
 ];
 
 const adminItems = [

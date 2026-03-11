@@ -51,6 +51,7 @@ function ProtectedRoutes() {
           <Route path="/produtos" element={<ProductsPage />} />
           <Route path="/variacoes" element={<VariationsPage />} />
           <Route path="/categorias" element={<CategoriesPage />} />
+          <Route path="/importar-woo" element={<WooImportPage />} />
           {profile?.isAdmin && (
             <>
               <Route path="/configuracoes" element={<SettingsPage />} />
