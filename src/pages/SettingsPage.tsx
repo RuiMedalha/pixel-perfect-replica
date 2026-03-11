@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Save, Eye, EyeOff, Loader2, Zap } from "lucide-react";
+import { Plus, Trash2, Save, Eye, EyeOff, Loader2, Zap, Send } from "lucide-react";
 import { useSettings, useSaveSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
