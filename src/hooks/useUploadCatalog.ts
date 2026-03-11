@@ -7,7 +7,7 @@ import { PDFDocument } from "pdf-lib";
 
 export type ColumnMapping = Record<string, string>; // productField -> excelColumn
 
-export type FileUploadType = "products" | "knowledge";
+export type FileUploadType = "products" | "knowledge" | "update";
 
 export interface UploadedFile {
   id: string;
