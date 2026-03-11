@@ -24,34 +24,127 @@ interface EnrichResult {
   missingVariations: MissingVariation[];
 }
 
+export interface EnrichProgress {
+  total: number;
+  done: number;
+  currentSku: string;
+  estimatedSecondsLeft: number | null;
+  startedAt: number;
+}
+
 export function useEnrichProducts() {
   const [isEnriching, setIsEnriching] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
   const [missingVariations, setMissingVariations] = useState<MissingVariation[]>([]);
+  const [progress, setProgress] = useState<EnrichProgress | null>(null);
   const qc = useQueryClient();
 
   const enrich = async ({
     workspaceId,
     supplierPrefixes = [],
     productIds,
+    onProgress,
   }: {
     workspaceId: string;
     supplierPrefixes?: SupplierPrefix[];
     productIds?: string[];
+    onProgress?: (p: EnrichProgress) => void;
   }) => {
 
     setIsEnriching(true);
     setResult(null);
     setMissingVariations([]);
+    setProgress(null);
 
     try {
+      // If we have specific productIds and more than 5, batch them for progress reporting
+      if (productIds && productIds.length > 5) {
+        const batchSize = 3;
+        const startedAt = Date.now();
+        const durations: number[] = [];
+        let totalEnriched = 0;
+        let totalFailed = 0;
+        let totalSkipped = 0;
+        const allMissing: MissingVariation[] = [];
+        const total = productIds.length;
+
+        for (let i = 0; i < productIds.length; i += batchSize) {
+          const batch = productIds.slice(i, i + batchSize);
+          
+          // Update progress
+          const done = i;
+          let estimatedSecondsLeft: number | null = null;
+          if (durations.length > 0) {
+            const avgMs = durations.reduce((a, b) => a + b, 0) / durations.length;
+            const remaining = Math.ceil((total - done) / batchSize);
+            estimatedSecondsLeft = Math.round((avgMs * remaining) / 1000);
+          }
+          const p: EnrichProgress = { total, done, currentSku: `Lote ${Math.floor(i / batchSize) + 1}`, estimatedSecondsLeft, startedAt };
+          setProgress(p);
+          onProgress?.(p);
+
+          const batchStart = Date.now();
+          const { data, error } = await supabase.functions.invoke("enrich-products", {
+            body: { workspaceId, supplierPrefixes, productIds: batch },
+          });
+          durations.push(Date.now() - batchStart);
+
+          if (error) {
+            totalFailed += batch.length;
+            continue;
+          }
+
+          totalEnriched += data.enriched || 0;
+          totalFailed += data.failed || 0;
+          totalSkipped += data.skipped || 0;
+
+          for (const r of (data.results || [])) {
+            if (r.missingVariations && r.missingVariations.length > 0) {
+              for (const mv of r.missingVariations) {
+                allMissing.push({ parentSku: r.sku, ...mv });
+              }
+            }
+          }
+
+          // Invalidate between batches for progressive UI updates
+          qc.invalidateQueries({ queryKey: ["products"] });
+        }
+
+        const res: EnrichResult = {
+          total,
+          enriched: totalEnriched,
+          failed: totalFailed,
+          skipped: totalSkipped,
+          missingVariations: allMissing,
+        };
+        setResult(res);
+        setMissingVariations(allMissing);
+        setProgress({ total, done: total, currentSku: "", estimatedSecondsLeft: 0, startedAt });
+
+        if (totalEnriched > 0) {
+          qc.invalidateQueries({ queryKey: ["products"] });
+          toast.success(`${totalEnriched} produto(s) enriquecidos via web!${totalSkipped > 0 ? ` (${totalSkipped} já tinham dados)` : ""}`);
+        } else if (totalSkipped > 0) {
+          toast.info(`Todos os ${totalSkipped} produtos já tinham dados de enriquecimento.`);
+        } else {
+          toast.warning("Nenhum produto foi enriquecido.");
+        }
+
+        if (allMissing.length > 0) {
+          toast.warning(`⚠️ ${allMissing.length} variação(ões) não encontrada(s) na lista.`, { duration: 15000 });
+        }
+
+        setTimeout(() => setProgress(null), 3000);
+        return res;
+      }
+
+      // Original single-call for small batches or full workspace
       const { data, error } = await supabase.functions.invoke("enrich-products", {
         body: { workspaceId, supplierPrefixes, productIds },
       });
 
       if (error) throw error;
 
-      // Collect missing variations from all results
       const allMissing: MissingVariation[] = [];
       for (const r of (data.results || [])) {
         if (r.missingVariations && r.missingVariations.length > 0) {
@@ -84,7 +177,6 @@ export function useEnrichProducts() {
         toast.warning("Nenhum produto foi enriquecido. Verifique os prefixos de fornecedor.");
       }
 
-      // Show warning for missing variations
       if (allMissing.length > 0) {
         const skuList = allMissing.map(m => m.sku).join(', ');
         toast.warning(
@@ -110,7 +202,6 @@ export function useEnrichProducts() {
 
       let created = 0;
       for (const mv of variations) {
-        // Get parent product data
         const { data: parent } = await supabase.from("products")
           .select("id, original_title, image_urls, technical_specs, source_file, supplier_ref, attributes")
           .eq("sku", mv.parentSku)
@@ -146,5 +237,5 @@ export function useEnrichProducts() {
     }
   };
 
-  return { enrich, isEnriching, result, missingVariations, createMissingVariations };
+  return { enrich, isEnriching, result, missingVariations, createMissingVariations, progress };
 }
