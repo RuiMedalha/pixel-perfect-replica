@@ -518,8 +518,11 @@ async function parseWithAI(apiKey: string, markdown: string, sku: string, title:
     const systemPrompt = `You are a product data extraction specialist. You analyze scraped web pages of supplier/manufacturer product pages and extract structured data.
 
 RULES:
-- Only include images that belong to THIS specific product (not series, related products, icons, logos, newsletter images, or footer images)
-- Filter out SVG icons, tiny images, and decorative elements
+- Include ALL images that belong to THIS specific product: main image, gallery images, zoom images, alternate angles, detail shots
+- A product typically has 3-10 images. Extract ALL of them from the gallery/carousel/slider
+- Filter out ONLY: SVG icons, tiny decorative images (<50px), newsletter banners, footer logos, cookie/popup images, social media icons
+- Do NOT filter out product images just because they look similar — each angle/view matters
+- Look for image galleries, carousels, sliders, thumbnail lists — extract every product photo URL from these
 - Detect product variations (sizes, colors, diameters, capacities, etc.)
 - CRITICAL: Extract the SKU for each variation. SKUs are typically found in:
   * URLs inside onclick="location.href='.../{SKU}'" attributes on radio buttons or links
