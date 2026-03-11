@@ -334,7 +334,7 @@ const ProductsPage = () => {
     }
 
     const nameMap: Record<string, string> = {};
-    (products ?? []).forEach(p => {
+    (allProductsLight ?? []).forEach((p: any) => {
       if (pendingOptimizeIds.includes(p.id)) {
         nameMap[p.id] = p.optimized_title || p.original_title || p.sku || p.id.slice(0, 8);
       }
