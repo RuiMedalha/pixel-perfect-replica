@@ -499,8 +499,8 @@ serve(async (req) => {
       const batch = products.slice(batchStart, batchStart + CONCURRENCY);
       const batchResults = await Promise.allSettled(batch.map(async (product) => {
       try {
-        // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) ===
-        if (product.optimized_title || product.optimized_description) {
+        // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) — only in phase 1 or no-phase mode ===
+        if (!phase || phase === 1) if (product.optimized_title || product.optimized_description) {
           // Get current version count
           const { data: existingVersions } = await supabase
             .from("product_versions")
