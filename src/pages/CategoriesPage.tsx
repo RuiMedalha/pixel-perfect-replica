@@ -72,7 +72,7 @@ function CategoryTreeItem({
 
 const CategoriesPage = () => {
   const { data: tree, flat, isLoading } = useCategoryTree();
-  const { data: products } = useProducts();
+  const { data: products } = useAllProductIds();
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();

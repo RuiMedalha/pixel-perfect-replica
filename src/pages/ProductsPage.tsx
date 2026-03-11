@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
+import { useProducts, useAllProductIds, useUpdateProductStatus, useProductFilterOptions, type Product, type ProductFilters } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { useOptimizationJob } from "@/hooks/useOptimizationJob";
 import { usePublishWooCommerce, type PublishResult } from "@/hooks/usePublishWooCommerce";

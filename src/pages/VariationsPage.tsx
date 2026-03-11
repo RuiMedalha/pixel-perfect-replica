@@ -16,7 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 type AnalysisState = "idle" | "analyzing" | "results";
 
 const VariationsPage = () => {
-  const { data: products, isLoading } = useProducts();
+  const { data: products, isLoading } = useAllProductIds();
   const { activeWorkspace } = useWorkspaceContext();
   const detectVariations = useDetectVariations();
   const applyVariations = useApplyVariations();

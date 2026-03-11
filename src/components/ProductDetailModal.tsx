@@ -30,7 +30,7 @@ interface Props {
 }
 
 export function ProductDetailModal({ product, onClose }: Props) {
-  const { data: allProducts } = useProducts();
+  const { data: allProducts } = useAllProductIds();
   const updateProduct = useUpdateProduct();
   const updateStatus = useUpdateProductStatus();
   const publishWoo = usePublishWooCommerce();
