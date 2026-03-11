@@ -116,7 +116,9 @@ async function insertProducts(
   columnMapping: Record<string, string> | undefined,
   userId: string,
   workspaceId: string | undefined,
-  fileName: string
+  fileName: string,
+  updateMode?: boolean,
+  updateFields?: string[]
 ) {
   const adminDb = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
