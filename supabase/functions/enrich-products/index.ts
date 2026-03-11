@@ -418,12 +418,26 @@ ${truncatedMd}`;
                         items: { type: "string" },
                         description: "SKUs for each variation value, if visible (same order as values)"
                       }
-                    },
-                    required: ["name", "values"],
-                    additionalProperties: false
-                  },
-                  description: "Product variations (sizes, colors, etc.)"
-                },
+                 },
+                     required: ["name", "values"],
+                     additionalProperties: false
+                   },
+                   description: "Product variations (sizes, colors, etc.)"
+                 },
+                 variation_urls: {
+                   type: "array",
+                   items: {
+                     type: "object",
+                     properties: {
+                       sku: { type: "string" },
+                       url: { type: "string" },
+                       value: { type: "string" }
+                     },
+                     required: ["sku", "value"],
+                     additionalProperties: false
+                   },
+                   description: "Individual URLs for each variation, if clickable links are visible on the page (e.g. size selector links)"
+                 },
                 specs: {
                   type: "object",
                   additionalProperties: { type: "string" },
