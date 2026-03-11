@@ -37,13 +37,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { workspaceId } = await req.json();
-    if (!workspaceId) {
-      return new Response(JSON.stringify({ error: "workspaceId obrigatório" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // workspaceId is no longer required — categories are global per user
+    // Accept it for backward compat but don't use it for scoping
 
     // Get WooCommerce credentials
     const { data: settings } = await supabase
