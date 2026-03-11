@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
@@ -60,7 +60,7 @@ const ProductsPage = () => {
   const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
-  const { enrich, isEnriching } = useEnrichProducts();
+  const { enrich, isEnriching, missingVariations, createMissingVariations } = useEnrichProducts();
   const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
@@ -101,6 +101,7 @@ const ProductsPage = () => {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportSkuPrefix, setExportSkuPrefix] = useState("");
+  const [dismissedMissing, setDismissedMissing] = useState(false);
   const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -988,6 +989,51 @@ const ProductsPage = () => {
             )}
           </CardContent>
         </Card>
+      )}
+      {/* Missing variations warning banner */}
+      {missingVariations.length > 0 && !dismissedMissing && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              <span className="font-semibold text-destructive text-sm">
+                {missingVariations.length} variação(ões) em falta na lista
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  if (activeWorkspace) {
+                    createMissingVariations(activeWorkspace.id, missingVariations);
+                  }
+                }}
+              >
+                Criar {missingVariations.length} variação(ões)
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setDismissedMissing(true);
+                }}
+                className="text-muted-foreground"
+              >
+                Ignorar
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+            {missingVariations.map((mv, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs bg-background rounded px-3 py-1.5 border">
+                <span className="font-mono font-semibold text-destructive">{mv.sku}</span>
+                <span className="text-muted-foreground">({mv.value})</span>
+                <span className="text-muted-foreground">← pai: {mv.parentSku}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
