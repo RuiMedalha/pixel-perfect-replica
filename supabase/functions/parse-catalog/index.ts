@@ -77,7 +77,7 @@ serve(async (req) => {
     // ─── Product parsing with pre-parsed rows from frontend ───
     if (parsedRows && Array.isArray(parsedRows)) {
       // Frontend already parsed the Excel — just insert into DB
-      const result = await insertProducts(parsedRows, columnMapping, userId, workspaceId, fileName);
+      const result = await insertProducts(parsedRows, columnMapping, userId, workspaceId, fileName, updateMode, updateFields);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
