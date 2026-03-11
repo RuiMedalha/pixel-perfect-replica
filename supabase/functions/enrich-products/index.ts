@@ -578,9 +578,11 @@ RULES:
 - Do NOT filter out product images just because they look similar — each angle/view matters
 - Look for image galleries, carousels, sliders, thumbnail lists — extract every product photo URL from these
 - Detect product variations (sizes, colors, diameters, capacities, etc.)
-- CRITICAL: Extract the SKU for each variation. SKUs are typically found in:
-  * URLs inside onclick="location.href='.../{SKU}'" attributes on radio buttons or links
-  * The last numeric segment of variation URLs (e.g. /product-name/62785 → SKU is 62785)
+- CRITICAL: Extract the SKU for each variation. SKUs are short numeric or alphanumeric codes (e.g. 80020, 60584).
+- NEVER return a full URL as a SKU. If a variation link is "https://www.lacor.es/cacerola-20-caliza/80020", the SKU is "80020", NOT the URL.
+- SKUs are typically found in:
+  * The last numeric segment of variation URLs (e.g. /product-name/62785 → SKU is "62785")
+  * URLs inside onclick="location.href='.../{SKU}'" attributes
   * Data attributes, select option values, or hidden inputs
 - The "skus" array MUST have the same length as "values" array, in matching order
 - Extract variation_urls with the full URL and extracted SKU for each variation
