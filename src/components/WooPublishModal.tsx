@@ -176,7 +176,7 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
             </div>
           );
         })()}
-
+        {variableParentCount > 0 && (
           <div className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-md px-3 py-2 space-y-0.5">
             <p className="font-medium">🔗 {variableParentCount} produto(s) variável(eis) detetado(s)</p>
             {autoIncludedVariationsCount > 0 && (
