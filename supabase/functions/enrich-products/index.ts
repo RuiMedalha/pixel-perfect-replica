@@ -316,7 +316,20 @@ Deno.serve(async (req) => {
             const variationUrls = aiParsed.variation_urls || [];
 
             if (values.length > 0 && rawSkus.length === values.length) {
-              const skus = rawSkus;
+              // Clean SKUs: if AI returned URLs instead of SKUs, extract the numeric part
+              const skus = rawSkus.map((s: string) => {
+                if (!s) return s;
+                // If it looks like a URL, extract the last numeric segment
+                if (s.startsWith('http://') || s.startsWith('https://') || s.includes('/')) {
+                  const numMatch = s.match(/\/(\d{3,})(?:[/?#]|$)/);
+                  if (numMatch) return numMatch[1];
+                  // Fallback: last path segment
+                  const parts = s.replace(/[?#].*$/, '').split('/').filter(Boolean);
+                  const last = parts[parts.length - 1];
+                  if (last && /^\d+$/.test(last)) return last;
+                }
+                return s;
+              });
               
               console.log(`Expanding ${values.length} variations for ${sku} (SKUs: ${skus.join(', ')})`);
               
@@ -565,9 +578,11 @@ RULES:
 - Do NOT filter out product images just because they look similar — each angle/view matters
 - Look for image galleries, carousels, sliders, thumbnail lists — extract every product photo URL from these
 - Detect product variations (sizes, colors, diameters, capacities, etc.)
-- CRITICAL: Extract the SKU for each variation. SKUs are typically found in:
-  * URLs inside onclick="location.href='.../{SKU}'" attributes on radio buttons or links
-  * The last numeric segment of variation URLs (e.g. /product-name/62785 → SKU is 62785)
+- CRITICAL: Extract the SKU for each variation. SKUs are short numeric or alphanumeric codes (e.g. 80020, 60584).
+- NEVER return a full URL as a SKU. If a variation link is "https://www.lacor.es/cacerola-20-caliza/80020", the SKU is "80020", NOT the URL.
+- SKUs are typically found in:
+  * The last numeric segment of variation URLs (e.g. /product-name/62785 → SKU is "62785")
+  * URLs inside onclick="location.href='.../{SKU}'" attributes
   * Data attributes, select option values, or hidden inputs
 - The "skus" array MUST have the same length as "values" array, in matching order
 - Extract variation_urls with the full URL and extracted SKU for each variation
@@ -624,7 +639,7 @@ ${truncatedMd}${variationHtml}`;
                       skus: {
                         type: "array",
                         items: { type: "string" },
-                        description: "SKUs for each variation value, if visible (same order as values)"
+                        description: "SKU codes (numeric or alphanumeric) for each variation value, in matching order. Extract ONLY the SKU identifier (e.g. '80020'), NEVER full URLs. If the SKU is in a URL like '/product-name/80020', extract only '80020'."
                       }
                  },
                      required: ["name", "values"],
@@ -637,7 +652,7 @@ ${truncatedMd}${variationHtml}`;
                    items: {
                      type: "object",
                      properties: {
-                       sku: { type: "string" },
+                       sku: { type: "string", description: "SKU code only (e.g. '80020'), NOT the full URL" },
                        url: { type: "string" },
                        value: { type: "string" }
                      },
