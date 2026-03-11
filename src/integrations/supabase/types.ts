@@ -793,6 +793,73 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_product_filter_options: {
+        Args: { _workspace_id: string }
+        Returns: {
+          filter_type: string
+          filter_value: string
+        }[]
+      }
+      get_product_stats: {
+        Args: { _workspace_id: string }
+        Returns: {
+          count: number
+          status: string
+        }[]
+      }
+      get_products_page: {
+        Args: {
+          _category?: string
+          _page?: number
+          _page_size?: number
+          _product_type?: string
+          _search?: string
+          _source_file?: string
+          _status?: string
+          _woo_filter?: string
+          _workspace_id: string
+        }
+        Returns: {
+          attributes: Json
+          category: string
+          category_id: string
+          created_at: string
+          crosssell_skus: Json
+          faq: Json
+          focus_keyword: string[]
+          id: string
+          image_alt_texts: Json
+          image_urls: string[]
+          meta_description: string
+          meta_title: string
+          optimized_description: string
+          optimized_price: number
+          optimized_sale_price: number
+          optimized_short_description: string
+          optimized_title: string
+          original_description: string
+          original_price: number
+          original_title: string
+          parent_product_id: string
+          product_type: string
+          sale_price: number
+          seo_score: number
+          seo_slug: string
+          short_description: string
+          sku: string
+          source_file: string
+          status: Database["public"]["Enums"]["product_status"]
+          supplier_ref: string
+          tags: string[]
+          technical_specs: string
+          total_count: number
+          updated_at: string
+          upsell_skus: Json
+          user_id: string
+          woocommerce_id: number
+          workspace_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

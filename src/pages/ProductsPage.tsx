@@ -12,7 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useProducts, useUpdateProductStatus, type Product } from "@/hooks/useProducts";
+import { useProducts, useAllProductIds, useUpdateProductStatus, useProductFilterOptions, type Product, type ProductFilters } from "@/hooks/useProducts";
 import { useOptimizeProducts, OPTIMIZATION_FIELDS, OPTIMIZATION_PHASES, AI_MODELS, CancellationToken, type OptimizationField } from "@/hooks/useOptimizeProducts";
 import { useOptimizationJob } from "@/hooks/useOptimizationJob";
 import { usePublishWooCommerce, type PublishResult } from "@/hooks/usePublishWooCommerce";
@@ -57,7 +57,6 @@ const ALL_FIELDS: OptimizationField[] = OPTIMIZATION_FIELDS.map(f => f.key);
 const ALL_PHASES = OPTIMIZATION_PHASES.map(p => p.phase);
 
 const ProductsPage = () => {
-  const { data: products, isLoading } = useProducts();
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
   const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
@@ -72,6 +71,7 @@ const ProductsPage = () => {
   const detectVariations = useDetectVariations();
   const applyVariations = useApplyVariations();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [sourceFileFilter, setSourceFileFilter] = useState<string>("all");
@@ -107,13 +107,39 @@ const ProductsPage = () => {
   const [showDuplicates, setShowDuplicates] = useState(false);
   const PAGE_SIZE = 100;
 
-  // Workspace-scoped products for duplicate detection
-  const workspaceProducts = useMemo(() => {
-    if (!activeWorkspace || !products) return [];
-    return products.filter(p => p.workspace_id === activeWorkspace.id);
-  }, [products, activeWorkspace]);
-  const { groups: duplicateGroups, run: runDuplicateDetection, isRunning: isDetectingDuplicates } = useDuplicateDetection(workspaceProducts);
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
+  // Server-side paginated products
+  const serverFilters: ProductFilters = {
+    search: debouncedSearch,
+    status: statusFilter,
+    category: categoryFilter,
+    productType: productTypeFilter,
+    sourceFile: sourceFileFilter,
+    wooFilter,
+    page: currentPage,
+    pageSize: PAGE_SIZE,
+  };
+  const { data: paginatedData, isLoading } = useProducts(serverFilters);
+  const products = paginatedData?.products ?? [];
+  const totalCount = paginatedData?.totalCount ?? 0;
+  const totalPages = paginatedData?.totalPages ?? 1;
+
+  // Lightweight all-products for bulk operations (optimize family expansion, export, etc.)
+  const { data: allProductsLight } = useAllProductIds();
+
+  // Filter options from server
+  const { data: filterOptions } = useProductFilterOptions();
+  const uniqueCategories = filterOptions?.categories ?? [];
+  const uniqueSourceFiles = filterOptions?.sourceFiles ?? [];
+
+  // Workspace-scoped products for duplicate detection
+  const workspaceProducts = useMemo(() => allProductsLight ?? [], [allProductsLight]);
+  const { groups: duplicateGroups, run: runDuplicateDetection, isRunning: isDetectingDuplicates } = useDuplicateDetection(workspaceProducts as any);
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{ id: string; field: string } | null>(null);
@@ -130,16 +156,6 @@ const ProductsPage = () => {
     }
   }, [pendingOptimizeIds.length]);
 
-  // Extract unique categories for filter
-  const uniqueCategories = Array.from(
-    new Set((products ?? []).map((p) => p.category).filter(Boolean) as string[])
-  ).sort();
-
-  // Extract unique source files for filter
-  const uniqueSourceFiles = Array.from(
-    new Set((products ?? []).map((p) => p.source_file).filter(Boolean) as string[])
-  ).sort();
-
   const getProductPhases = useCallback((p: Product) => {
     const p1 = !!(p.optimized_title || p.optimized_description || p.optimized_short_description);
     const p2 = !!(p.meta_title || p.meta_description || p.seo_slug || (p.faq && (Array.isArray(p.faq) ? (p.faq as any[]).length > 0 : true)));
@@ -147,15 +163,9 @@ const ProductsPage = () => {
     return { p1, p2, p3 };
   }, []);
 
-  const filtered = (products ?? []).filter((p) => {
-    const matchesSearch =
-      (p.sku ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.original_title ?? "").toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    const matchesCategory = categoryFilter === "all" || (p.category ?? "") === categoryFilter;
-    const matchesSourceFile = sourceFileFilter === "all" || (p.source_file ?? "") === sourceFileFilter;
-    
-    // SEO score filter
+  // Client-side filters applied to already server-filtered data (for filters not in SQL)
+  const filtered = products.filter((p) => {
+    // SEO score filter (computed, not in DB)
     let matchesSeoScore = true;
     if (seoScoreFilter !== "all") {
       const { score } = calculateSeoScore(p);
@@ -169,10 +179,6 @@ const ProductsPage = () => {
     if (hasKeywordFilter === "yes") matchesKeyword = Array.isArray(p.focus_keyword) && p.focus_keyword.length > 0;
     else if (hasKeywordFilter === "no") matchesKeyword = !p.focus_keyword || (Array.isArray(p.focus_keyword) && p.focus_keyword.length === 0);
 
-    // Product type filter
-    let matchesType = true;
-    if (productTypeFilter !== "all") matchesType = (p.product_type ?? "simple") === productTypeFilter;
-
     // Phase filter
     let matchesPhase = true;
     if (phaseFilter !== "all") {
@@ -184,20 +190,14 @@ const ProductsPage = () => {
       else if (phaseFilter === "none") matchesPhase = !phases.p1 && !phases.p2 && !phases.p3;
     }
 
-    // WooCommerce filter
-    let matchesWoo = true;
-    if (wooFilter === "published") matchesWoo = !!p.woocommerce_id;
-    else if (wooFilter === "not_published") matchesWoo = !p.woocommerce_id;
-
-    return matchesSearch && matchesStatus && matchesCategory && matchesSourceFile && matchesSeoScore && matchesKeyword && matchesType && matchesPhase && matchesWoo;
+    return matchesSeoScore && matchesKeyword && matchesPhase;
   });
 
-  // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [search, statusFilter, categoryFilter, sourceFileFilter, seoScoreFilter, hasKeywordFilter, productTypeFilter, phaseFilter, wooFilter]);
+  // Reset page when server filters change
+  useEffect(() => { setCurrentPage(1); }, [debouncedSearch, statusFilter, categoryFilter, sourceFileFilter, productTypeFilter, wooFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginatedFiltered = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-
+  // paginatedFiltered is the same as filtered since pagination is server-side now
+  const paginatedFiltered = filtered;
   // Build grouped view structure
   const groupedView = useMemo(() => {
     if (viewMode !== "grouped") return null;
@@ -211,11 +211,10 @@ const ProductsPage = () => {
 
     // Find all variable products and their children
     const variableProducts = filtered.filter(p => p.product_type === "variable");
-    const allProducts = products ?? [];
+    const allProds = products;
 
     for (const parent of variableProducts) {
-      // Find children in filtered AND in all products (show all children of matching parents)
-      const children = allProducts.filter(p => p.parent_product_id === parent.id);
+      const children = allProds.filter(p => p.parent_product_id === parent.id);
       children.forEach(c => variationIds.add(c.id));
       items.push({ type: "parent", product: parent, children });
     }
@@ -268,7 +267,7 @@ const ProductsPage = () => {
 
   const handleOptimizeClick = (ids: string[]) => {
     // Auto-include entire family: parent + all siblings for variable products
-    const allProducts = products ?? [];
+    const allProducts = allProductsLight ?? [];
     const expandedIds = new Set(ids);
     ids.forEach(id => {
       const p = allProducts.find(pr => pr.id === id);
@@ -335,7 +334,7 @@ const ProductsPage = () => {
     }
 
     const nameMap: Record<string, string> = {};
-    (products ?? []).forEach(p => {
+    (allProductsLight ?? []).forEach((p: any) => {
       if (pendingOptimizeIds.includes(p.id)) {
         nameMap[p.id] = p.optimized_title || p.original_title || p.sku || p.id.slice(0, 8);
       }
@@ -426,7 +425,7 @@ const ProductsPage = () => {
   // Update detailProduct when products data changes
   useEffect(() => {
     if (detailProduct && products) {
-      const updated = products.find((p) => p.id === detailProduct.id);
+      const updated = products.find((p: Product) => p.id === detailProduct.id);
       if (updated) setDetailProduct(updated);
     }
   }, [products]);
@@ -647,7 +646,7 @@ const ProductsPage = () => {
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <h1 className="text-lg sm:text-2xl font-bold text-foreground">Painel de Produtos</h1>
-            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">{products?.length ?? 0} produtos no total</p>
+            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">{totalCount} produtos no total</p>
           </div>
           <Select onValueChange={(val) => {
             const count = parseInt(val);
@@ -750,8 +749,8 @@ const ProductsPage = () => {
               className="text-xs h-8"
               onClick={async () => {
                 const selectedProducts = selected.size > 0
-                  ? (products ?? []).filter(p => selected.has(p.id) && p.product_type === 'simple')
-                  : (products ?? []).filter(p => p.product_type === 'simple').slice(0, 500);
+                  ? (allProductsLight ?? []).filter((p: any) => selected.has(p.id) && p.product_type === 'simple')
+                  : (allProductsLight ?? []).filter((p: any) => p.product_type === 'simple').slice(0, 500);
                 const result = await detectVariations.mutateAsync({
                   workspaceId: activeWorkspace.id,
                   products: selectedProducts.map(p => ({ id: p.id, sku: p.sku, original_title: p.original_title, optimized_title: p.optimized_title, category: p.category, original_price: p.original_price, original_description: p.original_description, short_description: p.short_description, product_type: p.product_type, attributes: p.attributes, crosssell_skus: p.crosssell_skus, upsell_skus: p.upsell_skus })),
@@ -998,7 +997,7 @@ const ProductsPage = () => {
             {activePublishJob.status === "completed" && activePublishJob.results && (activePublishJob.results as any[]).length > 0 && (
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {(activePublishJob.results as any[]).map((r: any, i: number) => {
-                  const product = (products ?? []).find(p => p.id === r.id);
+                  const product = products.find(p => p.id === r.id);
                   const label = product?.optimized_title || product?.original_title || product?.sku || r.id?.slice(0, 8);
                   return (
                     <div key={i} className={cn(
@@ -1454,8 +1453,8 @@ const ProductsPage = () => {
             </DialogTitle>
           </DialogHeader>
           {(() => {
-            const alreadyOptimized = (products ?? []).filter(
-              p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+            const alreadyOptimized = (allProductsLight ?? []).filter(
+              (p: any) => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
             ).length;
             const pendingCount = pendingOptimizeIds.length - alreadyOptimized;
             return (
@@ -1602,8 +1601,8 @@ const ProductsPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowFieldSelector(false)}>Cancelar</Button>
             {(() => {
-              const hasAlreadyOptimized = (products ?? []).some(
-                p => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
+              const hasAlreadyOptimized = (allProductsLight ?? []).some(
+                (p: any) => pendingOptimizeIds.includes(p.id) && (p.status === "optimized" || p.status === "published")
               );
               return (
                 <Button
@@ -1693,7 +1692,7 @@ const ProductsPage = () => {
                           <div key={vi} className="flex items-center gap-2 p-1.5 rounded bg-muted/30">
                             <Badge variant="secondary" className="text-xs shrink-0">{Object.values(v.attribute_values).join(" / ")}</Badge>
                             <span className="text-xs truncate flex-1">
-                              {(products ?? []).find(p => p.id === v.product_id)?.original_title ?? v.product_id.substring(0, 8)}
+                              {products.find(p => p.id === v.product_id)?.original_title ?? v.product_id.substring(0, 8)}
                             </span>
                             {/* Move to another group */}
                             {detectedGroups.length > 1 && (
@@ -1800,10 +1799,10 @@ const ProductsPage = () => {
       {(() => {
         // Compute publish info: auto-include child variations for selected variable parents
         const selectedArr = Array.from(selected);
-        const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
-        const variableParentIds = selectedProducts.filter(p => p.product_type === "variable").map(p => p.id);
-        const childVariations = (products ?? []).filter(p => p.parent_product_id && variableParentIds.includes(p.parent_product_id) && !selected.has(p.id));
-        const allPublishIds = [...selectedArr, ...childVariations.map(c => c.id)];
+        const selectedProducts = (allProductsLight ?? []).filter((p: any) => selected.has(p.id));
+        const variableParentIds = selectedProducts.filter((p: any) => p.product_type === "variable").map((p: any) => p.id);
+        const childVariations = (allProductsLight ?? []).filter((p: any) => p.parent_product_id && variableParentIds.includes(p.parent_product_id) && !selected.has(p.id));
+        const allPublishIds = [...selectedArr, ...childVariations.map((c: any) => c.id)];
         const variationCount = childVariations.length;
 
         return (
@@ -1814,7 +1813,7 @@ const ProductsPage = () => {
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={isCreatingPublish}
-            products={(products ?? []).filter(p => allPublishIds.includes(p.id))}
+            products={products.filter(p => allPublishIds.includes(p.id))}
             onConfirm={async (fields, pricing, scheduledFor, skuPrefix) => {
               try {
                 await createPublishJob({
@@ -1863,8 +1862,8 @@ const ProductsPage = () => {
             <Button variant="outline" size="sm" onClick={() => setShowExportDialog(false)}>Cancelar</Button>
             <Button size="sm" onClick={() => {
               const prods = exportTarget === "selected"
-                ? (products ?? []).filter(p => selected.has(p.id))
-                : (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
+                ? products.filter(p => selected.has(p.id))
+                : products.filter(p => statusFilter === "all" ? true : p.status === "optimized");
               const prefix = exportSkuPrefix.trim() || undefined;
               exportProductsToExcel(prods, exportTarget === "selected" ? "produtos-selecionados" : "produtos-otimizados", prefix);
               if (exportTarget === "selected") setSelected(new Set());
@@ -1885,7 +1884,7 @@ const ProductsPage = () => {
           setShowDuplicates(false);
         }}
         onOpenProduct={(id) => {
-          const p = (products ?? []).find(pr => pr.id === id);
+          const p = products.find(pr => pr.id === id);
           if (p) {
             setShowDuplicates(false);
             setDetailProduct(p);
