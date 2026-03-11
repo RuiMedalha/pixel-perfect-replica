@@ -991,7 +991,7 @@ const ProductsPage = () => {
         </Card>
       )}
       {/* Missing variations warning banner */}
-      {missingVariations.length > 0 && (
+      {missingVariations.length > 0 && !dismissedMissing && (
         <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
