@@ -637,7 +637,7 @@ ${truncatedMd}${variationHtml}`;
                       skus: {
                         type: "array",
                         items: { type: "string" },
-                        description: "SKUs for each variation value, if visible (same order as values)"
+                        description: "SKU codes (numeric or alphanumeric) for each variation value, in matching order. Extract ONLY the SKU identifier (e.g. '80020'), NEVER full URLs. If the SKU is in a URL like '/product-name/80020', extract only '80020'."
                       }
                  },
                      required: ["name", "values"],
