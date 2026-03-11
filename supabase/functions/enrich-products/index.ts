@@ -339,7 +339,8 @@ Deno.serve(async (req) => {
                       const varData = await varResp.json();
                       const varMd = varData.data?.markdown || varData.markdown || '';
                       if (varMd.length > 50 && lovableApiKey) {
-                        const varParsed = await parseWithAI(lovableApiKey, varMd, varSku, `${product.original_title} - ${varValue}`, instructions || '');
+                        const supplierInstr = matchedPrefix?.scrapingInstructions || scrapingInstructions[matchedPrefix?.name] || Object.values(scrapingInstructions)[0] || '';
+                        const varParsed = await parseWithAI(lovableApiKey, varMd, varSku, `${product.original_title} - ${varValue}`, supplierInstr);
                         if (varParsed) {
                           varImages = varParsed.product_images || [];
                           varSpecs = varParsed.specs && Object.keys(varParsed.specs).length > 0 ? varParsed.specs : null;
