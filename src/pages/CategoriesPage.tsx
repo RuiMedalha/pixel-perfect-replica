@@ -158,7 +158,7 @@ const CategoriesPage = () => {
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <FolderTree className="w-6 h-6" /> Categorias
           </h1>
-          <p className="text-muted-foreground mt-1">{flat.length} categoria(s) no workspace</p>
+          <p className="text-muted-foreground mt-1">{flat.length} categoria(s) — partilhadas entre todos os workspaces</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => syncWooCategories.mutate()} disabled={syncWooCategories.isPending}>
