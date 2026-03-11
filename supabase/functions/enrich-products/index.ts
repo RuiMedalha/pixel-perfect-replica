@@ -601,7 +601,8 @@ ${truncatedMd}`;
     }
 
     const parsed = JSON.parse(toolCall.function.arguments);
-    console.log(`AI parsed SKU ${sku}: ${parsed.product_images?.length || 0} images, ${parsed.variations?.length || 0} variations, ${Object.keys(parsed.specs || {}).length} specs`);
+    const varSkusInfo = parsed.variations?.map((v: any) => `${v.name}:${v.values?.length || 0}vals/${v.skus?.length || 0}skus`).join(', ') || 'none';
+    console.log(`AI parsed SKU ${sku}: ${parsed.product_images?.length || 0} images, variations=[${varSkusInfo}], ${Object.keys(parsed.specs || {}).length} specs`);
     return parsed;
   } catch (e) {
     console.error("AI parsing failed:", e);
