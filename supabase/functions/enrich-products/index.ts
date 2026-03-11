@@ -321,11 +321,12 @@ Deno.serve(async (req) => {
                 let varSpecs: any = null;
                 let varPrice: number | null = null;
 
+                const hasRealSku = rawSkus.length === values.length;
                 const varUrlEntry = variationUrls.find((vu: any) => vu.sku === varSku || vu.value === varValue);
                 let varScrapeUrl = varUrlEntry?.url || '';
 
-                // If no URL from AI, build from supplier prefix pattern
-                if (!varScrapeUrl && matchedPrefix?.searchUrl) {
+                // Only build scrape URL if we have real SKUs (not generated ones)
+                if (!varScrapeUrl && hasRealSku && matchedPrefix?.searchUrl) {
                   const varRef = matchedPrefix.prefix ? varSku.substring(matchedPrefix.prefix.length) : varSku;
                   varScrapeUrl = matchedPrefix.searchUrl.replace("{sku}", varRef);
                 }
