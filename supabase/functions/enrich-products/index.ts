@@ -488,6 +488,7 @@ Deno.serve(async (req) => {
       const batchResults = await Promise.all(batchPromises);
       for (const r of batchResults) {
         results.push(r);
+        if (r.skippedAsVariation) continue; // don't count as enriched or failed
         if (r.success) enriched++;
         else failed++;
       }
