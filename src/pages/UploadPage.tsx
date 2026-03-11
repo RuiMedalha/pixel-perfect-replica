@@ -258,19 +258,33 @@ const UploadPage = () => {
       {files
         .filter((f) => f.status === "a_mapear" && f.excelHeaders)
         .map((file) => (
-          <ColumnMapper
-            key={file.id}
-            fileName={file.name}
-            headers={file.excelHeaders!}
-            previewRows={file.previewRows || []}
-            mapping={file.columnMapping || {}}
-            sheetNames={file.sheetNames}
-            selectedSheet={file.selectedSheet}
-            fields={allFields}
-            onSheetChange={(s) => selectSheet(file.id, s)}
-            onMappingChange={(m) => setColumnMapping(file.id, m)}
-            onConfirm={() => confirmMapping(file.id)}
-          />
+          <div key={file.id} className="space-y-4">
+            <ColumnMapper
+              fileName={file.name}
+              headers={file.excelHeaders!}
+              previewRows={file.previewRows || []}
+              mapping={file.columnMapping || {}}
+              sheetNames={file.sheetNames}
+              selectedSheet={file.selectedSheet}
+              fields={allFields}
+              onSheetChange={(s) => selectSheet(file.id, s)}
+              onMappingChange={(m) => setColumnMapping(file.id, m)}
+              onConfirm={() => {
+                if (file.uploadType === "update" && (!file.updateFields || file.updateFields.length === 0)) {
+                  toast.error("Selecione pelo menos um campo para atualizar.");
+                  return;
+                }
+                confirmMapping(file.id);
+              }}
+            />
+            {/* Update fields selector for update mode */}
+            {file.uploadType === "update" && (
+              <UpdateFieldsSelector
+                selectedFields={file.updateFields || []}
+                onChange={(fields) => setUpdateFields(file.id, fields)}
+              />
+            )}
+          </div>
         ))}
 
       {/* File list */}
