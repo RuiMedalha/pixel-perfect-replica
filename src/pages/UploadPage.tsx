@@ -115,6 +115,9 @@ const UploadPage = () => {
           <TabsTrigger value="products" className="gap-2">
             <Package className="w-4 h-4" /> Produtos
           </TabsTrigger>
+          <TabsTrigger value="update" className="gap-2">
+            <RefreshCw className="w-4 h-4" /> Atualização
+          </TabsTrigger>
           <TabsTrigger value="knowledge" className="gap-2">
             <BookOpen className="w-4 h-4" /> Conhecimento
           </TabsTrigger>
@@ -123,6 +126,11 @@ const UploadPage = () => {
         <TabsContent value="products" className="space-y-4 mt-4">
           <p className="text-sm text-muted-foreground">
             Ficheiros com listas de produtos para importar (Excel com mapeamento de colunas, ou PDF processado com IA).
+          </p>
+        </TabsContent>
+        <TabsContent value="update" className="space-y-4 mt-4">
+          <p className="text-sm text-muted-foreground">
+            Re-importe um Excel exportado com alterações. Escolha os campos a atualizar — os produtos são identificados pelo SKU.
           </p>
         </TabsContent>
         <TabsContent value="knowledge" className="space-y-4 mt-4">
