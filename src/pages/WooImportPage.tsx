@@ -101,14 +101,17 @@ const WooImportPage = () => {
 
   return (
     <div className="p-3 sm:p-6 lg:p-8 space-y-6 animate-fade-in max-w-4xl">
-      <div>
-        <h1 className="text-lg sm:text-2xl font-bold text-foreground flex items-center gap-2">
-          <ShoppingCart className="w-6 h-6" />
-          Importar do WooCommerce
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Descarregue produtos da sua loja WooCommerce para otimizar e reimportar.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-lg sm:text-2xl font-bold text-foreground flex items-center gap-2">
+            <ShoppingCart className="w-6 h-6" />
+            Importar do WooCommerce
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Descarregue produtos da sua loja WooCommerce para otimizar e reimportar.
+          </p>
+        </div>
+        <WooSiteSelector setGlobal />
       </div>
 
       {/* Filters Card */}
