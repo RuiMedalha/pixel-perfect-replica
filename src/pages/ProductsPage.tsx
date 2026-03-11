@@ -1862,8 +1862,8 @@ const ProductsPage = () => {
             <Button variant="outline" size="sm" onClick={() => setShowExportDialog(false)}>Cancelar</Button>
             <Button size="sm" onClick={() => {
               const prods = exportTarget === "selected"
-                ? (products ?? []).filter(p => selected.has(p.id))
-                : (products ?? []).filter(p => statusFilter === "all" ? true : p.status === "optimized");
+                ? products.filter(p => selected.has(p.id))
+                : products.filter(p => statusFilter === "all" ? true : p.status === "optimized");
               const prefix = exportSkuPrefix.trim() || undefined;
               exportProductsToExcel(prods, exportTarget === "selected" ? "produtos-selecionados" : "produtos-otimizados", prefix);
               if (exportTarget === "selected") setSelected(new Set());
