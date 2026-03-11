@@ -1799,10 +1799,10 @@ const ProductsPage = () => {
       {(() => {
         // Compute publish info: auto-include child variations for selected variable parents
         const selectedArr = Array.from(selected);
-        const selectedProducts = (products ?? []).filter(p => selected.has(p.id));
-        const variableParentIds = selectedProducts.filter(p => p.product_type === "variable").map(p => p.id);
-        const childVariations = (products ?? []).filter(p => p.parent_product_id && variableParentIds.includes(p.parent_product_id) && !selected.has(p.id));
-        const allPublishIds = [...selectedArr, ...childVariations.map(c => c.id)];
+        const selectedProducts = (allProductsLight ?? []).filter((p: any) => selected.has(p.id));
+        const variableParentIds = selectedProducts.filter((p: any) => p.product_type === "variable").map((p: any) => p.id);
+        const childVariations = (allProductsLight ?? []).filter((p: any) => p.parent_product_id && variableParentIds.includes(p.parent_product_id) && !selected.has(p.id));
+        const allPublishIds = [...selectedArr, ...childVariations.map((c: any) => c.id)];
         const variationCount = childVariations.length;
 
         return (
@@ -1813,7 +1813,7 @@ const ProductsPage = () => {
             variableParentCount={variableParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={isCreatingPublish}
-            products={(products ?? []).filter(p => allPublishIds.includes(p.id))}
+            products={products.filter(p => allPublishIds.includes(p.id))}
             onConfirm={async (fields, pricing, scheduledFor, skuPrefix) => {
               try {
                 await createPublishJob({
