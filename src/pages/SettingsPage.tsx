@@ -217,6 +217,11 @@ const SettingsPage = () => {
                       toast.error("Introduz o Telegram Chat ID primeiro");
                       return;
                     }
+
+                    if (!/^-?\d+$/.test(chatId)) {
+                      toast.error("Chat ID inválido: usa apenas números (ex: 123456789 ou -100...).");
+                      return;
+                    }
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) { toast.error("Não autenticado"); return; }
 
@@ -228,10 +233,13 @@ const SettingsPage = () => {
                     toast.info("A enviar teste Telegram...");
                     const { data, error } = await supabase.functions.invoke("test-telegram");
                     if (error) {
-                      // Try to parse error context from FunctionsHttpError
-                      const ctx = typeof error === "object" && "context" in error ? (error as any).context : null;
-                      const msg = ctx?.error || error.message || "Erro ao enviar";
-                      toast.error(msg);
+                      const response = typeof error === "object" && error && "context" in error ? (error as any).context : null;
+                      if (response?.json) {
+                        const payload = await response.json().catch(() => null);
+                        toast.error(payload?.error || error.message || "Erro ao enviar");
+                      } else {
+                        toast.error(error.message || "Erro ao enviar");
+                      }
                       return;
                     }
                     if (data?.success) {
