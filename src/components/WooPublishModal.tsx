@@ -63,7 +63,7 @@ interface Props {
   products?: Product[];
 }
 
-export function WooPublishModal({ open, onClose, onConfirm, productCount, variableParentCount = 0, autoIncludedVariationsCount = 0, isPending }: Props) {
+export function WooPublishModal({ open, onClose, onConfirm, productCount, variableParentCount = 0, autoIncludedVariationsCount = 0, isPending, products = [] }: Props) {
   const { data: settings } = useSettings();
   const [selectedFields, setSelectedFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
