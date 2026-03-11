@@ -13,7 +13,41 @@ const MAX_PROCESSING_MS = 95_000; // keep safe headroom before timeout
 const CONCURRENCY = 2; // lower concurrency to reduce function rate limiting
 const SELF_INVOKE_RETRIES = 5;
 
+const TELEGRAM_GATEWAY_URL = "https://connector-gateway.lovable.dev/telegram";
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function sendTelegramNotification(chatId: string, message: string) {
+  try {
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const TELEGRAM_API_KEY = Deno.env.get("TELEGRAM_API_KEY");
+    if (!LOVABLE_API_KEY || !TELEGRAM_API_KEY) {
+      console.warn("Telegram keys not configured, skipping notification");
+      return;
+    }
+    const response = await fetch(`${TELEGRAM_GATEWAY_URL}/sendMessage`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+        "X-Connection-Api-Key": TELEGRAM_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: "HTML",
+      }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.warn(`Telegram notification failed [${response.status}]: ${errText}`);
+    } else {
+      console.log("📨 Telegram notification sent");
+    }
+  } catch (err) {
+    console.warn("Telegram notification error (non-fatal):", err);
+  }
+}
 
 async function selfInvokeWithRetry(authHeader: string, jobId: string, startIndex: number) {
   const payload = JSON.stringify({ jobId, startIndex });
