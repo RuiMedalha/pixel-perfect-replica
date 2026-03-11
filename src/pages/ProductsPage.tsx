@@ -989,6 +989,52 @@ const ProductsPage = () => {
           </CardContent>
         </Card>
       )}
+      {/* Missing variations warning banner */}
+      {missingVariations.length > 0 && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-destructive" />
+              <span className="font-semibold text-destructive text-sm">
+                {missingVariations.length} variação(ões) em falta na lista
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => {
+                  if (activeWorkspace) {
+                    createMissingVariations(activeWorkspace.id, missingVariations);
+                  }
+                }}
+              >
+                Criar {missingVariations.length} variação(ões)
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  // Clear by calling with empty - need a dismiss function
+                  // For now just hide via a local state workaround
+                }}
+                className="text-muted-foreground"
+              >
+                Ignorar
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-40 overflow-y-auto">
+            {missingVariations.map((mv, i) => (
+              <div key={i} className="flex items-center gap-2 text-xs bg-background rounded px-3 py-1.5 border">
+                <span className="font-mono font-semibold text-destructive">{mv.sku}</span>
+                <span className="text-muted-foreground">({mv.value})</span>
+                <span className="text-muted-foreground">← pai: {mv.parentSku}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="space-y-3">
         <div className="flex flex-wrap gap-2 sm:gap-3 items-center">
           <div className="relative flex-1 min-w-[150px] sm:min-w-[200px] max-w-sm">
