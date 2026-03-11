@@ -22,14 +22,29 @@ const WooImportPage = () => {
 
   const isLoading = loadingCats || loadingAttrs;
 
-  // Find the selected attribute object
-  const attrObj = attributes?.find(a => String(a.id) === selectedAttribute);
+  // Find the brand attribute (common names: marca, brand, pa_marca, pa_brand)
+  const brandAttr = attributes?.find(a => 
+    ['marca', 'brand', 'marcas', 'brands'].includes(a.name.toLowerCase())
+  );
+  
+  // Non-brand attributes for generic filter
+  const otherAttributes = attributes?.filter(a => a.id !== brandAttr?.id) || [];
+
+  // Find the selected attribute object (non-brand)
+  const attrObj = otherAttributes.find(a => String(a.id) === selectedAttribute);
 
   const handleImport = async () => {
     if (!activeWorkspace) return;
 
     const finalFilters: WooImportFilters = { ...filters };
-    if (selectedAttribute && selectedTerm) {
+    
+    // Brand filter
+    if (selectedBrand && brandAttr) {
+      finalFilters.attribute = `pa_${brandAttr.name.toLowerCase().replace(/\s+/g, '-')}`;
+      finalFilters.attribute_term = selectedBrand;
+    }
+    // Generic attribute filter (only if no brand filter active)
+    else if (selectedAttribute && selectedTerm) {
       finalFilters.attribute = `pa_${attrObj?.name?.toLowerCase().replace(/\s+/g, '-') || selectedAttribute}`;
       finalFilters.attribute_term = selectedTerm;
     }
