@@ -480,6 +480,8 @@ RULES:
 - Only include images that belong to THIS specific product (not series, related products, icons, logos, newsletter images, or footer images)
 - Filter out SVG icons, tiny images, and decorative elements
 - Detect product variations (sizes, colors, diameters, capacities, etc.) - each variation may have its own SKU
+- IMPORTANT: For each variation, try to extract the individual SKU code. Look in size selectors, option dropdowns, data attributes, or URL patterns.
+- If the page has clickable links for each variation (e.g. size buttons that link to individual product pages), extract those URLs in variation_urls.
 - Extract technical specifications as structured key-value pairs
 - Identify the product series/family name if visible
 
