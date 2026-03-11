@@ -547,11 +547,15 @@ export function useUploadCatalog() {
 
         updateFile(uploadedFile.id, { status: "a_processar", progress: 70 });
 
+        const isUpdateMode = uploadedFile.uploadType === "update";
         const result = await sendParsedRowsInBatches(
           parsedRows,
           uploadedFile.columnMapping,
           uploadedFile.name,
-          workspaceId
+          workspaceId,
+          3,
+          isUpdateMode,
+          isUpdateMode ? uploadedFile.updateFields : undefined
         );
 
         const totalProcessed = (result.count || 0) + (result.updated || 0);
