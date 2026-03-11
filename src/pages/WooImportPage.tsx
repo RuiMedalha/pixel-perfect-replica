@@ -248,6 +248,7 @@ const WooImportPage = () => {
                     setFilters({});
                     setSelectedAttribute("");
                     setSelectedTerm("");
+                    setSelectedBrand("");
                   }}
                   disabled={activeFiltersCount === 0}
                 >
