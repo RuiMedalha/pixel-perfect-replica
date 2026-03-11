@@ -234,6 +234,16 @@ serve(async (req) => {
     let currentIndex = Math.max(requestedStartIndex ?? (job.processed_products || 0), 0);
     let totalProcessed = job.processed_products || 0;
     let totalFailed = job.failed_products || 0;
+    let halfNotified = totalProcessed >= Math.floor(allProductIds.length / 2); // skip if already past 50%
+
+    // Fetch Telegram chat_id for notifications
+    const { data: telegramSetting } = await supabase
+      .from("settings")
+      .select("value")
+      .eq("key", "telegram_chat_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const telegramChatId = telegramSetting?.value || null;
 
     console.log(`📦 Processing from index ${currentIndex}, ${allProductIds.length - currentIndex} remaining`);
 
