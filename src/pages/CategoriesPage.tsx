@@ -115,7 +115,7 @@ const CategoriesPage = () => {
   };
 
   const handleSave = () => {
-    if (!form.name.trim() || !activeWorkspace) return;
+    if (!form.name.trim()) return;
     if (editingCat) {
       updateCategory.mutate({
         id: editingCat.id,
@@ -131,7 +131,6 @@ const CategoriesPage = () => {
     } else {
       createCategory.mutate({
         name: form.name,
-        workspace_id: activeWorkspace.id,
         slug: form.slug || undefined,
         description: form.description || undefined,
         meta_title: form.meta_title || undefined,
