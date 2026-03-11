@@ -282,13 +282,17 @@ const UploadPage = () => {
         onDrop={onDrop}
       >
         <CardContent className="flex flex-col items-center justify-center py-16">
-          {activeTab === "products" ? (
+          {activeTab === "update" ? (
+            <RefreshCw className="w-12 h-12 text-muted-foreground mb-4" />
+          ) : activeTab === "products" ? (
             <Package className="w-12 h-12 text-muted-foreground mb-4" />
           ) : (
             <BookOpen className="w-12 h-12 text-muted-foreground mb-4" />
           )}
           <p className="text-lg font-medium mb-1">
-            Arraste ficheiros {activeTab === "products" ? "de produtos" : "de conhecimento"} para aqui
+            {activeTab === "update"
+              ? "Arraste o Excel com alterações para aqui"
+              : `Arraste ficheiros ${activeTab === "products" ? "de produtos" : "de conhecimento"} para aqui`}
           </p>
           <p className="text-sm text-muted-foreground mb-4">ou clique para selecionar</p>
           <Button variant="outline" asChild>
@@ -297,15 +301,16 @@ const UploadPage = () => {
               <input
                 type="file"
                 multiple
-                accept=".pdf,.xlsx,.xls"
+                accept={activeTab === "update" ? ".xlsx,.xls" : ".pdf,.xlsx,.xls"}
                 className="hidden"
                 onChange={onFileSelect}
               />
             </label>
           </Button>
           <p className="text-xs text-muted-foreground mt-3">
-            Formatos aceites: PDF, XLSX, XLS
-            {activeTab === "products" && " — Excel permite mapeamento de colunas"}
+            {activeTab === "update"
+              ? "Apenas Excel (XLSX/XLS) — os produtos serão identificados pelo SKU"
+              : `Formatos aceites: PDF, XLSX, XLS${activeTab === "products" ? " — Excel permite mapeamento de colunas" : ""}`}
           </p>
         </CardContent>
       </Card>
