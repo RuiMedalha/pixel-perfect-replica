@@ -499,8 +499,8 @@ serve(async (req) => {
       const batch = products.slice(batchStart, batchStart + CONCURRENCY);
       const batchResults = await Promise.allSettled(batch.map(async (product) => {
       try {
-        // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) ===
-        if (product.optimized_title || product.optimized_description) {
+        // === SAVE VERSION BEFORE OPTIMIZING (keep max 3) — only in phase 1 or no-phase mode ===
+        if (!phase || phase === 1) if (product.optimized_title || product.optimized_description) {
           // Get current version count
           const { data: existingVersions } = await supabase
             .from("product_versions")
@@ -536,12 +536,16 @@ serve(async (req) => {
         }
 
         // 1. HYBRID RAG: keyword + trigram + family search with reranking
+        // OPTIMIZATION: Skip RAG/scraping in phases 2 and 3 — context already available from phase 1
+        const isLaterPhase = phase && phase > 1;
         let knowledgeContext = "";
         const allChunks: any[] = [];
         let topChunks: any[] = [];
         let ragMatchTypeCounts: Record<string, number> = {};
 
-        if (skipKnowledge) {
+        if (isLaterPhase) {
+          console.log(`⏭️ Phase ${phase}: skipping RAG (context from phase 1 already in product data)`);
+        } else if (skipKnowledge) {
           console.log("⏭️ Knowledge base skipped (skipKnowledge=true)");
         } else {
 
@@ -739,7 +743,9 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 
         // 2. Auto-scrape supplier page by SKU
         let supplierContext = "";
-        if (skipScraping) {
+        if (isLaterPhase) {
+          console.log(`⏭️ Phase ${phase}: skipping supplier scraping (already done in phase 1)`);
+        } else if (skipScraping) {
           console.log("⏭️ Supplier scraping skipped (skipScraping=true)");
         } else if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
           const skuUpper = product.sku.toUpperCase();
