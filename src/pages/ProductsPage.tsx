@@ -267,7 +267,7 @@ const ProductsPage = () => {
   };
 
   const handleOptimizeClick = (ids: string[]) => {
-    // Auto-include children of variable products for group optimization
+    // Auto-include entire family: parent + all siblings for variable products
     const allProducts = products ?? [];
     const expandedIds = new Set(ids);
     ids.forEach(id => {
@@ -275,11 +275,16 @@ const ProductsPage = () => {
       if (p?.product_type === "variable") {
         // Add all children of this variable product
         allProducts.filter(c => c.parent_product_id === id).forEach(c => expandedIds.add(c.id));
+      } else if (p?.product_type === "variation" && p.parent_product_id) {
+        // Add the parent variable product
+        expandedIds.add(p.parent_product_id);
+        // Add all sibling variations
+        allProducts.filter(c => c.parent_product_id === p.parent_product_id).forEach(c => expandedIds.add(c.id));
       }
     });
     const finalIds = Array.from(expandedIds);
     if (finalIds.length > ids.length) {
-      toast.info(`${finalIds.length - ids.length} variação(ões) incluídas automaticamente para otimização em grupo.`);
+      toast.info(`${finalIds.length - ids.length} produto(s) da mesma família incluído(s) automaticamente para otimização em grupo.`);
     }
 
     // Auto-enable skipScraping if all selected products already have technical_specs (web-enriched)
