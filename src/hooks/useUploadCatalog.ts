@@ -388,7 +388,7 @@ export function useUploadCatalog() {
           progress: 0,
         };
 
-      if (!isPdf && uploadType === "products") {
+      if (!isPdf && (uploadType === "products" || uploadType === "update")) {
         try {
           const workbook = await readExcelFile(partFile);
           base.sheetNames = workbook.SheetNames;
