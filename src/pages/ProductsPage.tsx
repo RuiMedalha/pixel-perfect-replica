@@ -364,7 +364,7 @@ const ProductsPage = () => {
     setPendingOptimizeIds([]);
     setSelected(new Set());
     setSelectedModel("default");
-    setBackgroundMode(false);
+    setBackgroundMode(true);
   };
 
   const togglePhase = (phase: number) => {
