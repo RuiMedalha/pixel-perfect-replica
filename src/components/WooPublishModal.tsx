@@ -13,6 +13,7 @@ import { ChevronDown, ChevronRight, Send, Loader2, TrendingUp, Percent, Calendar
 import { cn } from "@/lib/utils";
 import { WOO_PUBLISH_GROUPS, ALL_WOO_FIELD_KEYS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { useSettings } from "@/hooks/useSettings";
+import { WooSiteSelector } from "@/components/WooSiteSelector";
 import type { Product } from "@/hooks/useProducts";
 
 export interface PricingOptions {
