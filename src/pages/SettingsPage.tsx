@@ -43,6 +43,7 @@ const SETTING_KEYS = {
   optimization_prompt: "optimization_prompt",
   knowledge_urls: "knowledge_urls_json",
   whatsapp_webhook: "whatsapp_webhook_url",
+  telegram_chat_id: "telegram_chat_id",
 };
 
 const DEFAULT_OPTIMIZATION_PROMPT = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
