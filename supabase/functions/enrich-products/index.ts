@@ -513,21 +513,24 @@ async function parseWithAI(apiKey: string, markdown: string, sku: string, title:
 
     const systemPrompt = `You are a product data extraction specialist. You analyze scraped web pages of supplier/manufacturer product pages and extract structured data.
 
-RULES:
-- Include ALL images that belong to THIS specific product: main image, gallery images, zoom images, alternate angles, detail shots
-- A product typically has 3-10 images. Extract ALL of them from the gallery/carousel/slider
-- Filter out ONLY: SVG icons, tiny decorative images (<50px), newsletter banners, footer logos, cookie/popup images, social media icons
-- Do NOT filter out product images just because they look similar — each angle/view matters
-- Look for image galleries, carousels, sliders, thumbnail lists — extract every product photo URL from these
-- Detect product variations (sizes, colors, diameters, capacities, etc.)
-- CRITICAL: Extract the SKU for each variation. SKUs are short numeric or alphanumeric codes (e.g. 80020, 60584).
-- NEVER return a full URL as a SKU. If a variation link is "https://www.lacor.es/cacerola-20-caliza/80020", the SKU is "80020", NOT the URL.
-- SKUs are typically found in:
-  * The last numeric segment of variation URLs (e.g. /product-name/62785 → SKU is "62785")
-  * URLs inside onclick="location.href='.../{SKU}'" attributes
-  * Data attributes, select option values, or hidden inputs
-- The "skus" array MUST have the same length as "values" array, in matching order
-- Extract variation_urls with the full URL and extracted SKU for each variation
+RULES FOR IMAGES:
+- Extract ONLY images that belong to THIS specific product being viewed on the page
+- Focus on: the main product photo, gallery/carousel/slider images, alternate angles, zoom views, detail shots
+- These are typically found inside a product image gallery container, lightbox, or carousel — usually the first set of images on the page
+- STRICTLY EXCLUDE: navigation icons, category thumbnails, footer logos, newsletter banners, social media icons, cookie popup images, "related products" images, "you may also like" images, brand logos, payment method icons, shipping icons, trust badges, SVG icons, any image smaller than 100px
+- DO NOT include images from "related products", "recommended products", "products from the same series", or any section that shows OTHER products
+- A typical product has 1-8 images. If you find more than 10, you are probably including non-product images — be more selective
+- When in doubt, EXCLUDE the image
+
+RULES FOR VARIATIONS:
+- Only detect variations if the page clearly shows a selector (size picker, color picker, dropdown) for THIS product
+- CRITICAL: Only report variations that have REAL SKUs visible on the page (in URLs, onclick attributes, data attributes, or option values)
+- NEVER invent or guess SKUs — if you cannot find a real SKU code for a variation, do NOT include it in the "skus" array
+- If you see variation values (e.g. sizes) but NO associated SKUs, return the values WITHOUT the skus array
+- The "skus" array MUST only contain short alphanumeric codes (e.g. "80020", "UD12345"), NEVER full URLs
+- If a variation link is "https://supplier.com/product-name/80020", the SKU is "80020"
+
+RULES FOR SPECS:
 - Extract technical specifications as structured key-value pairs
 - Identify the product series/family name if visible
 
