@@ -336,7 +336,7 @@ Deno.serve(async (req) => {
                       },
                       body: JSON.stringify({
                         url: varScrapeUrl,
-                        formats: ['markdown'],
+                        formats: ['markdown', 'html'],
                         onlyMainContent: true,
                       }),
                     });
@@ -344,9 +344,10 @@ Deno.serve(async (req) => {
                     if (varResp.ok) {
                       const varData = await varResp.json();
                       const varMd = varData.data?.markdown || varData.markdown || '';
+                      const varHtml = varData.data?.html || varData.html || '';
                       if (varMd.length > 50 && lovableApiKey) {
                         const supplierInstr = matchedPrefix?.scrapingInstructions || scrapingInstructions[matchedPrefix?.name] || Object.values(scrapingInstructions)[0] || '';
-                        const varParsed = await parseWithAI(lovableApiKey, varMd, varSku, `${product.original_title} - ${varValue}`, supplierInstr);
+                        const varParsed = await parseWithAI(lovableApiKey, varMd, varSku, `${product.original_title} - ${varValue}`, supplierInstr, varHtml);
                         if (varParsed) {
                           varImages = varParsed.product_images || [];
                           varSpecs = varParsed.specs && Object.keys(varParsed.specs).length > 0 ? varParsed.specs : null;
