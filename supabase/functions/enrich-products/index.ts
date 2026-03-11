@@ -207,7 +207,7 @@ Deno.serve(async (req) => {
               || Object.values(scrapingInstructions)[0] 
               || '';
 
-            aiParsed = await parseWithAI(lovableApiKey, markdown, sku, product.original_title || '', supplierInstructions);
+            aiParsed = await parseWithAI(lovableApiKey, markdown, sku, product.original_title || '', supplierInstructions, html);
           }
 
           // Fallback to regex-based extraction if AI fails
