@@ -267,7 +267,7 @@ const ProductsPage = () => {
 
   const handleOptimizeClick = (ids: string[]) => {
     // Auto-include entire family: parent + all siblings for variable products
-    const allProducts = products ?? [];
+    const allProducts = allProductsLight ?? [];
     const expandedIds = new Set(ids);
     ids.forEach(id => {
       const p = allProducts.find(pr => pr.id === id);
