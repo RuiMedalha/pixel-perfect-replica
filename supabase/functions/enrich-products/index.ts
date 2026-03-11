@@ -303,23 +303,15 @@ Deno.serve(async (req) => {
             }
             updateData.attributes = sortedVariations;
             
-            // Only convert to variable if we have real SKUs AND at least one exists in the workspace
-            if (hasRealSkus && product.product_type === 'simple') {
-              // Check if any of these SKUs actually exist in the workspace before converting
-              const skusToCheck = mainVar.skus.filter((s: string) => s !== sku);
-              let anyExist = false;
-              for (let ci = 0; ci < skusToCheck.length; ci += 100) {
-                const chunk = skusToCheck.slice(ci, ci + 100);
-                const { data: found, count } = await supabase.from("products")
-                  .select("id", { count: 'exact', head: true })
-                  .eq("workspace_id", workspaceId)
-                  .in("sku", chunk);
-                if (count && count > 0) { anyExist = true; break; }
-              }
-              if (anyExist) {
-                updateData.product_type = 'variable';
-              }
+            // Only convert to variable if the product is ALREADY variable (e.g. imported from WooCommerce)
+            // Simple products should NOT be auto-converted — that's done explicitly via the Variations page
+            if (hasRealSkus && product.product_type === 'variable') {
+              // Product is already variable, just update attributes
+              updateData.product_type = 'variable';
             }
+            // NOTE: We no longer auto-convert simple→variable during enrichment.
+            // The detected variations are stored as attributes for reference,
+            // but the actual conversion happens explicitly via the Variations page.
           }
 
           if (Object.keys(updateData).length > 0) {
@@ -381,14 +373,20 @@ Deno.serve(async (req) => {
                 const existing = existingMap.get(varSku);
 
                 if (existing) {
-                  // If it exists as simple, convert to variation under this parent
+                  // Only convert simple→variation if the parent is ALREADY a variable product
+                  // (i.e., it was imported from WooCommerce or explicitly set via Variations page)
                   if (existing.product_type === 'simple' && !existing.parent_product_id && existing.id !== product.id) {
-                    await supabase.from("products").update({
-                      product_type: 'variation',
-                      parent_product_id: product.id,
-                      attributes: [{ name: mainVariation.name, value: varValue }],
-                    }).eq("id", existing.id);
-                    variationsCreated++;
+                    if (product.product_type === 'variable' || updateData.product_type === 'variable') {
+                      await supabase.from("products").update({
+                        product_type: 'variation',
+                        parent_product_id: product.id,
+                        attributes: [{ name: mainVariation.name, value: varValue }],
+                      }).eq("id", existing.id);
+                      variationsCreated++;
+                    } else {
+                      // Parent is still simple — don't convert children, just log
+                      console.log(`⏭️ Skipping conversion of ${varSku} — parent ${sku} is still simple`);
+                    }
                   }
                 } else if (varSku !== sku) {
                   // SKU not found in workspace — flag as missing, do NOT auto-create
