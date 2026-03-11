@@ -646,7 +646,7 @@ const ProductsPage = () => {
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <h1 className="text-lg sm:text-2xl font-bold text-foreground">Painel de Produtos</h1>
-            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">{products?.length ?? 0} produtos no total</p>
+            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">{totalCount} produtos no total</p>
           </div>
           <Select onValueChange={(val) => {
             const count = parseInt(val);
