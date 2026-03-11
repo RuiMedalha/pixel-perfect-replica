@@ -282,7 +282,13 @@ const ProductsPage = () => {
         allProducts.filter(c => c.parent_product_id === p.parent_product_id).forEach(c => expandedIds.add(c.id));
       }
     });
-    const finalIds = Array.from(expandedIds);
+    // Sort: variable parents first, then simple, then variations
+    const finalIds = Array.from(expandedIds).sort((a, b) => {
+      const pa = allProducts.find(pr => pr.id === a);
+      const pb = allProducts.find(pr => pr.id === b);
+      const order = (p: any) => p?.product_type === 'variable' ? 0 : p?.product_type === 'simple' ? 1 : 2;
+      return order(pa) - order(pb);
+    });
     if (finalIds.length > ids.length) {
       toast.info(`${finalIds.length - ids.length} produto(s) da mesma família incluído(s) automaticamente para otimização em grupo.`);
     }
