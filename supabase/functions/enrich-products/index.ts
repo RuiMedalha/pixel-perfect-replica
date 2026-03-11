@@ -85,17 +85,44 @@ Deno.serve(async (req) => {
     }
 
     // Check which products already have knowledge cached
-    const { data: existingChunks } = await supabase.from("knowledge_chunks")
-      .select("source_name")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", userId);
+    const isManualSelection = productIds && productIds.length > 0;
     
-    const existingSources = new Set((existingChunks || []).map((c: any) => c.source_name));
-
-    const toEnrich = products.filter(p => {
-      if (!p.sku) return false;
-      return !existingSources.has(`🌐 SKU: ${p.sku}`);
-    });
+    let toEnrich: any[];
+    
+    if (isManualSelection) {
+      // Manual selection: re-enrich ALL selected, delete old cache first
+      toEnrich = products.filter(p => !!p.sku);
+      
+      // Delete existing knowledge chunks for these SKUs so they get refreshed
+      const skusToRefresh = toEnrich.map(p => `🌐 SKU: ${p.sku}`);
+      if (skusToRefresh.length > 0) {
+        // Find and delete uploaded_files + chunks for these sources
+        const { data: oldFiles } = await supabase.from("uploaded_files")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", userId)
+          .in("file_name", skusToRefresh);
+        
+        if (oldFiles && oldFiles.length > 0) {
+          const oldFileIds = oldFiles.map((f: any) => f.id);
+          await supabase.from("knowledge_chunks").delete().in("file_id", oldFileIds);
+          await supabase.from("uploaded_files").delete().in("id", oldFileIds);
+          console.log(`Cleared ${oldFiles.length} cached enrichment entries for re-enrichment`);
+        }
+      }
+    } else {
+      // Bulk: skip already enriched
+      const { data: existingChunks } = await supabase.from("knowledge_chunks")
+        .select("source_name")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", userId);
+      
+      const existingSources = new Set((existingChunks || []).map((c: any) => c.source_name));
+      toEnrich = products.filter(p => {
+        if (!p.sku) return false;
+        return !existingSources.has(`🌐 SKU: ${p.sku}`);
+      });
+    }
 
     console.log(`Enriching ${toEnrich.length} of ${products.length} products (${products.length - toEnrich.length} already cached)`);
 
