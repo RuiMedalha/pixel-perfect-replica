@@ -266,20 +266,8 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
-      {/* WooCommerce */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">🛒 WooCommerce</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>URL do Site</Label>
-            <Input placeholder="https://hotelequip.pt" value={form[SETTING_KEYS.woo_url] ?? ""} onChange={(e) => updateField(SETTING_KEYS.woo_url, e.target.value)} />
-          </div>
-          <SecretField label="Consumer Key" id="woo_key" settingKey={SETTING_KEYS.woo_key} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
-          <SecretField label="Consumer Secret" id="woo_secret" settingKey={SETTING_KEYS.woo_secret} form={form} updateField={updateField} showKeys={showKeys} toggleShow={toggleShow} />
-        </CardContent>
-      </Card>
+      {/* WooCommerce Multi-Site */}
+      <WooSitesManager />
 
       {/* WooCommerce Publish Fields */}
       <Card>
