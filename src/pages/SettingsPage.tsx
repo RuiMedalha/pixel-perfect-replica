@@ -211,11 +211,31 @@ const SettingsPage = () => {
                 disabled={!form[SETTING_KEYS.telegram_chat_id]?.trim()}
                 onClick={async () => {
                   try {
+                    // Save the chat ID first so the edge function can read it
+                    const chatId = form[SETTING_KEYS.telegram_chat_id]?.trim();
+                    if (!chatId) {
+                      toast.error("Introduz o Telegram Chat ID primeiro");
+                      return;
+                    }
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) { toast.error("Não autenticado"); return; }
+
+                    await supabase.from("settings").upsert(
+                      { user_id: user.id, key: "telegram_chat_id", value: chatId },
+                      { onConflict: "user_id,key" }
+                    );
+
                     toast.info("A enviar teste Telegram...");
                     const { data, error } = await supabase.functions.invoke("test-telegram");
-                    if (error) throw error;
+                    if (error) {
+                      // Try to parse error context from FunctionsHttpError
+                      const ctx = typeof error === "object" && "context" in error ? (error as any).context : null;
+                      const msg = ctx?.error || error.message || "Erro ao enviar";
+                      toast.error(msg);
+                      return;
+                    }
                     if (data?.success) {
-                      toast.success("✅ Notificação Telegram enviada com sucesso!");
+                      toast.success("✅ Notificação Telegram enviada!");
                     } else {
                       toast.error(data?.error || "Erro ao enviar notificação");
                     }
