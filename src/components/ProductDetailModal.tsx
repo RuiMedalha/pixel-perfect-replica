@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { VariationsPanel } from "@/components/VariationsPanel";
 import { cn } from "@/lib/utils";
 import type { Product } from "@/hooks/useProducts";
-import { useProducts } from "@/hooks/useProducts";
+import { useAllProductIds } from "@/hooks/useProducts";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";

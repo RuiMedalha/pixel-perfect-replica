@@ -11,7 +11,7 @@ import { FolderTree, Plus, Edit, Trash2, ChevronRight, ChevronDown, Loader2, Fol
 import { cn } from "@/lib/utils";
 import { useCategoryTree, useCreateCategory, useUpdateCategory, useDeleteCategory, useSyncWooCategories, type CategoryTree, type Category } from "@/hooks/useCategories";
 
-import { useProducts } from "@/hooks/useProducts";
+import { useAllProductIds } from "@/hooks/useProducts";
 
 function CategoryTreeItem({
   cat,
