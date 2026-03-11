@@ -749,8 +749,8 @@ const ProductsPage = () => {
               className="text-xs h-8"
               onClick={async () => {
                 const selectedProducts = selected.size > 0
-                  ? (products ?? []).filter(p => selected.has(p.id) && p.product_type === 'simple')
-                  : (products ?? []).filter(p => p.product_type === 'simple').slice(0, 500);
+                  ? (allProductsLight ?? []).filter((p: any) => selected.has(p.id) && p.product_type === 'simple')
+                  : (allProductsLight ?? []).filter((p: any) => p.product_type === 'simple').slice(0, 500);
                 const result = await detectVariations.mutateAsync({
                   workspaceId: activeWorkspace.id,
                   products: selectedProducts.map(p => ({ id: p.id, sku: p.sku, original_title: p.original_title, optimized_title: p.optimized_title, category: p.category, original_price: p.original_price, original_description: p.original_description, short_description: p.short_description, product_type: p.product_type, attributes: p.attributes, crosssell_skus: p.crosssell_skus, upsell_skus: p.upsell_skus })),
