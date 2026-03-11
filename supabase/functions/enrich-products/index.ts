@@ -674,21 +674,27 @@ function parseWithRegex(markdown: string): any {
   const mdImageRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
   const foundImages: string[] = [];
 
+  // Only look at the first portion of markdown (product area, not footer/related)
+  const productArea = markdown.substring(0, 5000);
+  
   let match;
-  while ((match = mdImageRegex.exec(markdown)) !== null) {
+  while ((match = mdImageRegex.exec(productArea)) !== null) {
     const url = match[1];
-    if (imageExtensions.test(url.split('?')[0]) && !url.includes('.svg')) {
+    if (imageExtensions.test(url.split('?')[0]) && !url.includes('.svg') && !url.includes('logo') && !url.includes('icon') && !url.includes('banner') && !url.includes('footer')) {
       foundImages.push(url);
     }
   }
 
   const srcRegex = /src=["'](https?:\/\/[^"']+\.(?:jpg|jpeg|png|webp|gif)[^"']*)/gi;
-  while ((match = srcRegex.exec(markdown)) !== null) {
-    foundImages.push(match[1]);
+  while ((match = srcRegex.exec(productArea)) !== null) {
+    const url = match[1];
+    if (!url.includes('logo') && !url.includes('icon') && !url.includes('banner') && !url.includes('footer')) {
+      foundImages.push(url);
+    }
   }
 
   return {
-    product_images: [...new Set(foundImages)].slice(0, 10),
+    product_images: [...new Set(foundImages)].slice(0, 8),
     variations: [],
     specs: {},
     series_name: null,
