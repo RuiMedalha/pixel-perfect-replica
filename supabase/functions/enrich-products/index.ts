@@ -129,12 +129,20 @@ Deno.serve(async (req) => {
     let enriched = 0;
     let failed = 0;
     const results: any[] = [];
+    // Track SKUs that were converted to variations by a parent in this run
+    const convertedVariationSkus = new Set<string>();
 
     for (let i = 0; i < toEnrich.length; i += batchSize) {
       const batch = toEnrich.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (product: any) => {
         const sku = product.sku;
+        
+        // Skip if this product was already converted to a variation by a parent earlier in this run
+        if (convertedVariationSkus.has(sku)) {
+          console.log(`Skipping ${sku} — already converted to variation by a parent in this run`);
+          return { sku, success: true, skippedAsVariation: true };
+        }
         
         // Find matching supplier prefix
         let matchedPrefix: any = null;
@@ -317,6 +325,11 @@ Deno.serve(async (req) => {
               for (let vi = 0; vi < maxVariations; vi++) {
                 const varSku = skus[vi];
                 const varValue = values[vi];
+                
+                // Mark this SKU so it won't be enriched independently later in this run
+                if (varSku !== sku) {
+                  convertedVariationSkus.add(varSku);
+                }
 
                 // Check if this SKU already exists in workspace
                 const { data: existing } = await supabase.from("products")
@@ -475,6 +488,7 @@ Deno.serve(async (req) => {
       const batchResults = await Promise.all(batchPromises);
       for (const r of batchResults) {
         results.push(r);
+        if (r.skippedAsVariation) continue; // don't count as enriched or failed
         if (r.success) enriched++;
         else failed++;
       }
