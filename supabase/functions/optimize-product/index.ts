@@ -536,12 +536,16 @@ serve(async (req) => {
         }
 
         // 1. HYBRID RAG: keyword + trigram + family search with reranking
+        // OPTIMIZATION: Skip RAG/scraping in phases 2 and 3 — context already available from phase 1
+        const isLaterPhase = phase && phase > 1;
         let knowledgeContext = "";
         const allChunks: any[] = [];
         let topChunks: any[] = [];
         let ragMatchTypeCounts: Record<string, number> = {};
 
-        if (skipKnowledge) {
+        if (isLaterPhase) {
+          console.log(`⏭️ Phase ${phase}: skipping RAG (context from phase 1 already in product data)`);
+        } else if (skipKnowledge) {
           console.log("⏭️ Knowledge base skipped (skipKnowledge=true)");
         } else {
 
