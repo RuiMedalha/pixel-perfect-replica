@@ -650,7 +650,7 @@ ${truncatedMd}${variationHtml}`;
                    items: {
                      type: "object",
                      properties: {
-                       sku: { type: "string" },
+                       sku: { type: "string", description: "SKU code only (e.g. '80020'), NOT the full URL" },
                        url: { type: "string" },
                        value: { type: "string" }
                      },
