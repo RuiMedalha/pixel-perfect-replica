@@ -18,6 +18,7 @@ const WooImportPage = () => {
   const [filters, setFilters] = useState<WooImportFilters>({});
   const [selectedAttribute, setSelectedAttribute] = useState<string>("");
   const [selectedTerm, setSelectedTerm] = useState<string>("");
+  const [selectedBrand, setSelectedBrand] = useState<string>("");
 
   const isLoading = loadingCats || loadingAttrs;
 
