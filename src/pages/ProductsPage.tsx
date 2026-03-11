@@ -425,7 +425,7 @@ const ProductsPage = () => {
   // Update detailProduct when products data changes
   useEffect(() => {
     if (detailProduct && products) {
-      const updated = products.find((p) => p.id === detailProduct.id);
+      const updated = products.find((p: Product) => p.id === detailProduct.id);
       if (updated) setDetailProduct(updated);
     }
   }, [products]);
