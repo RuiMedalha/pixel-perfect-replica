@@ -47,9 +47,13 @@ const WooImportPage = () => {
     const finalFilters: WooImportFilters = { ...filters };
     
     // Brand filter
-    if (selectedBrand && brandAttr) {
-      finalFilters.attribute = `pa_${brandAttr.name.toLowerCase().replace(/\s+/g, '-')}`;
-      finalFilters.attribute_term = selectedBrand;
+    if (selectedBrand && hasBrands) {
+      const selectedBrandTerm = allBrandTerms.find(t => String(t.id) === selectedBrand);
+      if (selectedBrandTerm) {
+        const attr = brandAttrs.find(a => a.id === selectedBrandTerm.attrId);
+        finalFilters.attribute = `pa_${attr?.name.toLowerCase().replace(/\s+/g, '-')}`;
+        finalFilters.attribute_term = selectedBrand;
+      }
     }
     // Generic attribute filter (only if no brand filter active)
     else if (selectedAttribute && selectedTerm) {
