@@ -15,25 +15,29 @@ export const FIELD_PROMPTS: FieldPromptConfig[] = [
     label: "Título",
     settingKey: "prompt_field_title",
     defaultPrompt: `Gera um título otimizado para SEO (máx 70 chars).
+CONTEXTO: Estes são equipamentos PROFISSIONAIS para hotelaria, restauração, cozinhas industriais e bares.
 REGRAS OBRIGATÓRIAS:
 - Inclui a keyword principal no início
-- Inclui marca/linha se aplicável (ex: "Linha 700", "Linha 900")
-- Inclui capacidade/dimensão se relevante (ex: "40x40", "4 Bicos")
-- Nunca uses palavras genéricas como "Profissional" sem contexto
-- Mantém o tipo de energia se aplicável (Gás, Elétrico, etc.)`,
+- NÃO incluas o nome da marca no título (ex: NÃO "Zanussi Fritadeira", SIM "Fritadeira a Gás Linha 700")
+- Inclui linha/série se aplicável (ex: "Linha 700", "Linha 900")
+- Inclui capacidade/dimensão se relevante (ex: "40x40", "4 Bicos", "8 Litros")
+- Mantém o tipo de energia se aplicável (Gás, Elétrico, etc.)
+- Nunca uses palavras genéricas como "Profissional" sem contexto técnico`,
   },
   {
     key: "description",
     label: "Descrição Completa",
     settingKey: "prompt_field_description",
     defaultPrompt: `Gera uma descrição otimizada com ESTRUTURA OBRIGATÓRIA:
-1. PARÁGRAFO COMERCIAL (150-250 chars): Benefícios, aplicações, diferenciais. Sem dados técnicos.
+CONTEXTO: Estes são equipamentos PROFISSIONAIS para hotelaria, restauração, cozinhas industriais e bares.
+1. PARÁGRAFO COMERCIAL (150-250 chars): Benefícios, aplicações, diferenciais. Sem dados técnicos. NÃO menciones a marca.
 2. TABELA HTML de specs: <table> com TODAS as características técnicas (dimensões, peso, material, potência, voltagem, etc.)
 3. FAQ HTML: 3-5 perguntas frequentes em <details><summary>Pergunta</summary><p>Resposta</p></details>
 
 REGRAS OBRIGATÓRIAS:
+- NÃO incluas o nome da marca no texto comercial — foca no equipamento e nas suas capacidades
 - NÃO mistures dados técnicos no texto comercial
-- Menciona aplicações práticas (restaurante, hotel, pastelaria, etc.)
+- Menciona aplicações práticas (restaurante, hotel, pastelaria, bar, etc.)
 - Inclui benefícios de eficiência energética se aplicável
 - Menciona conformidade com normas (CE, HACCP) se relevante`,
   },
@@ -42,8 +46,10 @@ REGRAS OBRIGATÓRIAS:
     label: "Descrição Curta",
     settingKey: "prompt_field_short_description",
     defaultPrompt: `Gera uma descrição curta (máx 160 chars) para listagens.
+CONTEXTO: Equipamento profissional para hotelaria, restauração, cozinhas industriais e bares.
 REGRAS OBRIGATÓRIAS:
 - Resumo conciso focado no benefício principal
+- NÃO incluas o nome da marca
 - Inclui 1-2 specs chave (dimensão ou capacidade)
 - Inclui tipo de energia se aplicável
 - Tom profissional e direto`,
@@ -53,10 +59,11 @@ REGRAS OBRIGATÓRIAS:
     label: "Meta Title (SEO)",
     settingKey: "prompt_field_meta_title",
     defaultPrompt: `Gera meta title SEO (máx 60 chars).
+CONTEXTO: Equipamento profissional para hotelaria, restauração e bares.
 REGRAS OBRIGATÓRIAS:
 - Keyword principal no início
 - Inclui "Comprar" ou "Preço" para intenção comercial
-- Inclui marca/linha se couber
+- NÃO incluas o nome da marca — foca na linha/série e tipo de equipamento
 - Termina com separador e nome da loja se couber`,
   },
   {
