@@ -567,7 +567,7 @@ ${truncatedMd}${variationHtml}`;
                 product_images: {
                   type: "array",
                   items: { type: "string" },
-                  description: "URLs of images that belong ONLY to this specific product (not series, icons, or related products)"
+                  description: "ALL image URLs of this product: main photo, gallery images, alternate angles, zoom views, detail shots. Include every product image found. Exclude only icons, logos, banners, and decorative elements."
                 },
                 variations: {
                   type: "array",
