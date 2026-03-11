@@ -330,7 +330,7 @@ const ProductsPage = () => {
       setPendingOptimizeIds([]);
       setSelected(new Set());
       setSelectedModel("default");
-      setBackgroundMode(false);
+      setBackgroundMode(true);
       return;
     }
 
