@@ -271,6 +271,121 @@ Deno.serve(async (req) => {
             await supabase.from("products").update(updateData).eq("id", product.id);
           }
 
+          // --- Expand variations: create child products ---
+          let variationsCreated = 0;
+          if (aiParsed.variations && aiParsed.variations.length > 0) {
+            const mainVariation = aiParsed.variations[0]; // primary variation attribute
+            const skus = mainVariation.skus || [];
+            const values = mainVariation.values || [];
+            const variationUrls = aiParsed.variation_urls || [];
+
+            if (skus.length > 0 && skus.length === values.length) {
+              const maxVariations = Math.min(skus.length, 10);
+              
+              for (let vi = 0; vi < maxVariations; vi++) {
+                const varSku = skus[vi];
+                const varValue = values[vi];
+
+                // Check if this SKU already exists in workspace
+                const { data: existing } = await supabase.from("products")
+                  .select("id, product_type, parent_product_id")
+                  .eq("sku", varSku)
+                  .eq("workspace_id", workspaceId)
+                  .maybeSingle();
+
+                if (existing) {
+                  // If it exists as simple, convert to variation under this parent
+                  if (existing.product_type === 'simple' && !existing.parent_product_id && existing.id !== product.id) {
+                    await supabase.from("products").update({
+                      product_type: 'variation',
+                      parent_product_id: product.id,
+                      attributes: [{ name: mainVariation.name, value: varValue }],
+                    }).eq("id", existing.id);
+                    variationsCreated++;
+                  }
+                  continue;
+                }
+
+                // Try to scrape individual variation page for specific data
+                let varImages: string[] = [];
+                let varSpecs: any = null;
+                let varPrice: number | null = null;
+
+                const varUrlEntry = variationUrls.find((vu: any) => vu.sku === varSku || vu.value === varValue);
+                let varScrapeUrl = varUrlEntry?.url || '';
+
+                // If no URL from AI, build from supplier prefix pattern
+                if (!varScrapeUrl && matchedPrefix?.searchUrl) {
+                  const varRef = matchedPrefix.prefix ? varSku.substring(matchedPrefix.prefix.length) : varSku;
+                  varScrapeUrl = matchedPrefix.searchUrl.replace("{sku}", varRef);
+                }
+
+                if (varScrapeUrl) {
+                  try {
+                    const varResp = await fetch('https://api.firecrawl.dev/v1/scrape', {
+                      method: 'POST',
+                      headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        url: varScrapeUrl,
+                        formats: ['markdown'],
+                        onlyMainContent: true,
+                      }),
+                    });
+
+                    if (varResp.ok) {
+                      const varData = await varResp.json();
+                      const varMd = varData.data?.markdown || varData.markdown || '';
+                      if (varMd.length > 50 && lovableApiKey) {
+                        const supplierInstr = matchedPrefix?.scrapingInstructions || scrapingInstructions[matchedPrefix?.name] || Object.values(scrapingInstructions)[0] || '';
+                        const varParsed = await parseWithAI(lovableApiKey, varMd, varSku, `${product.original_title} - ${varValue}`, supplierInstr);
+                        if (varParsed) {
+                          varImages = varParsed.product_images || [];
+                          varSpecs = varParsed.specs && Object.keys(varParsed.specs).length > 0 ? varParsed.specs : null;
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    console.error(`Failed to scrape variation ${varSku}:`, e);
+                  }
+                }
+
+                // Create child product
+                const childData: any = {
+                  user_id: userId,
+                  workspace_id: workspaceId,
+                  sku: varSku,
+                  original_title: `${product.original_title || ''} - ${varValue}`.trim(),
+                  product_type: 'variation',
+                  parent_product_id: product.id,
+                  attributes: [{ name: mainVariation.name, value: varValue }],
+                  status: 'pending',
+                  source_file: product.source_file || null,
+                  supplier_ref: product.supplier_ref || null,
+                };
+
+                if (varImages.length > 0) {
+                  childData.image_urls = varImages;
+                } else if (product.image_urls && product.image_urls.length > 0) {
+                  childData.image_urls = product.image_urls; // inherit parent images
+                }
+
+                if (varSpecs) {
+                  childData.technical_specs = JSON.stringify(varSpecs);
+                } else if (product.technical_specs) {
+                  childData.technical_specs = product.technical_specs;
+                }
+
+                await supabase.from("products").insert(childData);
+                variationsCreated++;
+              }
+
+              console.log(`Created ${variationsCreated} variation children for parent ${sku}`);
+            }
+          }
+
           // --- Save knowledge chunks ---
           const extractedText = markdown.substring(0, 30000);
 
@@ -313,6 +428,7 @@ Deno.serve(async (req) => {
             sku, success: true, url: searchUrl, 
             images: productImages.length, 
             variations: aiParsed.variations?.length || 0,
+            variationsCreated,
             specs: Object.keys(aiParsed.specs || {}).length,
             isVariable: (aiParsed.variations?.length || 0) > 0,
             aiParsed: !!lovableApiKey,
@@ -365,6 +481,8 @@ RULES:
 - Only include images that belong to THIS specific product (not series, related products, icons, logos, newsletter images, or footer images)
 - Filter out SVG icons, tiny images, and decorative elements
 - Detect product variations (sizes, colors, diameters, capacities, etc.) - each variation may have its own SKU
+- IMPORTANT: For each variation, try to extract the individual SKU code. Look in size selectors, option dropdowns, data attributes, or URL patterns.
+- If the page has clickable links for each variation (e.g. size buttons that link to individual product pages), extract those URLs in variation_urls.
 - Extract technical specifications as structured key-value pairs
 - Identify the product series/family name if visible
 
@@ -418,12 +536,26 @@ ${truncatedMd}`;
                         items: { type: "string" },
                         description: "SKUs for each variation value, if visible (same order as values)"
                       }
-                    },
-                    required: ["name", "values"],
-                    additionalProperties: false
-                  },
-                  description: "Product variations (sizes, colors, etc.)"
-                },
+                 },
+                     required: ["name", "values"],
+                     additionalProperties: false
+                   },
+                   description: "Product variations (sizes, colors, etc.)"
+                 },
+                 variation_urls: {
+                   type: "array",
+                   items: {
+                     type: "object",
+                     properties: {
+                       sku: { type: "string" },
+                       url: { type: "string" },
+                       value: { type: "string" }
+                     },
+                     required: ["sku", "value"],
+                     additionalProperties: false
+                   },
+                   description: "Individual URLs for each variation, if clickable links are visible on the page (e.g. size selector links)"
+                 },
                 specs: {
                   type: "object",
                   additionalProperties: { type: "string" },
