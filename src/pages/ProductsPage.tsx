@@ -211,11 +211,10 @@ const ProductsPage = () => {
 
     // Find all variable products and their children
     const variableProducts = filtered.filter(p => p.product_type === "variable");
-    const allProducts = products ?? [];
+    const allProds = products;
 
     for (const parent of variableProducts) {
-      // Find children in filtered AND in all products (show all children of matching parents)
-      const children = allProducts.filter(p => p.parent_product_id === parent.id);
+      const children = allProds.filter(p => p.parent_product_id === parent.id);
       children.forEach(c => variationIds.add(c.id));
       items.push({ type: "parent", product: parent, children });
     }
