@@ -129,12 +129,20 @@ Deno.serve(async (req) => {
     let enriched = 0;
     let failed = 0;
     const results: any[] = [];
+    // Track SKUs that were converted to variations by a parent in this run
+    const convertedVariationSkus = new Set<string>();
 
     for (let i = 0; i < toEnrich.length; i += batchSize) {
       const batch = toEnrich.slice(i, i + batchSize);
       
       const batchPromises = batch.map(async (product: any) => {
         const sku = product.sku;
+        
+        // Skip if this product was already converted to a variation by a parent earlier in this run
+        if (convertedVariationSkus.has(sku)) {
+          console.log(`Skipping ${sku} — already converted to variation by a parent in this run`);
+          return { sku, success: true, skippedAsVariation: true };
+        }
         
         // Find matching supplier prefix
         let matchedPrefix: any = null;
