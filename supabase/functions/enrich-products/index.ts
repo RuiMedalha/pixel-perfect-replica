@@ -280,16 +280,10 @@ Deno.serve(async (req) => {
             const values = mainVariation.values || [];
             const variationUrls = aiParsed.variation_urls || [];
 
-            if (values.length > 0) {
-              // Generate SKUs if AI didn't extract them: parentSKU-value
-              const skus = rawSkus.length === values.length 
-                ? rawSkus 
-                : values.map((v: string) => {
-                    const cleanVal = v.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
-                    return `${sku}-${cleanVal}`;
-                  });
+            if (values.length > 0 && rawSkus.length === values.length) {
+              const skus = rawSkus;
               
-              console.log(`Expanding ${values.length} variations for ${sku} (SKUs from AI: ${rawSkus.length > 0 ? 'yes' : 'generated'})`);
+              console.log(`Expanding ${values.length} variations for ${sku} (SKUs: ${skus.join(', ')})`);
               
               const maxVariations = Math.min(skus.length, 10);
               
