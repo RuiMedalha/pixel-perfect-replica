@@ -37,13 +37,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { workspaceId } = await req.json();
-    if (!workspaceId) {
-      return new Response(JSON.stringify({ error: "workspaceId obrigatório" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    // workspaceId is no longer required — categories are global per user
+    // Accept it for backward compat but don't use it for scoping
 
     // Get WooCommerce credentials
     const { data: settings } = await supabase
@@ -87,11 +82,11 @@ Deno.serve(async (req) => {
       if (cats.length < 100) break;
     }
 
-    // Get existing categories for this workspace
+    // Get existing categories for this user (global, no workspace filter)
     const { data: existingCats } = await supabase
       .from("categories")
       .select("id, woocommerce_id, name")
-      .eq("workspace_id", workspaceId);
+      .is("workspace_id", null);
 
     const existingByWooId = new Map<number, string>();
     (existingCats || []).forEach((c: any) => {
@@ -135,7 +130,7 @@ Deno.serve(async (req) => {
         // Create new
         const { data: newCat, error: insertErr } = await supabase.from("categories").insert({
           user_id: user.id,
-          workspace_id: workspaceId,
+          workspace_id: null, // Global — shared across all workspaces
           woocommerce_id: wooCat.id,
           name: wooCat.name,
           slug: wooCat.slug,

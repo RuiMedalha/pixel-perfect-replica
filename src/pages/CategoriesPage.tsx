@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FolderTree, Plus, Edit, Trash2, ChevronRight, ChevronDown, Loader2, FolderOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCategoryTree, useCreateCategory, useUpdateCategory, useDeleteCategory, useSyncWooCategories, type CategoryTree, type Category } from "@/hooks/useCategories";
-import { useWorkspaceContext } from "@/hooks/useWorkspaces";
+
 import { useProducts } from "@/hooks/useProducts";
 
 function CategoryTreeItem({
@@ -71,7 +71,6 @@ function CategoryTreeItem({
 }
 
 const CategoriesPage = () => {
-  const { activeWorkspace } = useWorkspaceContext();
   const { data: tree, flat, isLoading } = useCategoryTree();
   const { data: products } = useProducts();
   const createCategory = useCreateCategory();
@@ -115,7 +114,7 @@ const CategoriesPage = () => {
   };
 
   const handleSave = () => {
-    if (!form.name.trim() || !activeWorkspace) return;
+    if (!form.name.trim()) return;
     if (editingCat) {
       updateCategory.mutate({
         id: editingCat.id,
@@ -131,7 +130,6 @@ const CategoriesPage = () => {
     } else {
       createCategory.mutate({
         name: form.name,
-        workspace_id: activeWorkspace.id,
         slug: form.slug || undefined,
         description: form.description || undefined,
         meta_title: form.meta_title || undefined,
@@ -160,7 +158,7 @@ const CategoriesPage = () => {
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <FolderTree className="w-6 h-6" /> Categorias
           </h1>
-          <p className="text-muted-foreground mt-1">{flat.length} categoria(s) no workspace</p>
+          <p className="text-muted-foreground mt-1">{flat.length} categoria(s) — partilhadas entre todos os workspaces</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => syncWooCategories.mutate()} disabled={syncWooCategories.isPending}>
@@ -180,7 +178,7 @@ const CategoriesPage = () => {
           ) : tree.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <FolderTree className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>Nenhuma categoria criada neste workspace.</p>
+              <p>Nenhuma categoria criada.</p>
               <p className="text-xs mt-1">Crie categorias para organizar os seus produtos.</p>
               <Button variant="outline" className="mt-4" onClick={() => openCreate()}>
                 <Plus className="w-4 h-4 mr-1" /> Criar Primeira Categoria
