@@ -45,10 +45,23 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .maybeSingle();
 
-    const chatId = chatIdSetting?.value;
+    const rawChatId = chatIdSetting?.value ?? "";
+    const chatId = rawChatId.trim();
+
     if (!chatId) {
       return new Response(
         JSON.stringify({ error: "telegram_chat_id não configurado nas Definições" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!/^-?\d+$/.test(chatId)) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Telegram Chat ID inválido. Usa um ID numérico (ex: 123456789 ou -1001234567890), não @username nem link t.me.",
+          received: rawChatId,
+        }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -85,12 +98,25 @@ serve(async (req) => {
       }),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({ ok: false, description: "Invalid response" }));
 
-    if (!response.ok) {
+    if (!response.ok || data?.ok === false) {
+      const description = data?.description ?? "Erro desconhecido do Telegram";
+
+      if (typeof description === "string" && description.toLowerCase().includes("chat not found")) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Chat não encontrado. Envia /start ao teu bot no Telegram e usa o teu Chat ID numérico (não @username).",
+            details: data,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       return new Response(
         JSON.stringify({ error: `Telegram API failed [${response.status}]`, details: data }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: response.status || 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
