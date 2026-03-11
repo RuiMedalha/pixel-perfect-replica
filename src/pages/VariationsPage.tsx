@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Search, Check, X, AlertTriangle, ChevronDown, ChevronRight, Sparkles, Network, Plus, RefreshCw, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { useProducts, type Product } from "@/hooks/useProducts";
+import { useAllProductIds, type Product } from "@/hooks/useProducts";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { useDetectVariations, useApplyVariations, type VariationGroup, type AddToExistingGroup } from "@/hooks/useVariableProducts";
 import { supabase } from "@/integrations/supabase/client";
