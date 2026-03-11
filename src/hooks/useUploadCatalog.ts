@@ -417,6 +417,10 @@ export function useUploadCatalog() {
     updateFile(id, { columnMapping: mapping });
   };
 
+  const setUpdateFields = (id: string, fields: string[]) => {
+    updateFile(id, { updateFields: fields });
+  };
+
   const confirmMapping = (id: string) => {
     updateFile(id, { status: "aguardando" });
   };
