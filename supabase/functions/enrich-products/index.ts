@@ -303,23 +303,15 @@ Deno.serve(async (req) => {
             }
             updateData.attributes = sortedVariations;
             
-            // Only convert to variable if we have real SKUs AND at least one exists in the workspace
-            if (hasRealSkus && product.product_type === 'simple') {
-              // Check if any of these SKUs actually exist in the workspace before converting
-              const skusToCheck = mainVar.skus.filter((s: string) => s !== sku);
-              let anyExist = false;
-              for (let ci = 0; ci < skusToCheck.length; ci += 100) {
-                const chunk = skusToCheck.slice(ci, ci + 100);
-                const { data: found, count } = await supabase.from("products")
-                  .select("id", { count: 'exact', head: true })
-                  .eq("workspace_id", workspaceId)
-                  .in("sku", chunk);
-                if (count && count > 0) { anyExist = true; break; }
-              }
-              if (anyExist) {
-                updateData.product_type = 'variable';
-              }
+            // Only convert to variable if the product is ALREADY variable (e.g. imported from WooCommerce)
+            // Simple products should NOT be auto-converted — that's done explicitly via the Variations page
+            if (hasRealSkus && product.product_type === 'variable') {
+              // Product is already variable, just update attributes
+              updateData.product_type = 'variable';
             }
+            // NOTE: We no longer auto-convert simple→variable during enrichment.
+            // The detected variations are stored as attributes for reference,
+            // but the actual conversion happens explicitly via the Variations page.
           }
 
           if (Object.keys(updateData).length > 0) {
