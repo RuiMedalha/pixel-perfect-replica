@@ -197,11 +197,36 @@ const SettingsPage = () => {
             <p className="text-xs text-muted-foreground">
               O bot Telegram envia notificações a 50% e ao concluir jobs de background. Para obter o chat ID, envie <code>/start</code> ao bot e depois use <code>/chatid</code> ou consulte o @userinfobot.
             </p>
-            <Input
-              placeholder="123456789"
-              value={form[SETTING_KEYS.telegram_chat_id] ?? ""}
-              onChange={(e) => updateField(SETTING_KEYS.telegram_chat_id, e.target.value)}
-            />
+            <div className="flex gap-2">
+              <Input
+                className="flex-1"
+                placeholder="123456789"
+                value={form[SETTING_KEYS.telegram_chat_id] ?? ""}
+                onChange={(e) => updateField(SETTING_KEYS.telegram_chat_id, e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!form[SETTING_KEYS.telegram_chat_id]?.trim()}
+                onClick={async () => {
+                  try {
+                    toast.info("A enviar teste Telegram...");
+                    const { data, error } = await supabase.functions.invoke("test-telegram");
+                    if (error) throw error;
+                    if (data?.success) {
+                      toast.success("✅ Notificação Telegram enviada com sucesso!");
+                    } else {
+                      toast.error(data?.error || "Erro ao enviar notificação");
+                    }
+                  } catch (err: any) {
+                    toast.error(err.message || "Erro ao testar Telegram");
+                  }
+                }}
+              >
+                <Send className="h-4 w-4 mr-1" /> Testar
+              </Button>
+            </div>
           </div>
           <Separator />
           <div className="space-y-2">
