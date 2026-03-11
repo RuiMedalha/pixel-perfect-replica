@@ -195,7 +195,7 @@ const SettingsPage = () => {
           <div className="space-y-2">
             <Label>Telegram Chat ID</Label>
             <p className="text-xs text-muted-foreground">
-              O bot Telegram envia notificações a 50% e ao concluir jobs de background. Para obter o chat ID, envie <code>/start</code> ao bot e depois use <code>/chatid</code> ou consulte o @userinfobot.
+              O bot Telegram envia notificações a 50% e ao concluir jobs de background. Usa o teu <strong>Chat ID numérico</strong> (ex: <code>123456789</code> ou <code>-1001234567890</code>), não <code>@username</code> nem links <code>t.me</code>.
             </p>
             <div className="flex gap-2">
               <Input
