@@ -101,6 +101,7 @@ const ProductsPage = () => {
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportSkuPrefix, setExportSkuPrefix] = useState("");
+  const [dismissedMissing, setDismissedMissing] = useState(false);
   const [exportTarget, setExportTarget] = useState<"all" | "selected">("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [showDuplicates, setShowDuplicates] = useState(false);
