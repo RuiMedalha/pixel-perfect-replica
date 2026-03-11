@@ -89,7 +89,7 @@ const ProductsPage = () => {
   const [pendingOptimizeIds, setPendingOptimizeIds] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("default");
   const [confirmReoptimize, setConfirmReoptimize] = useState(false);
-  const [backgroundMode, setBackgroundMode] = useState(false);
+  const [backgroundMode, setBackgroundMode] = useState(true);
   const [skipKnowledge, setSkipKnowledge] = useState(false);
   const [skipScraping, setSkipScraping] = useState(false);
   const [skipReranking, setSkipReranking] = useState(false);
