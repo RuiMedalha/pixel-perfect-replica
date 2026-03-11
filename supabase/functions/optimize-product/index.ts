@@ -743,7 +743,9 @@ Devolve os índices dos 6 excertos mais relevantes, priorizando:
 
         // 2. Auto-scrape supplier page by SKU
         let supplierContext = "";
-        if (skipScraping) {
+        if (isLaterPhase) {
+          console.log(`⏭️ Phase ${phase}: skipping supplier scraping (already done in phase 1)`);
+        } else if (skipScraping) {
           console.log("⏭️ Supplier scraping skipped (skipScraping=true)");
         } else if (FIRECRAWL_API_KEY && product.sku && product.sku.length > 2) {
           const skuUpper = product.sku.toUpperCase();
