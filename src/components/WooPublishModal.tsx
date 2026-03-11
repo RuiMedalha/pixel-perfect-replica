@@ -150,6 +150,10 @@ export function WooPublishModal({ open, onClose, onConfirm, productCount, variab
           <DialogTitle className="text-base">Publicar {productCount} produto(s) no WooCommerce</DialogTitle>
         </DialogHeader>
 
+        <div className="flex items-center gap-2">
+          <WooSiteSelector setGlobal className="h-8 text-xs flex-1" />
+        </div>
+
         <p className="text-xs text-muted-foreground">Escolha os campos a enviar. O processamento é feito em background — pode fechar o browser.</p>
 
         {/* Pre-publish validation checklist */}
