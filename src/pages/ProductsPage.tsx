@@ -841,7 +841,35 @@ const ProductsPage = () => {
         </Card>
       )}
 
-      {/* Background Job Progress Bar */}
+      {/* Enrichment Progress Bar */}
+      {enrichProgress && enrichProgress.done < enrichProgress.total && (
+        <Card className="border-blue-500/30 bg-blue-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                <span className="text-sm font-medium">
+                  A enriquecer: {enrichProgress.currentSku}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                {enrichProgress.estimatedSecondsLeft != null && (
+                  <span className="text-xs text-muted-foreground">
+                    ~{enrichProgress.estimatedSecondsLeft > 60
+                      ? `${Math.round(enrichProgress.estimatedSecondsLeft / 60)}min`
+                      : `${enrichProgress.estimatedSecondsLeft}s`} restantes
+                  </span>
+                )}
+                <span className="text-sm font-mono text-muted-foreground">
+                  {enrichProgress.done}/{enrichProgress.total}
+                </span>
+              </div>
+            </div>
+            <Progress value={(enrichProgress.done / enrichProgress.total) * 100} className="h-2" />
+          </CardContent>
+        </Card>
+      )}
+
       {activeJob && activeJob.status !== "completed" && activeJob.status !== "cancelled" && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4">
