@@ -325,6 +325,11 @@ Deno.serve(async (req) => {
               for (let vi = 0; vi < maxVariations; vi++) {
                 const varSku = skus[vi];
                 const varValue = values[vi];
+                
+                // Mark this SKU so it won't be enriched independently later in this run
+                if (varSku !== sku) {
+                  convertedVariationSkus.add(varSku);
+                }
 
                 // Check if this SKU already exists in workspace
                 const { data: existing } = await supabase.from("products")
