@@ -178,7 +178,7 @@ const CategoriesPage = () => {
           ) : tree.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <FolderTree className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p>Nenhuma categoria criada neste workspace.</p>
+              <p>Nenhuma categoria criada.</p>
               <p className="text-xs mt-1">Crie categorias para organizar os seus produtos.</p>
               <Button variant="outline" className="mt-4" onClick={() => openCreate()}>
                 <Plus className="w-4 h-4 mr-1" /> Criar Primeira Categoria
