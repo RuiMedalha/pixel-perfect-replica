@@ -15,12 +15,14 @@ export const FIELD_PROMPTS: FieldPromptConfig[] = [
     label: "Título",
     settingKey: "prompt_field_title",
     defaultPrompt: `Gera um título otimizado para SEO (máx 70 chars).
+CONTEXTO: Estes são equipamentos PROFISSIONAIS para hotelaria, restauração, cozinhas industriais e bares.
 REGRAS OBRIGATÓRIAS:
 - Inclui a keyword principal no início
-- Inclui marca/linha se aplicável (ex: "Linha 700", "Linha 900")
-- Inclui capacidade/dimensão se relevante (ex: "40x40", "4 Bicos")
-- Nunca uses palavras genéricas como "Profissional" sem contexto
-- Mantém o tipo de energia se aplicável (Gás, Elétrico, etc.)`,
+- NÃO incluas o nome da marca no título (ex: NÃO "Zanussi Fritadeira", SIM "Fritadeira a Gás Linha 700")
+- Inclui linha/série se aplicável (ex: "Linha 700", "Linha 900")
+- Inclui capacidade/dimensão se relevante (ex: "40x40", "4 Bicos", "8 Litros")
+- Mantém o tipo de energia se aplicável (Gás, Elétrico, etc.)
+- Nunca uses palavras genéricas como "Profissional" sem contexto técnico`,
   },
   {
     key: "description",
