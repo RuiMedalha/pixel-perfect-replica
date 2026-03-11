@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Download, Loader2, ShoppingCart, Package, Filter, CheckCircle, AlertTriangle } from "lucide-react";
+import { WooSiteSelector } from "@/components/WooSiteSelector";
+import { useWooSites } from "@/hooks/useWooSites";
 
 const WooImportPage = () => {
   const { activeWorkspace } = useWorkspaceContext();
