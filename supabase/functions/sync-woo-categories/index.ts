@@ -82,11 +82,11 @@ Deno.serve(async (req) => {
       if (cats.length < 100) break;
     }
 
-    // Get existing categories for this workspace
+    // Get existing categories for this user (global, no workspace filter)
     const { data: existingCats } = await supabase
       .from("categories")
       .select("id, woocommerce_id, name")
-      .eq("workspace_id", workspaceId);
+      .is("workspace_id", null);
 
     const existingByWooId = new Map<number, string>();
     (existingCats || []).forEach((c: any) => {
