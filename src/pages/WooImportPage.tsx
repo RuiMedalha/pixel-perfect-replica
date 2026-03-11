@@ -22,13 +22,21 @@ const WooImportPage = () => {
 
   const isLoading = loadingCats || loadingAttrs;
 
-  // Find the brand attribute (common names: marca, brand, pa_marca, pa_brand)
-  const brandAttr = attributes?.find(a => 
-    ['marca', 'brand', 'marcas', 'brands'].includes(a.name.toLowerCase())
-  );
+  // Find brand attributes (common names: marca, brand, xstore brand, etc.)
+  const brandAttrs = attributes?.filter(a => 
+    ['marca', 'brand', 'marcas', 'brands', 'xstore brand', 'xstore-brand'].includes(a.name.toLowerCase())
+  ) || [];
+  
+  // Merge all brand terms from all brand attributes
+  const allBrandTerms = brandAttrs.flatMap(a => 
+    a.terms.map(t => ({ ...t, attrId: a.id, attrName: a.name }))
+  ).sort((a, b) => a.name.localeCompare(b.name));
+  
+  const hasBrands = allBrandTerms.length > 0;
   
   // Non-brand attributes for generic filter
-  const otherAttributes = attributes?.filter(a => a.id !== brandAttr?.id) || [];
+  const brandAttrIds = new Set(brandAttrs.map(a => a.id));
+  const otherAttributes = attributes?.filter(a => !brandAttrIds.has(a.id)) || [];
 
   // Find the selected attribute object (non-brand)
   const attrObj = otherAttributes.find(a => String(a.id) === selectedAttribute);
@@ -39,9 +47,13 @@ const WooImportPage = () => {
     const finalFilters: WooImportFilters = { ...filters };
     
     // Brand filter
-    if (selectedBrand && brandAttr) {
-      finalFilters.attribute = `pa_${brandAttr.name.toLowerCase().replace(/\s+/g, '-')}`;
-      finalFilters.attribute_term = selectedBrand;
+    if (selectedBrand && hasBrands) {
+      const selectedBrandTerm = allBrandTerms.find(t => String(t.id) === selectedBrand);
+      if (selectedBrandTerm) {
+        const attr = brandAttrs.find(a => a.id === selectedBrandTerm.attrId);
+        finalFilters.attribute = `pa_${attr?.name.toLowerCase().replace(/\s+/g, '-')}`;
+        finalFilters.attribute_term = selectedBrand;
+      }
     }
     // Generic attribute filter (only if no brand filter active)
     else if (selectedAttribute && selectedTerm) {
@@ -173,15 +185,15 @@ const WooImportPage = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                {brandAttr && brandAttr.terms.length > 0 && (
+                {hasBrands && (
                   <div className="space-y-1.5">
                     <Label className="text-xs font-medium">Marca</Label>
                     <Select value={selectedBrand || "all"} onValueChange={(v) => setSelectedBrand(v === "all" ? "" : v)}>
                       <SelectTrigger><SelectValue placeholder="Todas as marcas" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todas as marcas</SelectItem>
-                        {brandAttr.terms.sort((a, b) => a.name.localeCompare(b.name)).map((term) => (
-                          <SelectItem key={term.id} value={String(term.id)}>
+                        {allBrandTerms.map((term) => (
+                          <SelectItem key={`${term.attrId}-${term.id}`} value={String(term.id)}>
                             {term.name} ({term.count})
                           </SelectItem>
                         ))}
