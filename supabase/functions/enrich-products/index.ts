@@ -482,19 +482,56 @@ Deno.serve(async (req) => {
 });
 
 // AI-powered parsing using Lovable AI Gateway
-async function parseWithAI(apiKey: string, markdown: string, sku: string, title: string, instructions: string): Promise<any> {
+async function parseWithAI(apiKey: string, markdown: string, sku: string, title: string, instructions: string, html: string = ''): Promise<any> {
   try {
-    // Truncate markdown to avoid token limits
-    const truncatedMd = markdown.substring(0, 15000);
+    // Truncate to avoid token limits
+    const truncatedMd = markdown.substring(0, 12000);
+    
+    // Extract variation-relevant HTML snippets (radio buttons, select options, size selectors)
+    let variationHtml = '';
+    if (html) {
+      // Extract product-size blocks, select elements, radio groups with onclick URLs
+      const patterns = [
+        /(<div[^>]*class="[^"]*product-size[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>\s*<\/div>)/gi,
+        /(<select[^>]*(?:size|variation|option)[^>]*>[\s\S]*?<\/select>)/gi,
+        /(<input[^>]*onclick="location\.href[^"]*"[^>]*>[\s\S]*?<\/label>)/gi,
+        /(<div[^>]*class="[^"]*size-check[^"]*"[^>]*>[\s\S]*?<\/div>)/gi,
+      ];
+      const snippets: string[] = [];
+      for (const pattern of patterns) {
+        let m;
+        while ((m = pattern.exec(html)) !== null) {
+          snippets.push(m[1]);
+        }
+      }
+      if (snippets.length > 0) {
+        variationHtml = '\n\nVARIATION HTML SNIPPETS (contains SKUs in URLs and onclick attributes):\n' + snippets.join('\n').substring(0, 5000);
+      } else {
+        // Fallback: search for any onclick with location.href
+        const onclickPattern = /onclick="location\.href\s*=\s*'([^']+)'"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/gi;
+        const matches: string[] = [];
+        let m2;
+        while ((m2 = onclickPattern.exec(html)) !== null) {
+          matches.push(`URL: ${m2[1]} | Value: ${m2[2].trim()}`);
+        }
+        if (matches.length > 0) {
+          variationHtml = '\n\nVARIATION LINKS FOUND IN HTML:\n' + matches.join('\n');
+        }
+      }
+    }
 
     const systemPrompt = `You are a product data extraction specialist. You analyze scraped web pages of supplier/manufacturer product pages and extract structured data.
 
 RULES:
 - Only include images that belong to THIS specific product (not series, related products, icons, logos, newsletter images, or footer images)
 - Filter out SVG icons, tiny images, and decorative elements
-- Detect product variations (sizes, colors, diameters, capacities, etc.) - each variation may have its own SKU
-- IMPORTANT: For each variation, try to extract the individual SKU code. Look in size selectors, option dropdowns, data attributes, or URL patterns.
-- If the page has clickable links for each variation (e.g. size buttons that link to individual product pages), extract those URLs in variation_urls.
+- Detect product variations (sizes, colors, diameters, capacities, etc.)
+- CRITICAL: Extract the SKU for each variation. SKUs are typically found in:
+  * URLs inside onclick="location.href='.../{SKU}'" attributes on radio buttons or links
+  * The last numeric segment of variation URLs (e.g. /product-name/62785 → SKU is 62785)
+  * Data attributes, select option values, or hidden inputs
+- The "skus" array MUST have the same length as "values" array, in matching order
+- Extract variation_urls with the full URL and extracted SKU for each variation
 - Extract technical specifications as structured key-value pairs
 - Identify the product series/family name if visible
 
@@ -502,10 +539,12 @@ ${instructions ? `USER INSTRUCTIONS FOR THIS SUPPLIER:\n${instructions}\n` : ''}
 
     const userPrompt = `Analyze this scraped product page content for SKU "${sku}" (${title}).
 
-Extract the following data and return it using the extract_product_data function:
+Extract the following data and return it using the extract_product_data function.
+Pay special attention to variation selectors (radio buttons, dropdowns) — extract the SKU from each variation's URL.
 
-CONTENT:
-${truncatedMd}`;
+MARKDOWN CONTENT:
+${truncatedMd}${variationHtml}`;
+
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
