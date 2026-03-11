@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FolderTree, Plus, Edit, Trash2, ChevronRight, ChevronDown, Loader2, FolderOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCategoryTree, useCreateCategory, useUpdateCategory, useDeleteCategory, useSyncWooCategories, type CategoryTree, type Category } from "@/hooks/useCategories";
-import { useWorkspaceContext } from "@/hooks/useWorkspaces";
+
 import { useProducts } from "@/hooks/useProducts";
 
 function CategoryTreeItem({
