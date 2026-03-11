@@ -1,10 +1,11 @@
-import { useCallback, useState } from "react";
-import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search, Eye } from "lucide-react";
+import { useCallback, useState, useMemo } from "react";
+import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search, Eye, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,10 +21,109 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 
+const UPDATE_FIELD_OPTIONS = [
+  { key: "price", label: "Preço Original", group: "Preços" },
+  { key: "optimized_price", label: "Preço Otimizado", group: "Preços" },
+  { key: "sale_price", label: "Preço Promocional", group: "Preços" },
+  { key: "optimized_sale_price", label: "Preço Promocional Otimizado", group: "Preços" },
+  { key: "title", label: "Título Original", group: "Conteúdo" },
+  { key: "optimized_title", label: "Título Otimizado", group: "Conteúdo" },
+  { key: "description", label: "Descrição Original", group: "Conteúdo" },
+  { key: "optimized_description", label: "Descrição Otimizada", group: "Conteúdo" },
+  { key: "short_description", label: "Descrição Curta", group: "Conteúdo" },
+  { key: "optimized_short_description", label: "Descrição Curta Otimizada", group: "Conteúdo" },
+  { key: "category", label: "Categoria", group: "Classificação" },
+  { key: "tags", label: "Tags", group: "Classificação" },
+  { key: "meta_title", label: "Meta Title SEO", group: "SEO" },
+  { key: "meta_description", label: "Meta Description SEO", group: "SEO" },
+  { key: "seo_slug", label: "SEO Slug", group: "SEO" },
+  { key: "focus_keyword", label: "Focus Keyword", group: "SEO" },
+  { key: "image_urls", label: "Imagens", group: "Media" },
+  { key: "attributes", label: "Atributos", group: "Classificação" },
+  { key: "technical_specs", label: "Especificações Técnicas", group: "Conteúdo" },
+  { key: "supplier_ref", label: "Ref. Fornecedor", group: "Classificação" },
+];
+
+function UpdateFieldsSelector({ selectedFields, onChange }: { selectedFields: string[]; onChange: (fields: string[]) => void }) {
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof UPDATE_FIELD_OPTIONS>();
+    UPDATE_FIELD_OPTIONS.forEach((f) => {
+      if (!map.has(f.group)) map.set(f.group, []);
+      map.get(f.group)!.push(f);
+    });
+    return map;
+  }, []);
+
+  const toggle = (key: string) => {
+    onChange(selectedFields.includes(key) ? selectedFields.filter((f) => f !== key) : [...selectedFields, key]);
+  };
+
+  const selectGroup = (group: string) => {
+    const groupKeys = UPDATE_FIELD_OPTIONS.filter((f) => f.group === group).map((f) => f.key);
+    const allSelected = groupKeys.every((k) => selectedFields.includes(k));
+    if (allSelected) {
+      onChange(selectedFields.filter((f) => !groupKeys.includes(f)));
+    } else {
+      onChange([...new Set([...selectedFields, ...groupKeys])]);
+    }
+  };
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 text-primary" />
+          Campos a Atualizar
+          {selectedFields.length > 0 && (
+            <Badge variant="secondary" className="text-[10px]">{selectedFields.length} selecionado(s)</Badge>
+          )}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Apenas os campos selecionados serão sobrescritos nos produtos existentes (identificados pelo SKU).
+        </p>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {Array.from(groups.entries()).map(([group, fields]) => (
+            <div key={group}>
+              <button
+                onClick={() => selectGroup(group)}
+                className="text-xs font-semibold text-muted-foreground mb-1.5 hover:text-foreground transition-colors cursor-pointer"
+              >
+                {group}
+              </button>
+              <div className="flex flex-wrap gap-2">
+                {fields.map((f) => (
+                  <label
+                    key={f.key}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-all",
+                      selectedFields.includes(f.key)
+                        ? "bg-primary/10 border-primary/40 text-primary font-medium"
+                        : "bg-muted/30 border-border text-muted-foreground hover:border-primary/20"
+                    )}
+                  >
+                    <Checkbox
+                      checked={selectedFields.includes(f.key)}
+                      onCheckedChange={() => toggle(f.key)}
+                      className="w-3.5 h-3.5"
+                    />
+                    {f.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const UploadPage = () => {
   const {
     files, addFiles, processAllFiles: processAll, processFile, removeFile,
-    setColumnMapping, confirmMapping, selectSheet,
+    setColumnMapping, confirmMapping, selectSheet, setUpdateFields,
     allFields, customFields, addCustomField, removeCustomField,
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
@@ -114,6 +214,9 @@ const UploadPage = () => {
           <TabsTrigger value="products" className="gap-2">
             <Package className="w-4 h-4" /> Produtos
           </TabsTrigger>
+          <TabsTrigger value="update" className="gap-2">
+            <RefreshCw className="w-4 h-4" /> Atualização
+          </TabsTrigger>
           <TabsTrigger value="knowledge" className="gap-2">
             <BookOpen className="w-4 h-4" /> Conhecimento
           </TabsTrigger>
@@ -122,6 +225,11 @@ const UploadPage = () => {
         <TabsContent value="products" className="space-y-4 mt-4">
           <p className="text-sm text-muted-foreground">
             Ficheiros com listas de produtos para importar (Excel com mapeamento de colunas, ou PDF processado com IA).
+          </p>
+        </TabsContent>
+        <TabsContent value="update" className="space-y-4 mt-4">
+          <p className="text-sm text-muted-foreground">
+            Re-importe um Excel exportado com alterações. Escolha os campos a atualizar — os produtos são identificados pelo SKU.
           </p>
         </TabsContent>
         <TabsContent value="knowledge" className="space-y-4 mt-4">
@@ -174,13 +282,17 @@ const UploadPage = () => {
         onDrop={onDrop}
       >
         <CardContent className="flex flex-col items-center justify-center py-16">
-          {activeTab === "products" ? (
+          {activeTab === "update" ? (
+            <RefreshCw className="w-12 h-12 text-muted-foreground mb-4" />
+          ) : activeTab === "products" ? (
             <Package className="w-12 h-12 text-muted-foreground mb-4" />
           ) : (
             <BookOpen className="w-12 h-12 text-muted-foreground mb-4" />
           )}
           <p className="text-lg font-medium mb-1">
-            Arraste ficheiros {activeTab === "products" ? "de produtos" : "de conhecimento"} para aqui
+            {activeTab === "update"
+              ? "Arraste o Excel com alterações para aqui"
+              : `Arraste ficheiros ${activeTab === "products" ? "de produtos" : "de conhecimento"} para aqui`}
           </p>
           <p className="text-sm text-muted-foreground mb-4">ou clique para selecionar</p>
           <Button variant="outline" asChild>
@@ -189,15 +301,16 @@ const UploadPage = () => {
               <input
                 type="file"
                 multiple
-                accept=".pdf,.xlsx,.xls"
+                accept={activeTab === "update" ? ".xlsx,.xls" : ".pdf,.xlsx,.xls"}
                 className="hidden"
                 onChange={onFileSelect}
               />
             </label>
           </Button>
           <p className="text-xs text-muted-foreground mt-3">
-            Formatos aceites: PDF, XLSX, XLS
-            {activeTab === "products" && " — Excel permite mapeamento de colunas"}
+            {activeTab === "update"
+              ? "Apenas Excel (XLSX/XLS) — os produtos serão identificados pelo SKU"
+              : `Formatos aceites: PDF, XLSX, XLS${activeTab === "products" ? " — Excel permite mapeamento de colunas" : ""}`}
           </p>
         </CardContent>
       </Card>
@@ -249,19 +362,33 @@ const UploadPage = () => {
       {files
         .filter((f) => f.status === "a_mapear" && f.excelHeaders)
         .map((file) => (
-          <ColumnMapper
-            key={file.id}
-            fileName={file.name}
-            headers={file.excelHeaders!}
-            previewRows={file.previewRows || []}
-            mapping={file.columnMapping || {}}
-            sheetNames={file.sheetNames}
-            selectedSheet={file.selectedSheet}
-            fields={allFields}
-            onSheetChange={(s) => selectSheet(file.id, s)}
-            onMappingChange={(m) => setColumnMapping(file.id, m)}
-            onConfirm={() => confirmMapping(file.id)}
-          />
+          <div key={file.id} className="space-y-4">
+            <ColumnMapper
+              fileName={file.name}
+              headers={file.excelHeaders!}
+              previewRows={file.previewRows || []}
+              mapping={file.columnMapping || {}}
+              sheetNames={file.sheetNames}
+              selectedSheet={file.selectedSheet}
+              fields={allFields}
+              onSheetChange={(s) => selectSheet(file.id, s)}
+              onMappingChange={(m) => setColumnMapping(file.id, m)}
+              onConfirm={() => {
+                if (file.uploadType === "update" && (!file.updateFields || file.updateFields.length === 0)) {
+                  toast.error("Selecione pelo menos um campo para atualizar.");
+                  return;
+                }
+                confirmMapping(file.id);
+              }}
+            />
+            {/* Update fields selector for update mode */}
+            {file.uploadType === "update" && (
+              <UpdateFieldsSelector
+                selectedFields={file.updateFields || []}
+                onChange={(fields) => setUpdateFields(file.id, fields)}
+              />
+            )}
+          </div>
         ))}
 
       {/* File list */}
@@ -295,8 +422,8 @@ const UploadPage = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">{file.name}</p>
-                        <Badge variant={file.uploadType === "knowledge" ? "outline" : "secondary"} className="text-[10px]">
-                          {file.uploadType === "knowledge" ? "Conhecimento" : "Produtos"}
+                        <Badge variant={file.uploadType === "knowledge" ? "outline" : file.uploadType === "update" ? "default" : "secondary"} className="text-[10px]">
+                          {file.uploadType === "knowledge" ? "Conhecimento" : file.uploadType === "update" ? "Atualização" : "Produtos"}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">

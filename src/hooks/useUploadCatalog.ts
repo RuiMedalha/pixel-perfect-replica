@@ -7,7 +7,7 @@ import { PDFDocument } from "pdf-lib";
 
 export type ColumnMapping = Record<string, string>; // productField -> excelColumn
 
-export type FileUploadType = "products" | "knowledge";
+export type FileUploadType = "products" | "knowledge" | "update";
 
 export interface UploadedFile {
   id: string;
@@ -25,6 +25,7 @@ export interface UploadedFile {
   excelHeaders?: string[];
   previewRows?: Record<string, unknown>[];
   columnMapping?: ColumnMapping;
+  updateFields?: string[];
 }
 
 export interface ProductField {
@@ -252,7 +253,9 @@ async function sendParsedRowsInBatches(
   columnMapping: ColumnMapping | undefined,
   fileName: string,
   workspaceId: string | undefined,
-  maxRetries = 3
+  maxRetries = 3,
+  updateMode?: boolean,
+  updateFields?: string[]
 ): Promise<{ count: number; updated: number; total: number; skipped: number; errors: string[] }> {
   const BATCH_SIZE = 500; // rows per request
   let totalCount = 0;
@@ -272,6 +275,8 @@ async function sendParsedRowsInBatches(
             parsedRows: batch,
             columnMapping: columnMapping || undefined,
             workspaceId: workspaceId || undefined,
+            updateMode: updateMode || undefined,
+            updateFields: updateFields || undefined,
           },
         });
 
@@ -383,7 +388,7 @@ export function useUploadCatalog() {
           progress: 0,
         };
 
-      if (!isPdf && uploadType === "products") {
+      if (!isPdf && (uploadType === "products" || uploadType === "update")) {
         try {
           const workbook = await readExcelFile(partFile);
           base.sheetNames = workbook.SheetNames;
@@ -410,6 +415,10 @@ export function useUploadCatalog() {
 
   const setColumnMapping = (id: string, mapping: ColumnMapping) => {
     updateFile(id, { columnMapping: mapping });
+  };
+
+  const setUpdateFields = (id: string, fields: string[]) => {
+    updateFile(id, { updateFields: fields });
   };
 
   const confirmMapping = (id: string) => {
@@ -542,11 +551,15 @@ export function useUploadCatalog() {
 
         updateFile(uploadedFile.id, { status: "a_processar", progress: 70 });
 
+        const isUpdateMode = uploadedFile.uploadType === "update";
         const result = await sendParsedRowsInBatches(
           parsedRows,
           uploadedFile.columnMapping,
           uploadedFile.name,
-          workspaceId
+          workspaceId,
+          3,
+          isUpdateMode,
+          isUpdateMode ? uploadedFile.updateFields : undefined
         );
 
         const totalProcessed = (result.count || 0) + (result.updated || 0);
@@ -653,6 +666,7 @@ export function useUploadCatalog() {
     processFile,
     processAllFiles,
     setColumnMapping,
+    setUpdateFields,
     confirmMapping,
     selectSheet,
     allFields,
