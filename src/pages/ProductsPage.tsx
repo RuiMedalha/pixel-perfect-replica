@@ -123,9 +123,9 @@ const ProductsPage = () => {
   const [batchProgress, setBatchProgress] = useState<import("@/hooks/useOptimizeProducts").OptimizationProgress | null>(null);
   const cancellationTokenRef = useRef<CancellationToken | null>(null);
 
-  // Auto-enable background mode for large selections
+  // Background mode is now always the default — only allow foreground for very small batches
   useEffect(() => {
-    if (pendingOptimizeIds.length >= 50) {
+    if (pendingOptimizeIds.length >= 3) {
       setBackgroundMode(true);
     }
   }, [pendingOptimizeIds.length]);
