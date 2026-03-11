@@ -411,6 +411,16 @@ serve(async (req) => {
         .eq("id", job.id);
 
       console.log(`✅ Batch done: ${totalProcessed}/${allProductIds.length} (${totalFailed} failed)`);
+
+      // === 50% Telegram notification ===
+      if (!halfNotified && telegramChatId && totalProcessed >= Math.floor(allProductIds.length / 2)) {
+        halfNotified = true;
+        const elapsed = Math.round((Date.now() - startTime) / 1000);
+        await sendTelegramNotification(
+          telegramChatId,
+          `⏳ <b>Otimização a 50%</b>\n\n📦 ${totalProcessed}/${allProductIds.length} produtos\n❌ ${totalFailed} erro(s)\n⏱️ ${elapsed}s decorridos`
+        );
+      }
     }
 
     // Check final status
