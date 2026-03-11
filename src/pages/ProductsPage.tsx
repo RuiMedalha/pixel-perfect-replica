@@ -280,6 +280,14 @@ const ProductsPage = () => {
     if (finalIds.length > ids.length) {
       toast.info(`${finalIds.length - ids.length} variação(ões) incluídas automaticamente para otimização em grupo.`);
     }
+
+    // Auto-enable skipScraping if all selected products already have technical_specs (web-enriched)
+    const selectedProducts = allProducts.filter(p => finalIds.includes(p.id));
+    const allEnriched = selectedProducts.length > 0 && selectedProducts.every((p: any) => p.technical_specs && p.technical_specs.length > 5);
+    if (allEnriched) {
+      setSkipScraping(true);
+    }
+
     setPendingOptimizeIds(finalIds);
     setConfirmReoptimize(false);
     setShowFieldSelector(true);
