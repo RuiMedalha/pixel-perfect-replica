@@ -275,11 +275,21 @@ Deno.serve(async (req) => {
           let variationsCreated = 0;
           if (aiParsed.variations && aiParsed.variations.length > 0) {
             const mainVariation = aiParsed.variations[0]; // primary variation attribute
-            const skus = mainVariation.skus || [];
+            const rawSkus = mainVariation.skus || [];
             const values = mainVariation.values || [];
             const variationUrls = aiParsed.variation_urls || [];
 
-            if (skus.length > 0 && skus.length === values.length) {
+            if (values.length > 0) {
+              // Generate SKUs if AI didn't extract them: parentSKU-value
+              const skus = rawSkus.length === values.length 
+                ? rawSkus 
+                : values.map((v: string) => {
+                    const cleanVal = v.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+                    return `${sku}-${cleanVal}`;
+                  });
+              
+              console.log(`Expanding ${values.length} variations for ${sku} (SKUs from AI: ${rawSkus.length > 0 ? 'yes' : 'generated'})`);
+              
               const maxVariations = Math.min(skus.length, 10);
               
               for (let vi = 0; vi < maxVariations; vi++) {
@@ -311,11 +321,12 @@ Deno.serve(async (req) => {
                 let varSpecs: any = null;
                 let varPrice: number | null = null;
 
+                const hasRealSku = rawSkus.length === values.length;
                 const varUrlEntry = variationUrls.find((vu: any) => vu.sku === varSku || vu.value === varValue);
                 let varScrapeUrl = varUrlEntry?.url || '';
 
-                // If no URL from AI, build from supplier prefix pattern
-                if (!varScrapeUrl && matchedPrefix?.searchUrl) {
+                // Only build scrape URL if we have real SKUs (not generated ones)
+                if (!varScrapeUrl && hasRealSku && matchedPrefix?.searchUrl) {
                   const varRef = matchedPrefix.prefix ? varSku.substring(matchedPrefix.prefix.length) : varSku;
                   varScrapeUrl = matchedPrefix.searchUrl.replace("{sku}", varRef);
                 }
@@ -590,7 +601,8 @@ ${truncatedMd}`;
     }
 
     const parsed = JSON.parse(toolCall.function.arguments);
-    console.log(`AI parsed SKU ${sku}: ${parsed.product_images?.length || 0} images, ${parsed.variations?.length || 0} variations, ${Object.keys(parsed.specs || {}).length} specs`);
+    const varSkusInfo = parsed.variations?.map((v: any) => `${v.name}:${v.values?.length || 0}vals/${v.skus?.length || 0}skus`).join(', ') || 'none';
+    console.log(`AI parsed SKU ${sku}: ${parsed.product_images?.length || 0} images, variations=[${varSkusInfo}], ${Object.keys(parsed.specs || {}).length} specs`);
     return parsed;
   } catch (e) {
     console.error("AI parsing failed:", e);
