@@ -24,7 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
 const UploadPage = () => {
   const {
     files, addFiles, processAllFiles: processAll, processFile, removeFile,
-    setColumnMapping, confirmMapping, selectSheet,
+    setColumnMapping, confirmMapping, selectSheet, setUpdateFields,
     allFields, customFields, addCustomField, removeCustomField,
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
