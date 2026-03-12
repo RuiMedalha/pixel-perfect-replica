@@ -744,6 +744,24 @@ const ProductsPage = () => {
             {isEnriching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Globe className="w-3.5 h-3.5 mr-1" />}
             <span className="hidden sm:inline">Enriquecer </span>Web{selected.size > 0 ? ` (${selected.size})` : ""}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-8"
+            onClick={() => {
+              if (!activeWorkspace) return;
+              const ids = selected.size > 0 ? Array.from(selected) : (allProductsLight ?? []).filter((p: any) => p.image_urls?.length > 0).map((p: any) => p.id).slice(0, 50);
+              if (ids.length === 0) {
+                toast.warning("Nenhum produto com imagens para processar.");
+                return;
+              }
+              processImages({ workspaceId: activeWorkspace.id, productIds: ids, mode: "optimize" });
+            }}
+            disabled={isProcessingImages}
+          >
+            {isProcessingImages ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5 mr-1" />}
+            <span className="hidden sm:inline">Otimizar </span>Imagens{selected.size > 0 ? ` (${selected.size})` : ""}
+          </Button>
           {activeWorkspace?.has_variable_products && (
             <Button
               size="sm"
