@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         // Get product
         const { data: product } = await sb
           .from("products")
-          .select("id, sku, original_title, image_urls, product_type")
+          .select("id, sku, original_title, image_urls, product_type, parent_product_id")
           .eq("id", productId)
           .single();
 
@@ -284,21 +284,65 @@ Deno.serve(async (req) => {
         }
 
         // Lifestyle mode keeps originals and appends generated URLs for quick access
+        // Also propagate to all family members (parent + variations)
         if (mode === "lifestyle" && lifestyleUrls.length > 0) {
-          const existingUrls = Array.isArray(product.image_urls)
-            ? product.image_urls
-            : [];
-          const mergedUrls = [...existingUrls];
+          // Find all family product IDs
+          let familyIds: string[] = [productId];
 
-          for (const lifestyleUrl of lifestyleUrls) {
-            if (!mergedUrls.includes(lifestyleUrl)) mergedUrls.push(lifestyleUrl);
+          if (product.product_type === "variable") {
+            // This is a parent — get all children
+            const { data: children } = await sb
+              .from("products")
+              .select("id, image_urls")
+              .eq("parent_product_id", productId);
+            if (children) familyIds.push(...children.map((c: any) => c.id));
+          } else if (product.parent_product_id) {
+            // This is a variation — get parent + siblings
+            const parentId = product.parent_product_id;
+            familyIds.push(parentId);
+            const { data: siblings } = await sb
+              .from("products")
+              .select("id, image_urls")
+              .eq("parent_product_id", parentId)
+              .neq("id", productId);
+            if (siblings) familyIds.push(...siblings.map((s: any) => s.id));
           }
 
-          await sb
-            .from("products")
-            .update({ image_urls: mergedUrls })
-            .eq("id", productId)
-            .eq("user_id", user.id);
+          // Propagate lifestyle URLs to all family members
+          for (const fid of familyIds) {
+            const { data: famProduct } = await sb
+              .from("products")
+              .select("id, image_urls")
+              .eq("id", fid)
+              .single();
+
+            if (!famProduct) continue;
+
+            const existing = Array.isArray(famProduct.image_urls) ? famProduct.image_urls : [];
+            const merged = [...existing];
+            for (const url of lifestyleUrls) {
+              if (!merged.includes(url)) merged.push(url);
+            }
+
+            await sb
+              .from("products")
+              .update({ image_urls: merged })
+              .eq("id", fid);
+
+            // Also insert image record for family member
+            if (fid !== productId) {
+              for (const url of lifestyleUrls) {
+                await sb.from("images").insert({
+                  product_id: fid,
+                  original_url: product.image_urls?.[0] || null,
+                  optimized_url: url,
+                  s3_key: `lifestyle_shared_from_${productId}`,
+                  sort_order: (existing.length + lifestyleUrls.indexOf(url)),
+                  status: "done",
+                });
+              }
+            }
+          }
         }
 
         if (processedUrls.length > 0) {
