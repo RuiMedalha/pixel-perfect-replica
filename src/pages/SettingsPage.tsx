@@ -551,6 +551,59 @@ const SettingsPage = () => {
 
       <Separator />
 
+      {/* Credits Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Créditos do Workspace
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Image Credits */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">🖼️ Créditos de Imagens</Label>
+              <span className="text-xs text-muted-foreground">
+                {imageCredits ? `${imageCredits.used_this_month} / ${imageCredits.monthly_limit}` : "0 / 100"}
+              </span>
+            </div>
+            <Progress
+              value={imageCredits ? (imageCredits.used_this_month / imageCredits.monthly_limit) * 100 : 0}
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+              Processamento de imagens com IA (otimização + lifestyle).
+              {imageCredits?.reset_at && (
+                <> Renova a {new Date(imageCredits.reset_at).toLocaleDateString("pt-PT")}.</>
+              )}
+            </p>
+          </div>
+
+          <Separator />
+
+          {/* Scraping Credits */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">🌐 Créditos de Scraping</Label>
+              <span className="text-xs text-muted-foreground">
+                {scrapingCredits ? `${scrapingCredits.used_this_month} / ${scrapingCredits.monthly_limit}` : "0 / 1000"}
+              </span>
+            </div>
+            <Progress
+              value={scrapingCredits ? (scrapingCredits.used_this_month / scrapingCredits.monthly_limit) * 100 : 0}
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+              Enriquecimento web via Firecrawl.
+              {scrapingCredits?.reset_at && (
+                <> Renova a {new Date(scrapingCredits.reset_at).toLocaleDateString("pt-PT")}.</>
+              )}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
         <Button onClick={handleSave} size="lg" disabled={saveSettings.isPending}>
           {saveSettings.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
