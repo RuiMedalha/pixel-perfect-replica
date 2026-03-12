@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle, ImageIcon } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle, ImageIcon, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useAllProductIds, useUpdateProductStatus, useProductFilterOptions, type Product, type ProductFilters } from "@/hooks/useProducts";
@@ -63,6 +64,29 @@ const ProductsPage = () => {
   const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
   const { processImages, isProcessing: isProcessingImages, progress: imgProgress } = useProcessImages();
   const { data: settings } = useSettings();
+
+  // Fetch which products have optimized/lifestyle images
+  const { data: imageStatusMap } = useQuery({
+    queryKey: ["product-image-status", activeWorkspace?.id],
+    enabled: !!activeWorkspace,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("images")
+        .select("product_id, s3_key")
+        .not("optimized_url", "is", null);
+      if (error) throw error;
+      const map: Record<string, { hasOptimized: boolean; hasLifestyle: boolean }> = {};
+      for (const row of data || []) {
+        if (!map[row.product_id]) map[row.product_id] = { hasOptimized: false, hasLifestyle: false };
+        const key = (row.s3_key || "").toLowerCase();
+        if (key.includes("lifestyle")) map[row.product_id].hasLifestyle = true;
+        else map[row.product_id].hasOptimized = true;
+      }
+      return map;
+    },
+  });
+
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
@@ -699,6 +723,18 @@ const ProductsPage = () => {
             </Badge>
           )}
           <EmptyFieldsIndicator product={product} />
+          {imageStatusMap?.[product.id]?.hasOptimized && (
+            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 gap-0.5" title="Imagem otimizada">
+              <ImageIcon className="w-2.5 h-2.5" />
+              Opt
+            </Badge>
+          )}
+          {imageStatusMap?.[product.id]?.hasLifestyle && (
+            <Badge variant="outline" className="text-[10px] bg-accent text-accent-foreground border-accent/50 gap-0.5" title="Imagem lifestyle">
+              <Camera className="w-2.5 h-2.5" />
+              Life
+            </Badge>
+          )}
         </div>
       </td>
       <td className="p-3 text-center">
