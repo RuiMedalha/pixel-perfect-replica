@@ -29,6 +29,34 @@ const Dashboard = () => {
   const { data: tokenSummary, isLoading: tokenLoading } = useTokenUsageSummary();
   const { data: quality, isLoading: qualityLoading } = useQualityMetrics();
 
+  const { data: imageCredits } = useQuery({
+    queryKey: ["image-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("image_credits" as any)
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data as unknown as { used_this_month: number; monthly_limit: number; reset_at: string } | null;
+    },
+    enabled: !!activeWorkspace,
+  });
+
+  const { data: scrapingCredits } = useQuery({
+    queryKey: ["scraping-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("scraping_credits")
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!activeWorkspace,
+  });
+
   const statCards = [
     { label: "Produtos Pendentes", value: stats?.pending ?? 0, icon: Clock, color: "text-warning" },
     { label: "Produtos Otimizados", value: stats?.optimized ?? 0, icon: CheckCircle, color: "text-success" },
