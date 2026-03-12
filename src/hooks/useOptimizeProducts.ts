@@ -40,7 +40,7 @@ export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string; phase
   { key: "seo_slug", label: "SEO Slug", phase: 2 },
   { key: "faq", label: "FAQ", phase: 2 },
   { key: "image_alt", label: "Alt Text Imagens", phase: 2 },
-  { key: "price", label: "Preço", phase: 3 },
+  
   { key: "upsells", label: "Upsells", phase: 3 },
   { key: "crosssells", label: "Cross-sells", phase: 3 },
 ];
