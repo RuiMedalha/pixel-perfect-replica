@@ -1303,7 +1303,6 @@ const ProductsPage = () => {
                         onCheckedChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="p-3 w-10"></th>
                     <th className="p-3 text-left font-medium text-muted-foreground">SKU</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Original</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Otimizado</th>
