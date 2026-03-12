@@ -1,12 +1,15 @@
-import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3, TrendingUp, AlertTriangle, Tag, Cpu } from "lucide-react";
+import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3, TrendingUp, AlertTriangle, Tag, Cpu, ImageIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
 import { useProductStats } from "@/hooks/useProducts";
 import { useRecentActivity } from "@/hooks/useActivityLog";
 import { useTokenUsageSummary, useQualityMetrics } from "@/hooks/useOptimizationLogs";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { pt } from "date-fns/locale";
 
@@ -25,6 +28,34 @@ const Dashboard = () => {
   const { data: activity, isLoading: activityLoading } = useRecentActivity();
   const { data: tokenSummary, isLoading: tokenLoading } = useTokenUsageSummary();
   const { data: quality, isLoading: qualityLoading } = useQualityMetrics();
+
+  const { data: imageCredits } = useQuery({
+    queryKey: ["image-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("image_credits" as any)
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data as unknown as { used_this_month: number; monthly_limit: number; reset_at: string } | null;
+    },
+    enabled: !!activeWorkspace,
+  });
+
+  const { data: scrapingCredits } = useQuery({
+    queryKey: ["scraping-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("scraping_credits")
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!activeWorkspace,
+  });
 
   const statCards = [
     { label: "Produtos Pendentes", value: stats?.pending ?? 0, icon: Clock, color: "text-warning" },
@@ -59,6 +90,50 @@ const Dashboard = () => {
           </Card>
         ))}
       </div>
+
+      {/* Credits Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ImageIcon className="w-4 h-4" />
+            Créditos do Workspace
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">🖼️ Imagens</span>
+                <span className="text-xs text-muted-foreground">
+                  {imageCredits ? `${imageCredits.used_this_month} / ${imageCredits.monthly_limit}` : "0 / 100"}
+                </span>
+              </div>
+              <Progress
+                value={imageCredits ? (imageCredits.used_this_month / imageCredits.monthly_limit) * 100 : 0}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Otimização e geração lifestyle com IA
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">🌐 Scraping</span>
+                <span className="text-xs text-muted-foreground">
+                  {scrapingCredits ? `${scrapingCredits.used_this_month} / ${scrapingCredits.monthly_limit}` : "0 / 1000"}
+                </span>
+              </div>
+              <Progress
+                value={scrapingCredits ? (scrapingCredits.used_this_month / scrapingCredits.monthly_limit) * 100 : 0}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enriquecimento web via Firecrawl
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Quality Dashboard */}
       <Card>
