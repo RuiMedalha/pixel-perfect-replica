@@ -42,7 +42,21 @@ export function ProductDetailModal({ product, onClose }: Props) {
   const { processImages, isProcessing, progress: imgProgress } = useProcessImages();
   const { activeWorkspace } = useWorkspaceContext();
 
-  // Editable fields state
+  // Fetch optimized images from images table
+  const { data: optimizedImages } = useQuery({
+    queryKey: ["product-images", product?.id],
+    enabled: !!product?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("images")
+        .select("*")
+        .eq("product_id", product!.id)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [hasChanges, setHasChanges] = useState(false);
 
