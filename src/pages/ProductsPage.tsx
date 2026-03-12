@@ -291,8 +291,14 @@ const ProductsPage = () => {
 
   const handleBulkDelete = () => {
     if (confirm(`Tem a certeza que deseja eliminar ${selected.size} produto(s)? Esta ação é irreversível.`)) {
-      deleteProducts.mutate(Array.from(selected));
+      const ids = Array.from(selected);
+      // Delete in batches of 500
+      const batchSize = 500;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        deleteProducts.mutate(ids.slice(i, i + batchSize));
+      }
       setSelected(new Set());
+      setAllPagesSelected(false);
     }
   };
 
