@@ -152,7 +152,7 @@ serve(async (req) => {
 
     function findSemanticCategory(productTitle: string, productCategory: string, existingCats: string[]): string[] {
       const normalized = normalizeForCategoryMatch(`${productTitle} ${productCategory}`);
-      const words = normalized.split(" ");
+      const words = normalized.split(" ").filter(w => w.length >= 3);
       
       // Find matching categories using synonyms
       const matchedCats: { cat: string; score: number }[] = [];
@@ -163,14 +163,12 @@ serve(async (req) => {
         
         // Direct word match
         for (const word of words) {
-          if (word.length < 3) continue;
           if (normalizedCat.includes(word)) score += 10;
         }
         
         // Synonym match
         for (const word of words) {
           const synonyms = CATEGORY_SYNONYMS[word] || [];
-          // Also check if any synonym key matches this word
           for (const [key, syns] of Object.entries(CATEGORY_SYNONYMS)) {
             if (syns.includes(word) || key === word) {
               const allTerms = [key, ...syns];
@@ -182,13 +180,25 @@ serve(async (req) => {
             }
           }
         }
+
+        // Bonus for hierarchical categories (more specific = better)
+        if (cat.includes(">") && score > 0) score += 5;
+        
+        // Bonus for subcategory parts matching product words
+        if (cat.includes(">")) {
+          const parts = cat.split(">").map(p => normalizeForCategoryMatch(p.trim()));
+          const lastPart = parts[parts.length - 1]; // most specific part
+          for (const word of words) {
+            if (lastPart.includes(word)) score += 6; // subcategory match is valuable
+          }
+        }
         
         if (score > 0) matchedCats.push({ cat, score });
       }
       
       return matchedCats
         .sort((a, b) => b.score - a.score)
-        .slice(0, 5)
+        .slice(0, 8)
         .map(m => m.cat);
     }
 
