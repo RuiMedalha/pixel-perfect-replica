@@ -512,7 +512,7 @@ const ProductsPage = () => {
     { key: "meta_description", label: "Meta Desc" },
     { key: "seo_slug", label: "Slug" },
     { key: "tags", label: "Tags" },
-    { key: "optimized_price", label: "Preço" },
+    
     { key: "image_urls", label: "Imagens" },
     { key: "focus_keyword", label: "Keyword" },
   ];
