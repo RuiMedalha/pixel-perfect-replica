@@ -75,6 +75,35 @@ const SettingsPage = () => {
   const [testingLoading, setTestingLoading] = useState<Record<number, boolean>>({});
   const [testResult, setTestResult] = useState<{ index: number; preview: string; chars: number; url: string } | null>(null);
   const [wooPublishFields, setWooPublishFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
+
+  const { data: imageCredits } = useQuery({
+    queryKey: ["image-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("image_credits" as any)
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data as { used_this_month: number; monthly_limit: number; reset_at: string } | null;
+    },
+    enabled: !!activeWorkspace,
+  });
+
+  const { data: scrapingCredits } = useQuery({
+    queryKey: ["scraping-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("scraping_credits")
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!activeWorkspace,
+  });
+
   useEffect(() => {
     if (settings) {
       setForm(settings);
