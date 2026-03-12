@@ -294,27 +294,50 @@ Deno.serve(async (req) => {
         }
 
         try {
-          const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              url: searchUrl,
-              formats: ['markdown', 'html'],
-              onlyMainContent: false,
-            }),
-          });
+          let markdown = '';
+          let html = '';
 
-          if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            return { sku, success: false, url: searchUrl, error: errData.error || `HTTP ${response.status}` };
+          // Check scrape cache first
+          const cached = await getCachedScrape(searchUrl, workspaceId);
+          if (cached) {
+            console.log(`Cache HIT for ${searchUrl}`);
+            markdown = cached.content_markdown || '';
+            html = cached.content_html || '';
+          } else {
+            // Check scraping credits before calling Firecrawl
+            const credits = await checkCredits(workspaceId);
+            if (!credits.allowed) {
+              await logError('enrich-products', `Scraping credits exhausted (limit reached)`, { sku, url: searchUrl });
+              return { sku, success: false, url: searchUrl, error: `Créditos de scraping esgotados (${credits.remaining} restantes)` };
+            }
+
+            const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                url: searchUrl,
+                formats: ['markdown', 'html'],
+                onlyMainContent: false,
+              }),
+            });
+
+            if (!response.ok) {
+              const errData = await response.json().catch(() => ({}));
+              await logError('enrich-products', errData.error || `HTTP ${response.status}`, { sku, url: searchUrl });
+              return { sku, success: false, url: searchUrl, error: errData.error || `HTTP ${response.status}` };
+            }
+
+            const data = await response.json();
+            markdown = data.data?.markdown || data.markdown || '';
+            html = data.data?.html || data.html || '';
+
+            // Cache the result
+            await cacheScrape(searchUrl, workspaceId, markdown, html);
+            await incrementCredits(workspaceId);
           }
-
-          const data = await response.json();
-          const markdown = data.data?.markdown || data.markdown || '';
-          const html = data.data?.html || data.html || '';
           
           if ((!markdown || markdown.length < 50) && (!html || html.length < 50)) {
             return { sku, success: false, url: searchUrl, error: "No content found" };
