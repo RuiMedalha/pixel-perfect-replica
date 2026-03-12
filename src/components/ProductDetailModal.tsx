@@ -39,6 +39,8 @@ export function ProductDetailModal({ product, onClose }: Props) {
   const { data: versions } = useProductVersions(product?.id ?? null);
   const { data: optLogs, isLoading: logsLoading } = useProductOptimizationLogs(product?.id ?? null);
   const restoreVersion = useRestoreVersion();
+  const { processImages, isProcessing, progress: imgProgress } = useProcessImages();
+  const { currentWorkspace } = useWorkspaceContext();
 
   // Editable fields state
   const [editData, setEditData] = useState<Record<string, any>>({});
