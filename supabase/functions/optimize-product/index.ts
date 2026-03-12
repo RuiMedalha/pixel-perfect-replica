@@ -194,13 +194,47 @@ serve(async (req) => {
 
     let existingCategories: string[] = [];
     if (fields.includes("category")) {
+      // 1. Fetch from categories table (proper taxonomy with hierarchy)
+      const { data: catTableData } = await supabase
+        .from("categories")
+        .select("id, name, parent_id")
+        .order("sort_order", { ascending: true });
+
+      if (catTableData && catTableData.length > 0) {
+        // Build hierarchy: "Parent > Child" format
+        const catById = new Map<string, any>(catTableData.map((c: any) => [c.id, c]));
+        const buildPath = (cat: any): string => {
+          const parts: string[] = [cat.name];
+          let current = cat;
+          while (current.parent_id) {
+            const parent = catById.get(current.parent_id);
+            if (!parent) break;
+            parts.unshift(parent.name);
+            current = parent;
+          }
+          return parts.join(" > ");
+        };
+
+        const catPaths = new Set<string>();
+        for (const cat of catTableData) {
+          catPaths.add(buildPath(cat));
+          // Also add individual names for fuzzy matching
+          catPaths.add(cat.name);
+        }
+        existingCategories = Array.from(catPaths).sort();
+      }
+
+      // 2. Also include unique categories from products (for backward compat)
       const { data: catData } = await supabase
         .from("products")
         .select("category")
         .not("category", "is", null);
-      const cats = new Set<string>();
-      (catData || []).forEach((p: any) => { if (p.category) cats.add(p.category); });
-      existingCategories = Array.from(cats).sort();
+      (catData || []).forEach((p: any) => { 
+        if (p.category && !existingCategories.includes(p.category)) {
+          existingCategories.push(p.category);
+        }
+      });
+      existingCategories.sort();
     }
 
     // Mark as processing
