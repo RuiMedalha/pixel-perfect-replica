@@ -1050,7 +1050,7 @@ REGRAS GLOBAIS:
           requiredFields.push("image_alt_texts");
         }
         if (fields.includes("category")) {
-          toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
+          toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'. DEVE ser uma das categorias existentes fornecidas na lista. Se a melhor correspondência for uma subcategoria, usa o caminho completo (ex: 'Equipamento > Fornos'). Se o produto não tiver categoria, analisa o título e descrição para sugerir a mais adequada." };
           requiredFields.push("suggested_category");
         }
         // Only generate focus keywords in phase 1 (or when no phase is set)
