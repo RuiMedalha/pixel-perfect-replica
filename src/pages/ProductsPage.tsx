@@ -241,6 +241,7 @@ const ProductsPage = () => {
   };
 
   const toggleSelect = (id: string) => {
+    setAllPagesSelected(false);
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -249,16 +250,43 @@ const ProductsPage = () => {
   };
 
   const bulkAction = (status: Enums<"product_status">) => {
-    updateStatus.mutate({ ids: Array.from(selected), status });
+    const ids = Array.from(selected);
+    // Process in batches of 500 for large selections
+    const batchSize = 500;
+    const batches: string[][] = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+      batches.push(ids.slice(i, i + batchSize));
+    }
+    batches.forEach((batch) => {
+      updateStatus.mutate({ ids: batch, status });
+    });
     setSelected(new Set());
+    setAllPagesSelected(false);
   };
 
   const toggleSelectAll = () => {
-    if (selected.size === filtered.length) {
+    if (selected.size === filtered.length && !allPagesSelected) {
       setSelected(new Set());
     } else {
       setSelected(new Set(filtered.map((p) => p.id)));
     }
+    setAllPagesSelected(false);
+  };
+
+  const selectAllPages = () => {
+    const allIds = (allProductsLight ?? [])
+      .filter((p: any) => {
+        if (statusFilter !== "all" && p.status !== statusFilter) return false;
+        if (categoryFilter !== "all" && (p.category || "") !== categoryFilter) return false;
+        if (productTypeFilter !== "all" && p.product_type !== productTypeFilter) return false;
+        if (sourceFileFilter !== "all" && (p.source_file || "") !== sourceFileFilter) return false;
+        if (wooFilter === "published" && !p.woocommerce_id) return false;
+        if (wooFilter === "not_published" && p.woocommerce_id) return false;
+        return true;
+      })
+      .map((p: any) => p.id);
+    setSelected(new Set(allIds));
+    setAllPagesSelected(true);
   };
 
   const handleBulkDelete = () => {
