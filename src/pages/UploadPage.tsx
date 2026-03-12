@@ -546,41 +546,60 @@ const UploadPage = () => {
             <div className="space-y-2">
               {uploadHistory.map((record: any) => {
                 const isWebScrape = record.metadata?.type === "web_scrape";
+                const isExcel = record.metadata?.type === "Excel";
+                const savedMapping = record.metadata?.columnMapping as Record<string, string> | undefined;
+                const mappedFieldCount = savedMapping ? Object.keys(savedMapping).length : 0;
                 return (
-                  <div key={record.id} className="flex items-center gap-3 p-2 rounded bg-muted/30 text-sm">
-                    <Badge
-                      variant={isWebScrape ? "default" : record.file_type === "knowledge" ? "outline" : "secondary"}
-                      className="text-[10px] shrink-0"
-                    >
-                      {isWebScrape ? "🌐 Web" : record.file_type === "knowledge" ? "Conhecimento" : "Produtos"}
-                    </Badge>
-                    <span className="truncate flex-1">{record.file_name}</span>
-                    {record.extracted_text && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] shrink-0 gap-1"
-                        onClick={() => setPreviewFile({ name: record.file_name, text: record.extracted_text })}
+                  <div key={record.id} className="space-y-1">
+                    <div className="flex items-center gap-3 p-2 rounded bg-muted/30 text-sm">
+                      <Badge
+                        variant={isWebScrape ? "default" : record.file_type === "knowledge" ? "outline" : "secondary"}
+                        className="text-[10px] shrink-0"
                       >
-                        <Eye className="w-3 h-3" />
-                        Ver Conteúdo
+                        {isWebScrape ? "🌐 Web" : record.file_type === "knowledge" ? "Conhecimento" : "Produtos"}
+                      </Badge>
+                      <span className="truncate flex-1">{record.file_name}</span>
+                      {isExcel && mappedFieldCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] shrink-0 gap-1">
+                          {mappedFieldCount} campos mapeados
+                        </Badge>
+                      )}
+                      {record.extracted_text && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] shrink-0 gap-1"
+                          onClick={() => setPreviewFile({ name: record.file_name, text: record.extracted_text })}
+                        >
+                          <Eye className="w-3 h-3" />
+                          Ver Conteúdo
+                        </Button>
+                      )}
+                      {record.products_count > 0 && (
+                        <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
+                      )}
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {format(new Date(record.created_at), "dd/MM/yyyy HH:mm")}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => deleteUploadedFile.mutate(record.id)}
+                        disabled={deleteUploadedFile.isPending}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
+                    </div>
+                    {isExcel && savedMapping && mappedFieldCount > 0 && (
+                      <div className="pl-4 flex flex-wrap gap-1">
+                        {allFields.filter((f) => savedMapping[f.key]).map((f) => (
+                          <Badge key={f.key} variant="outline" className="text-[10px] font-normal gap-1">
+                            {f.label} <span className="text-muted-foreground">← {savedMapping[f.key]}</span>
+                          </Badge>
+                        ))}
+                      </div>
                     )}
-                    {record.products_count > 0 && (
-                      <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
-                    )}
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {format(new Date(record.created_at), "dd/MM/yyyy HH:mm")}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                      onClick={() => deleteUploadedFile.mutate(record.id)}
-                      disabled={deleteUploadedFile.isPending}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
                   </div>
                 );
               })}
