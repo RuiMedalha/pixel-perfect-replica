@@ -104,7 +104,7 @@ export function useAllProductIds() {
       while (true) {
         const { data, error } = await supabase
           .from("products")
-          .select("id, sku, original_title, optimized_title, product_type, parent_product_id, status, technical_specs, category, source_file, woocommerce_id")
+          .select("id, sku, original_title, optimized_title, product_type, parent_product_id, status, technical_specs, category, source_file, woocommerce_id, image_urls, image_alt_texts")
           .eq("workspace_id", activeWorkspace!.id)
           .order("updated_at", { ascending: false })
           .range(from, from + pageSize - 1);
