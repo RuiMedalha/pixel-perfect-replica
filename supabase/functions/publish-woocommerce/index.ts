@@ -1273,13 +1273,19 @@ async function publishSingleProduct(
     wooData = existingWooId
       ? await wooFetch(baseUrl, auth, `/products/${existingWooId}`, "PUT", wooProduct)
       : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
-  } catch (skuErr) {
-    if (skuErr instanceof WooSkuConflictError) {
-      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
-      wooData = await wooFetch(baseUrl, auth, `/products/${skuErr.resourceId}`, "PUT", wooProduct);
+  } catch (err) {
+    if (err instanceof WooNotFoundError && existingWooId) {
+      // Stale woocommerce_id → clear and create fresh
+      console.warn(`Product ${product.id} WC#${existingWooId} not found (deleted?), creating new.`);
+      await supabase.from("products").update({ woocommerce_id: null }).eq("id", product.id);
+      wooData = await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
+      action = "created";
+    } else if (err instanceof WooSkuConflictError) {
+      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${err.resourceId}`);
+      wooData = await wooFetch(baseUrl, auth, `/products/${err.resourceId}`, "PUT", wooProduct);
       action = "updated";
     } else {
-      throw skuErr;
+      throw err;
     }
   }
 
