@@ -159,6 +159,41 @@ export type Database = {
           },
         ]
       }
+      image_credits: {
+        Row: {
+          id: string
+          monthly_limit: number
+          reset_at: string
+          updated_at: string
+          used_this_month: number
+          workspace_id: string
+        }
+        Insert: {
+          id?: string
+          monthly_limit?: number
+          reset_at?: string
+          updated_at?: string
+          used_this_month?: number
+          workspace_id: string
+        }
+        Update: {
+          id?: string
+          monthly_limit?: number
+          reset_at?: string
+          updated_at?: string
+          used_this_month?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "image_credits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       images: {
         Row: {
           alt_text: string | null
