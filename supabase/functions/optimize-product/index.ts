@@ -1173,6 +1173,7 @@ REGRAS GLOBAIS:
               const variationUpdate: Record<string, any> = {
                 status: "optimized",
                 category: updateData.category || product.category,
+                suggested_category: updateData.suggested_category || null,
               };
 
               // Propagate title with attribute suffix
