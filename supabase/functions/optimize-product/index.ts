@@ -921,7 +921,7 @@ IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variaçõ
         if (fields.includes("meta_description")) fieldInstructions.push(`META DESCRIPTION:\n${getFieldPrompt("meta_description", "Meta description SEO (máx 155 chars, com call-to-action)")}`);
         if (fields.includes("seo_slug")) fieldInstructions.push(`SEO SLUG:\n${getFieldPrompt("seo_slug", "SEO slug (url-friendly, lowercase, hífens, sem acentos)")}`);
         if (fields.includes("tags")) fieldInstructions.push(`TAGS:\n${getFieldPrompt("tags", "Tags relevantes (3-6 palavras-chave)")}`);
-        if (fields.includes("price")) fieldInstructions.push(`PREÇO:\n${getFieldPrompt("price", "Preço sugerido")}`);
+        
         if (fields.includes("faq")) fieldInstructions.push(`FAQ:\n${getFieldPrompt("faq", "FAQ com 3-5 perguntas e respostas frequentes")}`);
         if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
         if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
