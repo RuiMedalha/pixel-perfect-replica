@@ -503,6 +503,40 @@ const ProductsPage = () => {
     );
   };
 
+  const EMPTY_FIELD_CHECKS: { key: string; label: string }[] = [
+    { key: "optimized_title", label: "Título" },
+    { key: "optimized_description", label: "Descrição" },
+    { key: "optimized_short_description", label: "Desc. Curta" },
+    { key: "category", label: "Categoria" },
+    { key: "meta_title", label: "Meta Title" },
+    { key: "meta_description", label: "Meta Desc" },
+    { key: "seo_slug", label: "Slug" },
+    { key: "tags", label: "Tags" },
+    { key: "optimized_price", label: "Preço" },
+    { key: "image_urls", label: "Imagens" },
+    { key: "focus_keyword", label: "Keyword" },
+  ];
+
+  const EmptyFieldsIndicator = ({ product }: { product: Product }) => {
+    const empty = EMPTY_FIELD_CHECKS.filter(({ key }) => {
+      const val = (product as any)[key];
+      if (val == null) return true;
+      if (typeof val === "string" && val.trim() === "") return true;
+      if (Array.isArray(val) && val.length === 0) return true;
+      return false;
+    });
+    if (empty.length === 0) return null;
+    return (
+      <span
+        className="inline-flex items-center gap-0.5 text-[9px] text-warning cursor-help"
+        title={`Campos vazios: ${empty.map(e => e.label).join(", ")}`}
+      >
+        <AlertTriangle className="w-2.5 h-2.5" />
+        {empty.length}
+      </span>
+    );
+  };
+
   const ProductRow = ({ product }: { product: Product }) => (
     <tr
       className={cn(
