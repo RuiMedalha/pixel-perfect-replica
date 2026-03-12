@@ -29,6 +29,7 @@ import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
 import { useRepairAttributes } from "@/hooks/useRepairAttributes";
 import { useEnrichProducts } from "@/hooks/useEnrichProducts";
+import { useProcessImages } from "@/hooks/useProcessImages";
 import { useSettings } from "@/hooks/useSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
