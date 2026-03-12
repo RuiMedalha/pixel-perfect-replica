@@ -1978,13 +1978,24 @@ const ProductsPage = () => {
 
       {/* WooCommerce Publish Modal */}
       {(() => {
-        // Compute publish info: auto-include child variations for selected variable parents
+        // Compute publish info: auto-include parent + all siblings when a variation is selected,
+        // and auto-include children when a variable parent is selected
         const selectedArr = Array.from(selected);
         const selectedProducts = (allProductsLight ?? []).filter((p: any) => selected.has(p.id));
+        
+        // 1) Variable parents selected → include their children
         const variableParentIds = selectedProducts.filter((p: any) => p.product_type === "variable").map((p: any) => p.id);
         const childVariations = (allProductsLight ?? []).filter((p: any) => p.parent_product_id && variableParentIds.includes(p.parent_product_id) && !selected.has(p.id));
-        const allPublishIds = [...selectedArr, ...childVariations.map((c: any) => c.id)];
-        const variationCount = childVariations.length;
+        
+        // 2) Variations selected → include their parent + all siblings
+        const selectedVariations = selectedProducts.filter((p: any) => p.product_type === "variation" && p.parent_product_id);
+        const extraParentIds = [...new Set(selectedVariations.map((p: any) => p.parent_product_id))].filter((pid: string) => !selected.has(pid) && !variableParentIds.includes(pid));
+        const allFamilyParentIds = [...new Set([...variableParentIds, ...extraParentIds])];
+        const siblingVariations = (allProductsLight ?? []).filter((p: any) => p.parent_product_id && allFamilyParentIds.includes(p.parent_product_id) && !selected.has(p.id));
+        
+        const autoIncluded = [...new Set([...childVariations.map((c: any) => c.id), ...extraParentIds, ...siblingVariations.map((c: any) => c.id)])];
+        const allPublishIds = [...new Set([...selectedArr, ...autoIncluded])];
+        const variationCount = autoIncluded.length;
 
         return (
           <WooPublishModal
