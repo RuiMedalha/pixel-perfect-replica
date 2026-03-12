@@ -169,6 +169,11 @@ MÚLTIPLOS ATRIBUTOS:
 - Um grupo pode ter MAIS QUE UM atributo APENAS se ambos realmente variam.
 - Se todas têm 35cm mas cores diferentes → attribute_names: ["Cor"] apenas.
 
+CÓDIGOS EAN/BARCODE NÃO SÃO ATRIBUTOS DE VARIAÇÃO:
+- Valores numéricos de 8-14 dígitos (ex: 8690462004399) são códigos EAN/GTIN/barcode.
+- NUNCA uses EAN como valor de "Cor", "Tamanho" ou qualquer atributo de variação.
+- EAN é um atributo técnico que deve ficar fora dos attribute_names.
+
 TRADUÇÃO / CONSISTÊNCIA:
 - Normaliza sempre para Português de Portugal.
 - O parent_title deve incluir atributos FIXOS (que não variam) e excluir os que variam.
