@@ -1384,7 +1384,7 @@ async function publishVariableProduct(
     existingParentWooId = await findWooProductBySku(baseUrl, auth, parent.sku);
   }
 
-  const parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
+  let parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
 
   // Ao atualizar, preserva atributos já existentes no WooCommerce (ex.: Marca/Modelo/EAN) para não os "apagar".
   if (existingParentWooId && Array.isArray((parentPayload as any).attributes)) {
@@ -1394,15 +1394,35 @@ async function publishVariableProduct(
         (parentPayload as any).attributes = mergeWooAttributes(existingWoo.attributes, (parentPayload as any).attributes);
       }
     } catch (e) {
-      console.warn("Não foi possível ler atributos existentes do WooCommerce; a continuar.", e);
+      if (e instanceof WooNotFoundError) {
+        // Stale woocommerce_id → clear and create fresh
+        console.warn(`Variable parent ${parent.id} WC#${existingParentWooId} not found, will create new.`);
+        await supabase.from("products").update({ woocommerce_id: null }).eq("id", parent.id);
+        existingParentWooId = null;
+        parentAction = "created";
+      } else {
+        console.warn("Não foi possível ler atributos existentes do WooCommerce; a continuar.", e);
+      }
     }
   }
 
   console.log(`[publish-variable] Sending ${parentAction} to WC#${existingParentWooId || 'new'}, final payload: ${JSON.stringify(parentPayload).substring(0, 1500)}`);
 
-  const parentWooData = existingParentWooId
-    ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
-    : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+  let parentWooData;
+  try {
+    parentWooData = existingParentWooId
+      ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
+      : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+  } catch (err) {
+    if (err instanceof WooNotFoundError && existingParentWooId) {
+      console.warn(`Variable parent ${parent.id} WC#${existingParentWooId} not found on PUT, creating new.`);
+      await supabase.from("products").update({ woocommerce_id: null }).eq("id", parent.id);
+      parentWooData = await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+      parentAction = "created";
+    } else {
+      throw err;
+    }
+  }
 
   const parentWooId = parentWooData.id;
   console.log(`[publish-variable] WC response: id=${parentWooId}, name=${parentWooData.name}, images=${parentWooData.images?.length || 0}, attrs=${parentWooData.attributes?.length || 0}`);
