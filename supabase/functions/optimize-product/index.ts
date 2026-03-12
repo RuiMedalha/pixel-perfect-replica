@@ -1155,10 +1155,49 @@ REGRAS GLOBAIS:
         if (product.product_type === "variable") {
           const { data: variations } = await supabase
             .from("products")
-            .select("id, sku, attributes, original_title")
+            .select("id, sku, attributes, original_title, category")
             .eq("parent_product_id", product.id);
 
           if (variations && variations.length > 0) {
+            // === CATEGORY CONCORDANCE ANALYSIS ===
+            // Check if variations have a more concordant category than the parent
+            const parentCategory = updateData.suggested_category || product.category || "";
+            const variationCategories = variations
+              .map((v: any) => v.category)
+              .filter((c: string | null) => c && c.trim() !== "");
+            
+            let finalCategory = parentCategory;
+            let categoryChanged = false;
+            
+            if (variationCategories.length > 0) {
+              // Count category occurrences among variations
+              const catCounts: Record<string, number> = {};
+              for (const cat of variationCategories) {
+                catCounts[cat!] = (catCounts[cat!] || 0) + 1;
+              }
+              
+              // Find the most common category among variations
+              const sortedCats = Object.entries(catCounts).sort((a, b) => b[1] - a[1]);
+              const mostCommonCat = sortedCats[0][0];
+              const mostCommonCount = sortedCats[0][1];
+              
+              // If majority of variations agree on a different category, adopt it
+              if (mostCommonCat && mostCommonCat !== parentCategory && mostCommonCount > variationCategories.length / 2) {
+                // Verify the category exists in the system
+                if (existingCategories.includes(mostCommonCat)) {
+                  console.log(`🔄 Category concordance: variations prefer "${mostCommonCat}" (${mostCommonCount}/${variationCategories.length}) over parent "${parentCategory}" → updating parent`);
+                  finalCategory = mostCommonCat;
+                  categoryChanged = true;
+                  
+                  // Update the parent product category
+                  await supabase.from("products").update({ 
+                    category: mostCommonCat,
+                    suggested_category: parentCategory !== mostCommonCat ? parentCategory : null
+                  }).eq("id", product.id);
+                }
+              }
+            }
+
             let propagated = 0;
             for (const variation of variations) {
               // Build attribute suffix (e.g., "- Vermelho, 16 cm")
@@ -1173,7 +1212,7 @@ REGRAS GLOBAIS:
 
               const variationUpdate: Record<string, any> = {
                 status: "optimized",
-                category: updateData.category || product.category,
+                category: finalCategory,
                 suggested_category: updateData.suggested_category || null,
               };
 

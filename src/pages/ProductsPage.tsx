@@ -608,7 +608,7 @@ const ProductsPage = () => {
             </span>
             {(product as any).suggested_category && (product as any).suggested_category !== product.category && (
               <span
-                className="truncate block text-[10px] text-muted-foreground italic mt-0.5 cursor-pointer hover:text-primary"
+                className="truncate block text-[10px] text-destructive font-medium italic mt-0.5 cursor-pointer hover:text-destructive/80 border-l-2 border-destructive/40 pl-1"
                 title={`Proposta IA: ${(product as any).suggested_category} — Clique para aceitar`}
                 onClick={(e) => {
                   e.stopPropagation();
