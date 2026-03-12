@@ -348,6 +348,12 @@ class WooSkuConflictError extends Error {
   }
 }
 
+class WooNotFoundError extends Error {
+  constructor(endpoint: string) {
+    super(`WooCommerce 404: resource not found at ${endpoint}`);
+  }
+}
+
 async function wooFetch(baseUrl: string, auth: string, endpoint: string, method: string, body?: Record<string, unknown>) {
   const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
     method,
@@ -356,6 +362,10 @@ async function wooFetch(baseUrl: string, auth: string, endpoint: string, method:
   });
   if (!resp.ok) {
     const errBody = await resp.text();
+    // Detect 404 (stale woocommerce_id)
+    if (resp.status === 404) {
+      throw new WooNotFoundError(endpoint);
+    }
     // Detect SKU conflict and extract existing resource_id for retry
     try {
       const parsed = JSON.parse(errBody);
