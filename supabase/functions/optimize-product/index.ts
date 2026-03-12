@@ -1128,7 +1128,7 @@ REGRAS GLOBAIS:
         if (optimized.meta_description) updateData.meta_description = optimized.meta_description;
         if (optimized.seo_slug) updateData.seo_slug = optimized.seo_slug;
         if (optimized.tags) updateData.tags = optimized.tags;
-        if (optimized.optimized_price !== undefined) updateData.optimized_price = optimized.optimized_price ?? product.original_price;
+        
         if (optimized.faq) updateData.faq = optimized.faq;
         if (optimized.upsell_skus) updateData.upsell_skus = optimized.upsell_skus;
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
