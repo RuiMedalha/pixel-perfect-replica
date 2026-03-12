@@ -64,6 +64,29 @@ const ProductsPage = () => {
   const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
   const { processImages, isProcessing: isProcessingImages, progress: imgProgress } = useProcessImages();
   const { data: settings } = useSettings();
+
+  // Fetch which products have optimized/lifestyle images
+  const { data: imageStatusMap } = useQuery({
+    queryKey: ["product-image-status", activeWorkspace?.id],
+    enabled: !!activeWorkspace,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("images")
+        .select("product_id, s3_key")
+        .not("optimized_url", "is", null);
+      if (error) throw error;
+      const map: Record<string, { hasOptimized: boolean; hasLifestyle: boolean }> = {};
+      for (const row of data || []) {
+        if (!map[row.product_id]) map[row.product_id] = { hasOptimized: false, hasLifestyle: false };
+        const key = (row.s3_key || "").toLowerCase();
+        if (key.includes("lifestyle")) map[row.product_id].hasLifestyle = true;
+        else map[row.product_id].hasOptimized = true;
+      }
+      return map;
+    },
+  });
+
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
   const { activeJob, isCreating: isCreatingJob, createJob, cancelJob, dismissJob } = useOptimizationJob();
