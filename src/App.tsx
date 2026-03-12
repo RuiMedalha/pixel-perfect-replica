@@ -16,6 +16,7 @@ import AdminUsersPage from "./pages/AdminUsersPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import VariationsPage from "./pages/VariationsPage";
 import WooImportPage from "./pages/WooImportPage";
+import ImagesPage from "./pages/ImagesPage";
 import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -52,6 +53,7 @@ function ProtectedRoutes() {
           <Route path="/variacoes" element={<VariationsPage />} />
           <Route path="/categorias" element={<CategoriesPage />} />
           <Route path="/importar-woo" element={<WooImportPage />} />
+          <Route path="/imagens" element={<ImagesPage />} />
           {profile?.isAdmin && (
             <>
               <Route path="/configuracoes" element={<SettingsPage />} />
