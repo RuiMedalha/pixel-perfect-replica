@@ -672,6 +672,7 @@ export function useUploadCatalog() {
     setColumnMapping,
     setUpdateFields,
     confirmMapping,
+    reopenMapping,
     selectSheet,
     allFields,
     customFields,
