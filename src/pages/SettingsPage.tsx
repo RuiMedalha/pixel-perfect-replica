@@ -85,7 +85,7 @@ const SettingsPage = () => {
         .select("*")
         .eq("workspace_id", activeWorkspace.id)
         .maybeSingle();
-      return data as { used_this_month: number; monthly_limit: number; reset_at: string } | null;
+      return data as unknown as { used_this_month: number; monthly_limit: number; reset_at: string } | null;
     },
     enabled: !!activeWorkspace,
   });
