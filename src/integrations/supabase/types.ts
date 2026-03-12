@@ -115,6 +115,50 @@ export type Database = {
           },
         ]
       }
+      error_logs: {
+        Row: {
+          context: Json | null
+          created_at: string
+          error_message: string
+          id: string
+          severity: string
+          source: string
+          stack_trace: string | null
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          context?: Json | null
+          created_at?: string
+          error_message: string
+          id?: string
+          severity?: string
+          source?: string
+          stack_trace?: string | null
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          context?: Json | null
+          created_at?: string
+          error_message?: string
+          id?: string
+          severity?: string
+          source?: string
+          stack_trace?: string | null
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "error_logs_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       images: {
         Row: {
           alt_text: string | null
@@ -652,6 +696,85 @@ export type Database = {
             foreignKeyName: "publish_jobs_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scrape_cache: {
+        Row: {
+          content_html: string | null
+          content_markdown: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          metadata: Json | null
+          url: string
+          url_hash: string
+          workspace_id: string | null
+        }
+        Insert: {
+          content_html?: string | null
+          content_markdown?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          metadata?: Json | null
+          url: string
+          url_hash: string
+          workspace_id?: string | null
+        }
+        Update: {
+          content_html?: string | null
+          content_markdown?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          metadata?: Json | null
+          url?: string
+          url_hash?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scrape_cache_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scraping_credits: {
+        Row: {
+          id: string
+          monthly_limit: number
+          reset_at: string
+          updated_at: string
+          used_this_month: number
+          workspace_id: string
+        }
+        Insert: {
+          id?: string
+          monthly_limit?: number
+          reset_at?: string
+          updated_at?: string
+          used_this_month?: number
+          workspace_id: string
+        }
+        Update: {
+          id?: string
+          monthly_limit?: number
+          reset_at?: string
+          updated_at?: string
+          used_this_month?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scraping_credits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
