@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2, Save, Eye, EyeOff, Loader2, Zap, Send } from "lucide-react";
+import { Plus, Trash2, Save, Eye, EyeOff, Loader2, Zap, Send, ImageIcon } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { useSettings, useSaveSettings } from "@/hooks/useSettings";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,6 +20,7 @@ import { DescriptionTemplateEditor } from "@/components/DescriptionTemplateEdito
 import { AI_MODELS } from "@/hooks/useOptimizeProducts";
 import { WOO_PUBLISH_GROUPS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { WooSitesManager } from "@/components/WooSitesManager";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 
 interface Supplier {
   name: string;
@@ -61,6 +64,7 @@ Gera:
 IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica.`;
 
 const SettingsPage = () => {
+  const { activeWorkspace } = useWorkspaceContext();
   const { data: settings, isLoading } = useSettings();
   const saveSettings = useSaveSettings();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
@@ -71,6 +75,35 @@ const SettingsPage = () => {
   const [testingLoading, setTestingLoading] = useState<Record<number, boolean>>({});
   const [testResult, setTestResult] = useState<{ index: number; preview: string; chars: number; url: string } | null>(null);
   const [wooPublishFields, setWooPublishFields] = useState<Set<string>>(new Set(DEFAULT_WOO_FIELDS));
+
+  const { data: imageCredits } = useQuery({
+    queryKey: ["image-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("image_credits" as any)
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data as unknown as { used_this_month: number; monthly_limit: number; reset_at: string } | null;
+    },
+    enabled: !!activeWorkspace,
+  });
+
+  const { data: scrapingCredits } = useQuery({
+    queryKey: ["scraping-credits", activeWorkspace?.id],
+    queryFn: async () => {
+      if (!activeWorkspace) return null;
+      const { data } = await supabase
+        .from("scraping_credits")
+        .select("*")
+        .eq("workspace_id", activeWorkspace.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!activeWorkspace,
+  });
+
   useEffect(() => {
     if (settings) {
       setForm(settings);
@@ -517,6 +550,59 @@ const SettingsPage = () => {
       </Card>
 
       <Separator />
+
+      {/* Credits Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ImageIcon className="w-4 h-4" />
+            Créditos do Workspace
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Image Credits */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">🖼️ Créditos de Imagens</Label>
+              <span className="text-xs text-muted-foreground">
+                {imageCredits ? `${imageCredits.used_this_month} / ${imageCredits.monthly_limit}` : "0 / 100"}
+              </span>
+            </div>
+            <Progress
+              value={imageCredits ? (imageCredits.used_this_month / imageCredits.monthly_limit) * 100 : 0}
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+              Processamento de imagens com IA (otimização + lifestyle).
+              {imageCredits?.reset_at && (
+                <> Renova a {new Date(imageCredits.reset_at).toLocaleDateString("pt-PT")}.</>
+              )}
+            </p>
+          </div>
+
+          <Separator />
+
+          {/* Scraping Credits */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">🌐 Créditos de Scraping</Label>
+              <span className="text-xs text-muted-foreground">
+                {scrapingCredits ? `${scrapingCredits.used_this_month} / ${scrapingCredits.monthly_limit}` : "0 / 1000"}
+              </span>
+            </div>
+            <Progress
+              value={scrapingCredits ? (scrapingCredits.used_this_month / scrapingCredits.monthly_limit) * 100 : 0}
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+              Enriquecimento web via Firecrawl.
+              {scrapingCredits?.reset_at && (
+                <> Renova a {new Date(scrapingCredits.reset_at).toLocaleDateString("pt-PT")}.</>
+              )}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex justify-end">
         <Button onClick={handleSave} size="lg" disabled={saveSettings.isPending}>
