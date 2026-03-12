@@ -599,6 +599,7 @@ const UploadPage = () => {
                           <Download className="w-3 h-3" />
                           Descarregar
                         </Button>
+                      )}
                       {record.products_count > 0 && (
                         <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
                       )}
