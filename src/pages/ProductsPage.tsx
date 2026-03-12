@@ -84,6 +84,7 @@ const ProductsPage = () => {
   const [wooFilter, setWooFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allPagesSelected, setAllPagesSelected] = useState(false);
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
@@ -240,6 +241,7 @@ const ProductsPage = () => {
   };
 
   const toggleSelect = (id: string) => {
+    setAllPagesSelected(false);
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -248,22 +250,55 @@ const ProductsPage = () => {
   };
 
   const bulkAction = (status: Enums<"product_status">) => {
-    updateStatus.mutate({ ids: Array.from(selected), status });
+    const ids = Array.from(selected);
+    // Process in batches of 500 for large selections
+    const batchSize = 500;
+    const batches: string[][] = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+      batches.push(ids.slice(i, i + batchSize));
+    }
+    batches.forEach((batch) => {
+      updateStatus.mutate({ ids: batch, status });
+    });
     setSelected(new Set());
+    setAllPagesSelected(false);
   };
 
   const toggleSelectAll = () => {
-    if (selected.size === filtered.length) {
+    if (selected.size === filtered.length && !allPagesSelected) {
       setSelected(new Set());
     } else {
       setSelected(new Set(filtered.map((p) => p.id)));
     }
+    setAllPagesSelected(false);
+  };
+
+  const selectAllPages = () => {
+    const allIds = (allProductsLight ?? [])
+      .filter((p: any) => {
+        if (statusFilter !== "all" && p.status !== statusFilter) return false;
+        if (categoryFilter !== "all" && (p.category || "") !== categoryFilter) return false;
+        if (productTypeFilter !== "all" && p.product_type !== productTypeFilter) return false;
+        if (sourceFileFilter !== "all" && (p.source_file || "") !== sourceFileFilter) return false;
+        if (wooFilter === "published" && !p.woocommerce_id) return false;
+        if (wooFilter === "not_published" && p.woocommerce_id) return false;
+        return true;
+      })
+      .map((p: any) => p.id);
+    setSelected(new Set(allIds));
+    setAllPagesSelected(true);
   };
 
   const handleBulkDelete = () => {
     if (confirm(`Tem a certeza que deseja eliminar ${selected.size} produto(s)? Esta ação é irreversível.`)) {
-      deleteProducts.mutate(Array.from(selected));
+      const ids = Array.from(selected);
+      // Delete in batches of 500
+      const batchSize = 500;
+      for (let i = 0; i < ids.length; i += batchSize) {
+        deleteProducts.mutate(ids.slice(i, i + batchSize));
+      }
       setSelected(new Set());
+      setAllPagesSelected(false);
     }
   };
 
@@ -1299,7 +1334,7 @@ const ProductsPage = () => {
                   <tr className="border-b bg-muted/50">
                     <th className="p-3 w-10">
                       <Checkbox
-                        checked={filtered.length > 0 && selected.size === filtered.length}
+                        checked={filtered.length > 0 && (selected.size >= filtered.length || allPagesSelected)}
                         onCheckedChange={toggleSelectAll}
                       />
                     </th>
@@ -1315,6 +1350,27 @@ const ProductsPage = () => {
                     <th className="p-3 text-right font-medium text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
+                {/* Select all pages banner */}
+                {selected.size >= filtered.length && selected.size > 0 && totalCount > filtered.length && !allPagesSelected && (
+                  <caption className="caption-top">
+                    <div className="bg-primary/10 text-primary text-sm py-2 px-4 text-center rounded-md mb-1">
+                      {selected.size} produtos desta página selecionados.{" "}
+                      <button className="underline font-semibold hover:text-primary/80" onClick={selectAllPages}>
+                        Selecionar todos os {totalCount} produtos{statusFilter !== "all" ? ` (${statusFilter})` : ""}
+                      </button>
+                    </div>
+                  </caption>
+                )}
+                {allPagesSelected && (
+                  <caption className="caption-top">
+                    <div className="bg-success/10 text-success text-sm py-2 px-4 text-center rounded-md mb-1">
+                      ✓ Todos os {selected.size} produtos selecionados.{" "}
+                      <button className="underline font-semibold hover:text-success/80" onClick={() => { setSelected(new Set()); setAllPagesSelected(false); }}>
+                        Limpar seleção
+                      </button>
+                    </div>
+                  </caption>
+                )}
                 <tbody>
                   {viewMode === "list" ? (
                     paginatedFiltered.map((product) => (
