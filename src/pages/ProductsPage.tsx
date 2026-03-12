@@ -61,6 +61,7 @@ const ProductsPage = () => {
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
   const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
+  const { processImages, isProcessing: isProcessingImages, progress: imgProgress } = useProcessImages();
   const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
