@@ -425,6 +425,10 @@ export function useUploadCatalog() {
     updateFile(id, { status: "aguardando" });
   };
 
+  const reopenMapping = (id: string) => {
+    updateFile(id, { status: "a_mapear" });
+  };
+
   const selectSheet = async (id: string, sheetName: string) => {
     const file = files.find((f) => f.id === id);
     if (!file) return;
