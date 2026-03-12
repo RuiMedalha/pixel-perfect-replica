@@ -1,5 +1,5 @@
 import { useCallback, useState, useMemo } from "react";
-import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search, Eye, RefreshCw } from "lucide-react";
+import { Upload as UploadIcon, File, CheckCircle, AlertCircle, Loader2, X, Play, BookOpen, Package, Clock, Plus, Trash2, Globe, Search, Eye, RefreshCw, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -575,6 +575,29 @@ const UploadPage = () => {
                         >
                           <Eye className="w-3 h-3" />
                           Ver Conteúdo
+                        </Button>
+                      )}
+                      {record.storage_path && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] shrink-0 gap-1"
+                          onClick={async () => {
+                            const { data, error } = await supabase.storage
+                              .from("catalogs")
+                              .createSignedUrl(record.storage_path, 60);
+                            if (error || !data?.signedUrl) {
+                              toast.error("Erro ao gerar link de download.");
+                              return;
+                            }
+                            const a = document.createElement("a");
+                            a.href = data.signedUrl;
+                            a.download = record.file_name;
+                            a.click();
+                          }}
+                        >
+                          <Download className="w-3 h-3" />
+                          Descarregar
                         </Button>
                       )}
                       {record.products_count > 0 && (
