@@ -90,7 +90,6 @@ export function useProducts(filters: ProductFilters = {}) {
 
 /**
  * Lightweight hook to fetch ALL product IDs + minimal data for bulk operations.
- * Only loads id, sku, original_title, optimized_title, product_type, parent_product_id, status, technical_specs.
  */
 export function useAllProductIds() {
   const { activeWorkspace } = useWorkspaceContext();
