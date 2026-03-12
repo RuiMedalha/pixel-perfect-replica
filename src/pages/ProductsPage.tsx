@@ -575,8 +575,8 @@ const ProductsPage = () => {
           onCheckedChange={() => toggleSelect(product.id)}
         />
       </td>
-      <td className="p-3 font-mono text-xs">{product.sku ?? "—"}</td>
-      <td className="p-3 max-w-[180px] truncate">{product.original_title ?? "—"}</td>
+      <td className="p-3 font-mono text-xs" title={product.sku ?? undefined}>{product.sku ?? "—"}</td>
+      <td className="p-3 max-w-[180px] truncate" title={product.original_title ?? undefined}>{product.original_title ?? "—"}</td>
       <td className="p-3 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
         {editingCell?.id === product.id && editingCell.field === "optimized_title" ? (
           <div className="flex gap-1">
@@ -598,7 +598,7 @@ const ProductsPage = () => {
           <span
             className="truncate block text-primary font-medium cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
             onDoubleClick={() => startInlineEdit(product.id, "optimized_title", product.optimized_title ?? "")}
-            title="Duplo-clique para editar"
+            title={product.optimized_title || "Duplo-clique para editar"}
           >
             {product.optimized_title ?? "—"}
           </span>
@@ -626,7 +626,7 @@ const ProductsPage = () => {
             <span
               className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
               onDoubleClick={() => startInlineEdit(product.id, "category", product.category ?? "")}
-              title="Duplo-clique para editar"
+              title={product.category || "Duplo-clique para editar"}
             >
               {product.category ?? "—"}
             </span>
@@ -666,7 +666,7 @@ const ProductsPage = () => {
           <span
             className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
             onDoubleClick={() => startInlineEdit(product.id, "optimized_short_description", product.optimized_short_description ?? "")}
-            title="Duplo-clique para editar"
+            title={product.optimized_short_description || "Duplo-clique para editar"}
           >
             {product.optimized_short_description ?? "—"}
           </span>
@@ -693,7 +693,7 @@ const ProductsPage = () => {
           <span
             className="truncate block text-xs font-mono text-muted-foreground cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
             onDoubleClick={() => startInlineEdit(product.id, "seo_slug", product.seo_slug ?? "")}
-            title="Duplo-clique para editar"
+            title={product.seo_slug || "Duplo-clique para editar"}
           >
             {product.seo_slug ?? "—"}
           </span>
@@ -1501,11 +1501,11 @@ const ProductsPage = () => {
                                 {item.product.sku ?? "—"}
                               </div>
                             </td>
-                            <td className="p-3 max-w-[180px] truncate font-medium">{item.product.original_title ?? "—"}</td>
-                            <td className="p-3 max-w-[180px] truncate text-primary font-medium">{item.product.optimized_title ?? "—"}</td>
-                            <td className="p-3 max-w-[140px] truncate text-xs">{item.product.category ?? "—"}</td>
-                            <td className="p-3 max-w-[140px] truncate text-xs">{item.product.optimized_short_description ?? "—"}</td>
-                            <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground">{item.product.seo_slug ?? "—"}</td>
+                            <td className="p-3 max-w-[180px] truncate font-medium" title={item.product.original_title ?? undefined}>{item.product.original_title ?? "—"}</td>
+                            <td className="p-3 max-w-[180px] truncate text-primary font-medium" title={item.product.optimized_title ?? undefined}>{item.product.optimized_title ?? "—"}</td>
+                            <td className="p-3 max-w-[140px] truncate text-xs" title={item.product.category ?? undefined}>{item.product.category ?? "—"}</td>
+                            <td className="p-3 max-w-[140px] truncate text-xs" title={item.product.optimized_short_description ?? undefined}>{item.product.optimized_short_description ?? "—"}</td>
+                            <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground" title={item.product.seo_slug ?? undefined}>{item.product.seo_slug ?? "—"}</td>
                             <td className="p-3">
                               <div className="flex items-center gap-1.5">
                                 <Badge variant="secondary" className="text-[10px]">Variável</Badge>
@@ -1558,10 +1558,15 @@ const ProductsPage = () => {
                                   {child.sku ?? "—"}
                                 </div>
                               </td>
-                              <td className="p-3 max-w-[180px] truncate text-muted-foreground text-xs">{child.original_title ?? "—"}</td>
-                              <td className="p-3 max-w-[180px] truncate text-primary/70 text-xs">{child.optimized_title ?? "—"}</td>
-                              <td className="p-3 max-w-[140px] truncate text-xs text-muted-foreground">
-                                {/* Show attribute values instead of category for variations */}
+                              <td className="p-3 max-w-[180px] truncate text-muted-foreground text-xs" title={child.original_title ?? undefined}>{child.original_title ?? "—"}</td>
+                              <td className="p-3 max-w-[180px] truncate text-primary/70 text-xs" title={child.optimized_title ?? undefined}>{child.optimized_title ?? "—"}</td>
+                              <td className="p-3 max-w-[140px] truncate text-xs text-muted-foreground" title={
+                                Array.isArray(child.attributes) && (child.attributes as any[]).length > 0
+                                  ? (child.attributes as any[]).map((a: any) => 
+                                      Array.isArray(a.values) ? a.values.join("/") : (a.value || "")
+                                    ).filter(Boolean).join(", ")
+                                  : (child.category ?? undefined)
+                              }>
                                 {Array.isArray(child.attributes) && (child.attributes as any[]).length > 0
                                   ? (child.attributes as any[]).map((a: any) => 
                                       Array.isArray(a.values) ? a.values.join("/") : (a.value || "")
@@ -1569,8 +1574,8 @@ const ProductsPage = () => {
                                   : child.category ?? "—"
                                 }
                               </td>
-                              <td className="p-3 max-w-[140px] truncate text-xs text-muted-foreground">{child.optimized_short_description ?? "—"}</td>
-                              <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground/60">{child.seo_slug ?? "—"}</td>
+                              <td className="p-3 max-w-[140px] truncate text-xs text-muted-foreground" title={child.optimized_short_description ?? undefined}>{child.optimized_short_description ?? "—"}</td>
+                              <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground/60" title={child.seo_slug ?? undefined}>{child.seo_slug ?? "—"}</td>
                               <td className="p-3">
                                 <div className="flex items-center gap-1.5">
                                   <Badge variant="outline" className="text-[10px] text-muted-foreground border-dashed">Variação</Badge>
