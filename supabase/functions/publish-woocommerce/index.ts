@@ -1194,8 +1194,13 @@ function buildAttributesForParent(
       // Find structured attribute value if present
       const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
       const raw = String(found?.value || "").trim();
-      const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
-      if (option) add(name, option);
+      // If the structured value looks like an EAN, skip it and infer from title instead
+      const option = (raw && !isEanLikeValue(raw)) ? raw : inferVariationOptionFromTitle(parentTitle, childTitle);
+      if (option) {
+        // If the inferred option changes the logical attribute name (e.g. was "Cor" but value is a size), use the correct name
+        const effectiveName = (!raw || isEanLikeValue(raw)) ? inferAttrNameFromOption(option) : name;
+        add(effectiveName, option);
+      }
     }
   }
 
