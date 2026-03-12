@@ -5,7 +5,7 @@ import { toast } from "sonner";
 export type OptimizationField = 
   | "title" | "description" | "short_description"
   | "meta_title" | "meta_description" | "seo_slug"
-  | "tags" | "price" | "faq" | "upsells" | "crosssells"
+  | "tags" | "faq" | "upsells" | "crosssells"
   | "image_alt" | "category";
 
 export const OPTIMIZATION_PHASES = [
