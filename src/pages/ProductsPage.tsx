@@ -84,6 +84,7 @@ const ProductsPage = () => {
   const [wooFilter, setWooFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [allPagesSelected, setAllPagesSelected] = useState(false);
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
   const [selectedFields, setSelectedFields] = useState<Set<OptimizationField>>(new Set(ALL_FIELDS));
