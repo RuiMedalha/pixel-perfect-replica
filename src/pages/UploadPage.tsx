@@ -123,7 +123,7 @@ function UpdateFieldsSelector({ selectedFields, onChange }: { selectedFields: st
 const UploadPage = () => {
   const {
     files, addFiles, processAllFiles: processAll, processFile, removeFile,
-    setColumnMapping, confirmMapping, selectSheet, setUpdateFields,
+    setColumnMapping, confirmMapping, reopenMapping, selectSheet, setUpdateFields,
     allFields, customFields, addCustomField, removeCustomField,
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
