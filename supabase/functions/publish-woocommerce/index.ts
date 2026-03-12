@@ -231,24 +231,32 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Expand variable products to include children
+    // Expand: variable parents → include children, variations → include parent + siblings
     const { data: selectedProducts } = await supabase
       .from("products")
-      .select("id, product_type")
+      .select("id, product_type, parent_product_id")
       .in("id", productIds);
 
     const variableParentIds = (selectedProducts || [])
       .filter((p: any) => p.product_type === "variable")
       .map((p: any) => p.id);
 
+    // Variations selected → find their parents
+    const variationParentIds = (selectedProducts || [])
+      .filter((p: any) => p.product_type === "variation" && p.parent_product_id)
+      .map((p: any) => p.parent_product_id);
+
+    const allFamilyParentIds = [...new Set([...variableParentIds, ...variationParentIds])];
+
     let allIds = [...productIds];
-    if (variableParentIds.length > 0) {
+    if (allFamilyParentIds.length > 0) {
+      // Include parents themselves + all their children
       const { data: children } = await supabase
         .from("products")
         .select("id")
-        .in("parent_product_id", variableParentIds);
+        .in("parent_product_id", allFamilyParentIds);
       const childIds = (children || []).map((c: any) => c.id);
-      allIds = [...new Set([...allIds, ...childIds])];
+      allIds = [...new Set([...allIds, ...allFamilyParentIds, ...childIds])];
     }
 
     // Ensure parents are processed before variations to avoid "pai não publicado" errors
