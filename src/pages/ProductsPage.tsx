@@ -482,20 +482,6 @@ const ProductsPage = () => {
           onCheckedChange={() => toggleSelect(product.id)}
         />
       </td>
-      <td className="p-3 w-10">
-        {product.image_urls && product.image_urls.length > 0 ? (
-          <img
-            src={product.image_urls[0]}
-            alt={product.original_title || "Produto"}
-            className="w-10 h-10 rounded border object-contain bg-background"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-10 h-10 rounded border bg-muted/30 flex items-center justify-center">
-            <ImageIcon className="w-4 h-4 text-muted-foreground/40" />
-          </div>
-        )}
-      </td>
       <td className="p-3 font-mono text-xs">{product.sku ?? "—"}</td>
       <td className="p-3 max-w-[180px] truncate">{product.original_title ?? "—"}</td>
       <td className="p-3 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
@@ -1317,7 +1303,6 @@ const ProductsPage = () => {
                         onCheckedChange={toggleSelectAll}
                       />
                     </th>
-                    <th className="p-3 w-10"></th>
                     <th className="p-3 text-left font-medium text-muted-foreground">SKU</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Original</th>
                     <th className="p-3 text-left font-medium text-muted-foreground">Título Otimizado</th>
