@@ -935,12 +935,13 @@ IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variaçõ
             product.category || "",
             existingCategories
           );
-          const catList = semanticMatches.length > 0
+          const catList = existingCategories.length > 0
+            ? `\nCATEGORIAS DISPONÍVEIS (usa APENAS uma destas, NÃO inventes novas): ${existingCategories.join(", ")}`
+            : "";
+          const semanticHint = semanticMatches.length > 0
             ? `\nCATEGORIAS MAIS RELEVANTES (por análise semântica): ${semanticMatches.join(", ")}`
-            : existingCategories.length > 0
-              ? `\nTODAS AS CATEGORIAS EXISTENTES: ${existingCategories.join(", ")}`
-              : "";
-          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria no formato 'Categoria > Subcategoria'. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se encontrares uma categoria existente que se aplique, USA-A em vez de criar uma nova. Prioriza as categorias semelhantes listadas abaixo.")}${catList}`);
+            : "";
+          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE. NÃO cries categorias novas — usa APENAS as categorias da lista abaixo. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se nenhuma categoria existente se aplicar, devolve a string vazia.")}${catList}${semanticHint}`);
         }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
