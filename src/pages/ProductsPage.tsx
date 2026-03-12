@@ -480,7 +480,7 @@ const ProductsPage = () => {
   const PhaseIndicator = ({ product }: { product: Product }) => {
     const p1 = !!(product.optimized_title || product.optimized_description || product.optimized_short_description);
     const p2 = !!(product.meta_title || product.meta_description || product.seo_slug || product.faq);
-    const p3 = !!(product.optimized_price || (product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
+    const p3 = !!((product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
     return (
       <div className="flex items-center justify-center gap-0.5">
         {[
