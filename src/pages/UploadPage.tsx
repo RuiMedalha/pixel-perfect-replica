@@ -360,7 +360,7 @@ const UploadPage = () => {
 
       {/* Column mapping cards for Excel files — visible even after confirmation */}
       {files
-        .filter((f) => f.excelHeaders && (f.status === "a_mapear" || f.status === "aguardando"))
+        .filter((f) => f.excelHeaders && (f.status === "a_mapear" || f.status === "aguardando" || f.status === "concluido" || f.status === "erro"))
         .map((file) => {
           const isConfirmed = file.status === "aguardando";
           return (
