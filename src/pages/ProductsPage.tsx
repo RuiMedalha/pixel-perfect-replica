@@ -666,7 +666,7 @@ const ProductsPage = () => {
           <span
             className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
             onDoubleClick={() => startInlineEdit(product.id, "optimized_short_description", product.optimized_short_description ?? "")}
-            title="Duplo-clique para editar"
+            title={product.optimized_short_description || "Duplo-clique para editar"}
           >
             {product.optimized_short_description ?? "—"}
           </span>
