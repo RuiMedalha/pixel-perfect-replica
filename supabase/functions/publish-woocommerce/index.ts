@@ -1098,6 +1098,8 @@ function buildAttributesForParent(
     const v = String(value || "").trim();
     if (!n || !v) return;
     if (isTechnicalAttrName(n)) return;
+    // Skip EAN/barcode-like values (8-14 digits) from variation attributes
+    if (isEanLikeValue(v)) return;
     if (!attrMap.has(n)) attrMap.set(n, new Set());
     attrMap.get(n)!.add(v);
   };
