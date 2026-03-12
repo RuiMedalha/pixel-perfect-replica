@@ -42,7 +42,21 @@ export function ProductDetailModal({ product, onClose }: Props) {
   const { processImages, isProcessing, progress: imgProgress } = useProcessImages();
   const { activeWorkspace } = useWorkspaceContext();
 
-  // Editable fields state
+  // Fetch optimized images from images table
+  const { data: optimizedImages } = useQuery({
+    queryKey: ["product-images", product?.id],
+    enabled: !!product?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("images")
+        .select("*")
+        .eq("product_id", product!.id)
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const [editData, setEditData] = useState<Record<string, any>>({});
   const [hasChanges, setHasChanges] = useState(false);
 
@@ -456,14 +470,32 @@ export function ProductDetailModal({ product, onClose }: Props) {
                     A processar... {imgProgress.done}/{imgProgress.total}
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
                   {product.image_urls.map((url, i) => {
                     const altTexts = Array.isArray((product as any).image_alt_texts) ? (product as any).image_alt_texts : [];
                     const altEntry = altTexts.find((a: any) => a.url === url);
                     const altText = altEntry?.alt_text || "";
+                    const optimized = optimizedImages?.find((img) => img.sort_order === i);
                     return (
                       <div key={i} className="space-y-2">
-                        <img src={url} alt={altText || `Produto ${i + 1}`} className="rounded-lg border object-contain aspect-square w-full bg-background" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Original</p>
+                            <img src={url} alt={altText || `Original ${i + 1}`} className="rounded-lg border object-contain aspect-square w-full bg-background" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                              {optimized?.optimized_url ? "✅ Otimizada" : "— Não processada"}
+                            </p>
+                            {optimized?.optimized_url ? (
+                              <img src={optimized.optimized_url} alt={altText || `Otimizada ${i + 1}`} className="rounded-lg border border-primary/30 object-contain aspect-square w-full bg-background" />
+                            ) : (
+                              <div className="rounded-lg border border-dashed object-contain aspect-square w-full bg-muted/20 flex items-center justify-center">
+                                <ImageIcon className="w-8 h-8 text-muted-foreground/20" />
+                              </div>
+                            )}
+                          </div>
+                        </div>
                         <div>
                           <label className="text-xs text-muted-foreground">Alt Text (SEO)</label>
                           <Input

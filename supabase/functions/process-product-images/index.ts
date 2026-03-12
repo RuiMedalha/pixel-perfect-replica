@@ -242,13 +242,8 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Update product with new image URLs
+        // Keep original image_urls intact — optimized versions are in the images table
         if (processedUrls.length > 0) {
-          await sb
-            .from("products")
-            .update({ image_urls: processedUrls })
-            .eq("id", productId);
-
           // Increment credits
           await sb.rpc("increment_image_credits", {
             _workspace_id: workspaceId,
