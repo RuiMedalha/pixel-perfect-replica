@@ -693,7 +693,7 @@ const ProductsPage = () => {
           <span
             className="truncate block text-xs font-mono text-muted-foreground cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
             onDoubleClick={() => startInlineEdit(product.id, "seo_slug", product.seo_slug ?? "")}
-            title="Duplo-clique para editar"
+            title={product.seo_slug || "Duplo-clique para editar"}
           >
             {product.seo_slug ?? "—"}
           </span>
