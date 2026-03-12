@@ -723,6 +723,18 @@ const ProductsPage = () => {
             </Badge>
           )}
           <EmptyFieldsIndicator product={product} />
+          {imageStatusMap?.[product.id]?.hasOptimized && (
+            <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 gap-0.5" title="Imagem otimizada">
+              <ImageIcon className="w-2.5 h-2.5" />
+              Opt
+            </Badge>
+          )}
+          {imageStatusMap?.[product.id]?.hasLifestyle && (
+            <Badge variant="outline" className="text-[10px] bg-accent text-accent-foreground border-accent/50 gap-0.5" title="Imagem lifestyle">
+              <Camera className="w-2.5 h-2.5" />
+              Life
+            </Badge>
+          )}
         </div>
       </td>
       <td className="p-3 text-center">
