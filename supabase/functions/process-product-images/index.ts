@@ -17,13 +17,17 @@ Deno.serve(async (req) => {
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     const sb = createClient(supabaseUrl, serviceKey);
 
-    const authHeader = req.headers.get("authorization");
+    const authHeader = req.headers.get("Authorization") || req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      throw new Error("Não autenticado");
+    }
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { authorization: authHeader || "" } },
+      global: { headers: { Authorization: authHeader } },
     });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) throw new Error("Não autenticado");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await userClient.auth.getUser(token);
+    if (userError || !user) throw new Error("Não autenticado");
 
     const { productIds, workspaceId, mode = "optimize" } = await req.json();
     // mode: "optimize" = pad+enhance, "lifestyle" = generate contextual image
