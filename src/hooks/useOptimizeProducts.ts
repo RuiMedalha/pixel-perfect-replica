@@ -24,8 +24,8 @@ export const OPTIMIZATION_PHASES = [
   {
     phase: 3 as const,
     label: "Comercial",
-    description: "Preço, upsells e cross-sells",
-    fields: ["price", "upsells", "crosssells"] as OptimizationField[],
+    description: "Upsells e cross-sells",
+    fields: ["upsells", "crosssells"] as OptimizationField[],
   },
 ];
 
