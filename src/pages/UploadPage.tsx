@@ -225,6 +225,8 @@ const UploadPage = () => {
         <TabsContent value="products" className="space-y-4 mt-4">
           <p className="text-sm text-muted-foreground">
             Ficheiros com listas de produtos para importar (Excel com mapeamento de colunas, ou PDF processado com IA).
+            <br />
+            <span className="text-primary font-medium">💡 Pode re-importar o mesmo Excel com colunas diferentes — os dados são acrescentados sem apagar o que já existe (merge inteligente por SKU).</span>
           </p>
         </TabsContent>
         <TabsContent value="update" className="space-y-4 mt-4">
