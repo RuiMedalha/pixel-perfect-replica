@@ -91,6 +91,50 @@ const Dashboard = () => {
         ))}
       </div>
 
+      {/* Credits Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ImageIcon className="w-4 h-4" />
+            Créditos do Workspace
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">🖼️ Imagens</span>
+                <span className="text-xs text-muted-foreground">
+                  {imageCredits ? `${imageCredits.used_this_month} / ${imageCredits.monthly_limit}` : "0 / 100"}
+                </span>
+              </div>
+              <Progress
+                value={imageCredits ? (imageCredits.used_this_month / imageCredits.monthly_limit) * 100 : 0}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Otimização e geração lifestyle com IA
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">🌐 Scraping</span>
+                <span className="text-xs text-muted-foreground">
+                  {scrapingCredits ? `${scrapingCredits.used_this_month} / ${scrapingCredits.monthly_limit}` : "0 / 1000"}
+                </span>
+              </div>
+              <Progress
+                value={scrapingCredits ? (scrapingCredits.used_this_month / scrapingCredits.monthly_limit) * 100 : 0}
+                className="h-2"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enriquecimento web via Firecrawl
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Quality Dashboard */}
       <Card>
         <CardHeader>
