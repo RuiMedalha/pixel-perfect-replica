@@ -648,6 +648,56 @@ async function searchWPMediaByFilename(baseUrl: string, auth: string, filename: 
   }
 }
 
+const SUPABASE_STORAGE_PATTERN = /supabase\.co\/storage\/v1\/object\/public\//;
+
+/**
+ * Upload an image from a URL directly to WP Media Library.
+ * Returns the WP media ID or null on failure.
+ */
+async function uploadImageToWPMedia(
+  sourceUrl: string,
+  baseUrl: string,
+  auth: string,
+  filename?: string
+): Promise<number | null> {
+  try {
+    // Download the image
+    const resp = await fetch(sourceUrl);
+    if (!resp.ok) {
+      console.warn(`Failed to download image from ${sourceUrl}: ${resp.status}`);
+      return null;
+    }
+    const blob = await resp.blob();
+    const contentType = resp.headers.get("content-type") || "image/webp";
+
+    // Derive filename from URL
+    const fname = filename || sourceUrl.split("/").pop() || `image_${Date.now()}.webp`;
+
+    // Upload to WP Media Library
+    const formData = new FormData();
+    formData.append("file", new File([blob], fname, { type: contentType }));
+
+    const uploadResp = await fetch(`${baseUrl}/wp-json/wp/v2/media`, {
+      method: "POST",
+      headers: { Authorization: `Basic ${auth}` },
+      body: formData,
+    });
+
+    if (!uploadResp.ok) {
+      const errText = await uploadResp.text().catch(() => "");
+      console.warn(`Failed to upload image to WP Media: ${uploadResp.status} ${errText.substring(0, 200)}`);
+      return null;
+    }
+
+    const mediaData = await uploadResp.json();
+    console.log(`✅ Uploaded image to WP Media: ID ${mediaData.id}, filename ${fname}`);
+    return mediaData.id;
+  } catch (e) {
+    console.warn(`Exception uploading image to WP Media:`, e);
+    return null;
+  }
+}
+
 async function resolveImageRef(
   ref: string,
   position: number,
