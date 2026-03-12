@@ -1501,11 +1501,11 @@ const ProductsPage = () => {
                                 {item.product.sku ?? "—"}
                               </div>
                             </td>
-                            <td className="p-3 max-w-[180px] truncate font-medium">{item.product.original_title ?? "—"}</td>
-                            <td className="p-3 max-w-[180px] truncate text-primary font-medium">{item.product.optimized_title ?? "—"}</td>
-                            <td className="p-3 max-w-[140px] truncate text-xs">{item.product.category ?? "—"}</td>
-                            <td className="p-3 max-w-[140px] truncate text-xs">{item.product.optimized_short_description ?? "—"}</td>
-                            <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground">{item.product.seo_slug ?? "—"}</td>
+                            <td className="p-3 max-w-[180px] truncate font-medium" title={item.product.original_title ?? undefined}>{item.product.original_title ?? "—"}</td>
+                            <td className="p-3 max-w-[180px] truncate text-primary font-medium" title={item.product.optimized_title ?? undefined}>{item.product.optimized_title ?? "—"}</td>
+                            <td className="p-3 max-w-[140px] truncate text-xs" title={item.product.category ?? undefined}>{item.product.category ?? "—"}</td>
+                            <td className="p-3 max-w-[140px] truncate text-xs" title={item.product.optimized_short_description ?? undefined}>{item.product.optimized_short_description ?? "—"}</td>
+                            <td className="p-3 max-w-[120px] truncate text-xs font-mono text-muted-foreground" title={item.product.seo_slug ?? undefined}>{item.product.seo_slug ?? "—"}</td>
                             <td className="p-3">
                               <div className="flex items-center gap-1.5">
                                 <Badge variant="secondary" className="text-[10px]">Variável</Badge>
