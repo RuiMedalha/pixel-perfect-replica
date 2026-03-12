@@ -1344,6 +1344,27 @@ const ProductsPage = () => {
                     <th className="p-3 text-right font-medium text-muted-foreground">Ações</th>
                   </tr>
                 </thead>
+                {/* Select all pages banner */}
+                {selected.size >= filtered.length && selected.size > 0 && totalCount > filtered.length && !allPagesSelected && (
+                  <caption className="caption-top">
+                    <div className="bg-primary/10 text-primary text-sm py-2 px-4 text-center rounded-md mb-1">
+                      {selected.size} produtos desta página selecionados.{" "}
+                      <button className="underline font-semibold hover:text-primary/80" onClick={selectAllPages}>
+                        Selecionar todos os {totalCount} produtos{statusFilter !== "all" ? ` (${statusFilter})` : ""}
+                      </button>
+                    </div>
+                  </caption>
+                )}
+                {allPagesSelected && (
+                  <caption className="caption-top">
+                    <div className="bg-success/10 text-success text-sm py-2 px-4 text-center rounded-md mb-1">
+                      ✓ Todos os {selected.size} produtos selecionados.{" "}
+                      <button className="underline font-semibold hover:text-success/80" onClick={() => { setSelected(new Set()); setAllPagesSelected(false); }}>
+                        Limpar seleção
+                      </button>
+                    </div>
+                  </caption>
+                )}
                 <tbody>
                   {viewMode === "list" ? (
                     paginatedFiltered.map((product) => (
