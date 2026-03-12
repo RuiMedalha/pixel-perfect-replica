@@ -1365,23 +1365,23 @@ async function publishSingleProduct(
   const wooProduct = await buildBasePayload(enrichedProduct, supabase, baseUrl, auth, has, markupPercent, discountPercent);
 
   if (has("upsells")) {
-    const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.upsell_skus || []);
+    const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, enrichedProduct.upsell_skus || []);
     if (upsellIds.length > 0) wooProduct.upsell_ids = upsellIds;
   }
   if (has("crosssells")) {
-    const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.crosssell_skus || []);
+    const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, enrichedProduct.crosssell_skus || []);
     if (crosssellIds.length > 0) wooProduct.cross_sell_ids = crosssellIds;
   }
 
   if (Object.keys(wooProduct).length === 0) {
-    return { id: product.id, status: "skipped" };
+    return { id: enrichedProduct.id, status: "skipped" };
   }
 
   wooProduct.type = "simple";
 
-  let existingWooId = product.woocommerce_id;
-  if (!existingWooId && product.sku) {
-    existingWooId = await findWooProductBySku(baseUrl, auth, product.sku);
+  let existingWooId = enrichedProduct.woocommerce_id;
+  if (!existingWooId && enrichedProduct.sku) {
+    existingWooId = await findWooProductBySku(baseUrl, auth, enrichedProduct.sku);
   }
 
   let action: "created" | "updated" = existingWooId ? "updated" : "created";
@@ -1392,13 +1392,12 @@ async function publishSingleProduct(
       : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
   } catch (err) {
     if (err instanceof WooNotFoundError && existingWooId) {
-      // Stale woocommerce_id → clear and create fresh
-      console.warn(`Product ${product.id} WC#${existingWooId} not found (deleted?), creating new.`);
-      await supabase.from("products").update({ woocommerce_id: null }).eq("id", product.id);
+      console.warn(`Product ${enrichedProduct.id} WC#${existingWooId} not found (deleted?), creating new.`);
+      await supabase.from("products").update({ woocommerce_id: null }).eq("id", enrichedProduct.id);
       wooData = await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
       action = "created";
     } else if (err instanceof WooSkuConflictError) {
-      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${err.resourceId}`);
+      console.log(`SKU conflict for product ${enrichedProduct.id}, retrying PUT with resource_id ${err.resourceId}`);
       wooData = await wooFetch(baseUrl, auth, `/products/${err.resourceId}`, "PUT", wooProduct);
       action = "updated";
     } else {
@@ -1409,9 +1408,9 @@ async function publishSingleProduct(
   await supabase
     .from("products")
     .update({ woocommerce_id: wooData.id, status: "published" as any })
-    .eq("id", product.id);
+    .eq("id", enrichedProduct.id);
 
-  return { id: product.id, status: action, woocommerce_id: wooData.id };
+  return { id: enrichedProduct.id, status: action, woocommerce_id: wooData.id };
 }
 
 async function publishVariableProduct(
