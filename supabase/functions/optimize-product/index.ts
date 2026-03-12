@@ -1135,7 +1135,7 @@ REGRAS GLOBAIS:
         if (optimized.upsell_skus) updateData.upsell_skus = optimized.upsell_skus;
         if (optimized.crosssell_skus) updateData.crosssell_skus = optimized.crosssell_skus;
         if (optimized.image_alt_texts) updateData.image_alt_texts = optimized.image_alt_texts;
-        if (optimized.suggested_category) updateData.category = optimized.suggested_category;
+        if (optimized.suggested_category) updateData.suggested_category = optimized.suggested_category;
         if (optimized.focus_keywords && Array.isArray(optimized.focus_keywords) && optimized.focus_keywords.length > 0) {
           updateData.focus_keyword = optimized.focus_keywords.slice(0, 5);
         }
