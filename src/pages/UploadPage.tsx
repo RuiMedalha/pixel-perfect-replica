@@ -366,24 +366,41 @@ const UploadPage = () => {
           return (
             <div key={file.id} className="space-y-4">
               {isConfirmed ? (
-                <Card className="border-green-500/30 bg-green-500/5">
+                <Card className={cn(
+                  "border-primary/30",
+                  file.status === "concluido" ? "border-green-500/30 bg-green-500/5" : 
+                  file.status === "erro" ? "border-destructive/30 bg-destructive/5" : 
+                  "bg-primary/5"
+                )}>
                   <CardHeader className="pb-2 flex flex-row items-center justify-between">
                     <CardTitle className="text-sm flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                      Mapeamento Confirmado — <span className="font-normal text-muted-foreground">{file.name}</span>
-                      <Badge variant="secondary" className="text-[10px]">
+                      {file.status === "concluido" ? (
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      ) : file.status === "erro" ? (
+                        <AlertCircle className="w-4 h-4 text-destructive" />
+                      ) : (
+                        <CheckCircle className="w-4 h-4 text-primary" />
+                      )}
+                      <span className="truncate">
+                        {file.status === "concluido" ? "Processado" : file.status === "erro" ? "Erro" : "Mapeamento Confirmado"}
+                        {" — "}
+                      </span>
+                      <span className="font-normal text-muted-foreground truncate">{file.name}</span>
+                      <Badge variant="secondary" className="text-[10px] shrink-0">
                         {Object.keys(file.columnMapping || {}).length} campos mapeados
                       </Badge>
                     </CardTitle>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1"
-                      onClick={() => reopenMapping(file.id)}
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Editar Mapeamento
-                    </Button>
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => reopenMapping(file.id)}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Editar Mapeamento
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="flex flex-wrap gap-1.5">
