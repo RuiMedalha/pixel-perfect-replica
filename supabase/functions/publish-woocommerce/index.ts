@@ -1425,18 +1425,28 @@ async function publishVariableProduct(
   discountPercent: number
 ): Promise<WooResult> {
   // Fetch children
-  const { data: children } = await supabase
+  const { data: rawChildren } = await supabase
     .from("products")
     .select("*")
     .eq("parent_product_id", parent.id);
 
-  console.log(`[publish-variable] Parent ${parent.id} has ${(children || []).length} children, image_urls=${JSON.stringify(parent.image_urls)}, title=${parent.optimized_title}`);
+  // Enrich children images from images table
+  const children: any[] = [];
+  if (rawChildren && rawChildren.length > 0 && has("images")) {
+    for (const child of rawChildren) {
+      children.push(await enrichProductImages(child, supabase));
+    }
+  } else {
+    children.push(...(rawChildren || []));
+  }
+
+  console.log(`[publish-variable] Parent ${parent.id} has ${children.length} children, image_urls=${JSON.stringify(parent.image_urls)}, title=${parent.optimized_title}`);
 
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
 
   // If the parent has no images, aggregate unique images from children for the gallery
-  if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children && children.length > 0) {
+  if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children.length > 0) {
     const childImagePromises: Array<Promise<Record<string, unknown> | null>> = [];
     const seenRefs = new Set<string>();
     for (const child of children) {
