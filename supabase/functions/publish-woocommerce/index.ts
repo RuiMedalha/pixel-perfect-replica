@@ -1117,12 +1117,14 @@ function buildAttributesForParent(
     }
   }
 
-  return Array.from(attrMap.entries()).map(([name, values]) => ({
-    name,
-    options: Array.from(values),
-    variation: true,
-    visible: true,
-  }));
+  return Array.from(attrMap.entries())
+    .filter(([_, values]) => values.size > 0) // Remove attrs where all values were filtered (e.g. all EANs)
+    .map(([name, values]) => ({
+      name,
+      options: Array.from(values),
+      variation: true,
+      visible: true,
+    }));
 }
 
 function buildStaticAttributesForParent(
