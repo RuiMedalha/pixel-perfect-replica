@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle, ImageIcon } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle, ImageIcon, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useAllProductIds, useUpdateProductStatus, useProductFilterOptions, type Product, type ProductFilters } from "@/hooks/useProducts";
