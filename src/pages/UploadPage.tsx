@@ -387,7 +387,7 @@ const UploadPage = () => {
                   </CardHeader>
                   <CardContent className="pt-0">
                     <div className="flex flex-wrap gap-1.5">
-                      {(fields || allFields).filter((f) => file.columnMapping?.[f.key]).map((f) => (
+                      {allFields.filter((f) => file.columnMapping?.[f.key]).map((f) => (
                         <Badge key={f.key} variant="outline" className="text-[10px] font-normal gap-1">
                           {f.label} <span className="text-muted-foreground">← {file.columnMapping?.[f.key]}</span>
                         </Badge>
