@@ -595,6 +595,43 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
   return resolvedIds;
 }
 
+// ── Enrich product images from `images` table ──
+// Replaces original URLs with optimized versions and adds any extra processed images
+async function enrichProductImages(product: any, supabase: any): Promise<any> {
+  const { data: imageRows } = await supabase
+    .from("images")
+    .select("original_url, optimized_url, sort_order")
+    .eq("product_id", product.id)
+    .eq("status", "done")
+    .not("optimized_url", "is", null)
+    .order("sort_order", { ascending: true });
+
+  if (!imageRows || imageRows.length === 0) return product;
+
+  const urls: string[] = Array.isArray(product.image_urls) ? [...product.image_urls] : [];
+
+  // Map: original -> optimized (for substitution)
+  const optimizedMap = new Map<string, string>();
+  for (const row of imageRows) {
+    if (row.original_url && row.optimized_url) {
+      optimizedMap.set(row.original_url, row.optimized_url);
+    }
+  }
+
+  // Replace originals with optimized versions
+  const enriched = urls.map((url: string) => optimizedMap.get(url) || url);
+
+  // Add any optimized URLs not already in the list
+  for (const row of imageRows) {
+    if (row.optimized_url && !enriched.includes(row.optimized_url)) {
+      enriched.push(row.optimized_url);
+    }
+  }
+
+  console.log(`[enrichProductImages] Product ${product.id}: ${urls.length} original → ${enriched.length} enriched (${imageRows.length} optimized rows)`);
+  return { ...product, image_urls: enriched };
+}
+
 // ── Image reference resolution ──
 const IMAGE_EXTENSIONS = /\.(webp|jpeg|jpg|png|gif|svg|bmp|avif|tiff|tif)$/i;
 const imageCache = new Map<string, Record<string, unknown>>();
