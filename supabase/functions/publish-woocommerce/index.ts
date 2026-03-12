@@ -348,6 +348,12 @@ class WooSkuConflictError extends Error {
   }
 }
 
+class WooNotFoundError extends Error {
+  constructor(endpoint: string) {
+    super(`WooCommerce 404: resource not found at ${endpoint}`);
+  }
+}
+
 async function wooFetch(baseUrl: string, auth: string, endpoint: string, method: string, body?: Record<string, unknown>) {
   const resp = await fetch(`${baseUrl}/wp-json/wc/v3${endpoint}`, {
     method,
@@ -356,6 +362,10 @@ async function wooFetch(baseUrl: string, auth: string, endpoint: string, method:
   });
   if (!resp.ok) {
     const errBody = await resp.text();
+    // Detect 404 (stale woocommerce_id)
+    if (resp.status === 404) {
+      throw new WooNotFoundError(endpoint);
+    }
     // Detect SKU conflict and extract existing resource_id for retry
     try {
       const parsed = JSON.parse(errBody);
@@ -1263,13 +1273,19 @@ async function publishSingleProduct(
     wooData = existingWooId
       ? await wooFetch(baseUrl, auth, `/products/${existingWooId}`, "PUT", wooProduct)
       : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
-  } catch (skuErr) {
-    if (skuErr instanceof WooSkuConflictError) {
-      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${skuErr.resourceId}`);
-      wooData = await wooFetch(baseUrl, auth, `/products/${skuErr.resourceId}`, "PUT", wooProduct);
+  } catch (err) {
+    if (err instanceof WooNotFoundError && existingWooId) {
+      // Stale woocommerce_id → clear and create fresh
+      console.warn(`Product ${product.id} WC#${existingWooId} not found (deleted?), creating new.`);
+      await supabase.from("products").update({ woocommerce_id: null }).eq("id", product.id);
+      wooData = await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
+      action = "created";
+    } else if (err instanceof WooSkuConflictError) {
+      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${err.resourceId}`);
+      wooData = await wooFetch(baseUrl, auth, `/products/${err.resourceId}`, "PUT", wooProduct);
       action = "updated";
     } else {
-      throw skuErr;
+      throw err;
     }
   }
 
@@ -1368,7 +1384,7 @@ async function publishVariableProduct(
     existingParentWooId = await findWooProductBySku(baseUrl, auth, parent.sku);
   }
 
-  const parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
+  let parentAction: "created" | "updated" = existingParentWooId ? "updated" : "created";
 
   // Ao atualizar, preserva atributos já existentes no WooCommerce (ex.: Marca/Modelo/EAN) para não os "apagar".
   if (existingParentWooId && Array.isArray((parentPayload as any).attributes)) {
@@ -1378,15 +1394,35 @@ async function publishVariableProduct(
         (parentPayload as any).attributes = mergeWooAttributes(existingWoo.attributes, (parentPayload as any).attributes);
       }
     } catch (e) {
-      console.warn("Não foi possível ler atributos existentes do WooCommerce; a continuar.", e);
+      if (e instanceof WooNotFoundError) {
+        // Stale woocommerce_id → clear and create fresh
+        console.warn(`Variable parent ${parent.id} WC#${existingParentWooId} not found, will create new.`);
+        await supabase.from("products").update({ woocommerce_id: null }).eq("id", parent.id);
+        existingParentWooId = null;
+        parentAction = "created";
+      } else {
+        console.warn("Não foi possível ler atributos existentes do WooCommerce; a continuar.", e);
+      }
     }
   }
 
   console.log(`[publish-variable] Sending ${parentAction} to WC#${existingParentWooId || 'new'}, final payload: ${JSON.stringify(parentPayload).substring(0, 1500)}`);
 
-  const parentWooData = existingParentWooId
-    ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
-    : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+  let parentWooData;
+  try {
+    parentWooData = existingParentWooId
+      ? await wooFetch(baseUrl, auth, `/products/${existingParentWooId}`, "PUT", parentPayload)
+      : await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+  } catch (err) {
+    if (err instanceof WooNotFoundError && existingParentWooId) {
+      console.warn(`Variable parent ${parent.id} WC#${existingParentWooId} not found on PUT, creating new.`);
+      await supabase.from("products").update({ woocommerce_id: null }).eq("id", parent.id);
+      parentWooData = await wooFetch(baseUrl, auth, `/products`, "POST", parentPayload);
+      parentAction = "created";
+    } else {
+      throw err;
+    }
+  }
 
   const parentWooId = parentWooData.id;
   console.log(`[publish-variable] WC response: id=${parentWooId}, name=${parentWooData.name}, images=${parentWooData.images?.length || 0}, attrs=${parentWooData.attributes?.length || 0}`);
@@ -1441,8 +1477,14 @@ async function publishVariation(
       varWooData = existingVarWooId
         ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
         : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
-    } catch (skuErr) {
-      if (skuErr instanceof WooSkuConflictError) {
+    } catch (err) {
+      if (err instanceof WooNotFoundError && existingVarWooId) {
+        // Stale variation woocommerce_id → clear and create fresh
+        console.warn(`Variation ${variation.id} WC#${existingVarWooId} not found, creating new.`);
+        await supabase.from("products").update({ woocommerce_id: null }).eq("id", variation.id);
+        varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+        action = "created";
+      } else if (err instanceof WooSkuConflictError) {
         console.log(`SKU conflict for standalone variation ${variation.id}, handling properly`);
         varWooData = await handleVariationSkuConflict(
           baseUrl,
@@ -1451,12 +1493,12 @@ async function publishVariation(
           variation.id,
           variation.sku || "",
           variationPayload,
-          skuErr,
+          err,
           supabase
         );
         action = "updated";
       } else {
-        throw skuErr;
+        throw err;
       }
     }
 
