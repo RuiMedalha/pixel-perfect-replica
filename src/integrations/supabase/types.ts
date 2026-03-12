@@ -1010,6 +1010,7 @@ export type Database = {
           sku: string
           source_file: string
           status: Database["public"]["Enums"]["product_status"]
+          suggested_category: string
           supplier_ref: string
           tags: string[]
           technical_specs: string
