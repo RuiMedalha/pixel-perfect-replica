@@ -595,6 +595,43 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
   return resolvedIds;
 }
 
+// ── Enrich product images from `images` table ──
+// Replaces original URLs with optimized versions and adds any extra processed images
+async function enrichProductImages(product: any, supabase: any): Promise<any> {
+  const { data: imageRows } = await supabase
+    .from("images")
+    .select("original_url, optimized_url, sort_order")
+    .eq("product_id", product.id)
+    .eq("status", "done")
+    .not("optimized_url", "is", null)
+    .order("sort_order", { ascending: true });
+
+  if (!imageRows || imageRows.length === 0) return product;
+
+  const urls: string[] = Array.isArray(product.image_urls) ? [...product.image_urls] : [];
+
+  // Map: original -> optimized (for substitution)
+  const optimizedMap = new Map<string, string>();
+  for (const row of imageRows) {
+    if (row.original_url && row.optimized_url) {
+      optimizedMap.set(row.original_url, row.optimized_url);
+    }
+  }
+
+  // Replace originals with optimized versions
+  const enriched = urls.map((url: string) => optimizedMap.get(url) || url);
+
+  // Add any optimized URLs not already in the list
+  for (const row of imageRows) {
+    if (row.optimized_url && !enriched.includes(row.optimized_url)) {
+      enriched.push(row.optimized_url);
+    }
+  }
+
+  console.log(`[enrichProductImages] Product ${product.id}: ${urls.length} original → ${enriched.length} enriched (${imageRows.length} optimized rows)`);
+  return { ...product, image_urls: enriched };
+}
+
 // ── Image reference resolution ──
 const IMAGE_EXTENSIONS = /\.(webp|jpeg|jpg|png|gif|svg|bmp|avif|tiff|tif)$/i;
 const imageCache = new Map<string, Record<string, unknown>>();
@@ -1311,37 +1348,40 @@ async function publishSingleProduct(
   markupPercent: number,
   discountPercent: number
 ): Promise<WooResult> {
+  // Enrich images from images table (optimized/lifestyle)
+  const enrichedProduct = has("images") ? await enrichProductImages(product, supabase) : product;
+
   // Handle variable products
-  if (product.product_type === "variable") {
-    return await publishVariableProduct(product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
+  if (enrichedProduct.product_type === "variable") {
+    return await publishVariableProduct(enrichedProduct, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
   }
 
   // Handle standalone variations
-  if (product.parent_product_id) {
-    return await publishVariation(product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
+  if (enrichedProduct.parent_product_id) {
+    return await publishVariation(enrichedProduct, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
   }
 
   // Simple product
-  const wooProduct = await buildBasePayload(product, supabase, baseUrl, auth, has, markupPercent, discountPercent);
+  const wooProduct = await buildBasePayload(enrichedProduct, supabase, baseUrl, auth, has, markupPercent, discountPercent);
 
   if (has("upsells")) {
-    const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.upsell_skus || []);
+    const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, enrichedProduct.upsell_skus || []);
     if (upsellIds.length > 0) wooProduct.upsell_ids = upsellIds;
   }
   if (has("crosssells")) {
-    const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.crosssell_skus || []);
+    const crosssellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, enrichedProduct.crosssell_skus || []);
     if (crosssellIds.length > 0) wooProduct.cross_sell_ids = crosssellIds;
   }
 
   if (Object.keys(wooProduct).length === 0) {
-    return { id: product.id, status: "skipped" };
+    return { id: enrichedProduct.id, status: "skipped" };
   }
 
   wooProduct.type = "simple";
 
-  let existingWooId = product.woocommerce_id;
-  if (!existingWooId && product.sku) {
-    existingWooId = await findWooProductBySku(baseUrl, auth, product.sku);
+  let existingWooId = enrichedProduct.woocommerce_id;
+  if (!existingWooId && enrichedProduct.sku) {
+    existingWooId = await findWooProductBySku(baseUrl, auth, enrichedProduct.sku);
   }
 
   let action: "created" | "updated" = existingWooId ? "updated" : "created";
@@ -1352,13 +1392,12 @@ async function publishSingleProduct(
       : await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
   } catch (err) {
     if (err instanceof WooNotFoundError && existingWooId) {
-      // Stale woocommerce_id → clear and create fresh
-      console.warn(`Product ${product.id} WC#${existingWooId} not found (deleted?), creating new.`);
-      await supabase.from("products").update({ woocommerce_id: null }).eq("id", product.id);
+      console.warn(`Product ${enrichedProduct.id} WC#${existingWooId} not found (deleted?), creating new.`);
+      await supabase.from("products").update({ woocommerce_id: null }).eq("id", enrichedProduct.id);
       wooData = await wooFetch(baseUrl, auth, `/products`, "POST", wooProduct);
       action = "created";
     } else if (err instanceof WooSkuConflictError) {
-      console.log(`SKU conflict for product ${product.id}, retrying PUT with resource_id ${err.resourceId}`);
+      console.log(`SKU conflict for product ${enrichedProduct.id}, retrying PUT with resource_id ${err.resourceId}`);
       wooData = await wooFetch(baseUrl, auth, `/products/${err.resourceId}`, "PUT", wooProduct);
       action = "updated";
     } else {
@@ -1369,9 +1408,9 @@ async function publishSingleProduct(
   await supabase
     .from("products")
     .update({ woocommerce_id: wooData.id, status: "published" as any })
-    .eq("id", product.id);
+    .eq("id", enrichedProduct.id);
 
-  return { id: product.id, status: action, woocommerce_id: wooData.id };
+  return { id: enrichedProduct.id, status: action, woocommerce_id: wooData.id };
 }
 
 async function publishVariableProduct(
@@ -1385,18 +1424,28 @@ async function publishVariableProduct(
   discountPercent: number
 ): Promise<WooResult> {
   // Fetch children
-  const { data: children } = await supabase
+  const { data: rawChildren } = await supabase
     .from("products")
     .select("*")
     .eq("parent_product_id", parent.id);
 
-  console.log(`[publish-variable] Parent ${parent.id} has ${(children || []).length} children, image_urls=${JSON.stringify(parent.image_urls)}, title=${parent.optimized_title}`);
+  // Enrich children images from images table
+  const children: any[] = [];
+  if (rawChildren && rawChildren.length > 0 && has("images")) {
+    for (const child of rawChildren) {
+      children.push(await enrichProductImages(child, supabase));
+    }
+  } else {
+    children.push(...(rawChildren || []));
+  }
+
+  console.log(`[publish-variable] Parent ${parent.id} has ${children.length} children, image_urls=${JSON.stringify(parent.image_urls)}, title=${parent.optimized_title}`);
 
   const parentPayload = await buildBasePayload(parent, supabase, baseUrl, auth, has, markupPercent, discountPercent);
   parentPayload.type = "variable";
 
   // If the parent has no images, aggregate unique images from children for the gallery
-  if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children && children.length > 0) {
+  if (has("images") && (!parent.image_urls || parent.image_urls.length === 0) && children.length > 0) {
     const childImagePromises: Array<Promise<Record<string, unknown> | null>> = [];
     const seenRefs = new Set<string>();
     for (const child of children) {
