@@ -369,12 +369,14 @@ export function useUploadCatalog() {
         : [f];
 
       for (const partFile of filesToProcess) {
-        // Check for duplicates
+        // Check for duplicates — only block PDFs & knowledge; for Excel products/update allow re-import (merge)
         const hash = await computeFileHash(partFile);
-        const isDuplicate = await checkDuplicate(partFile.name, hash);
-        if (isDuplicate) {
-          toast.warning(`"${partFile.name}" já foi carregado anteriormente. A ignorar.`);
-          continue;
+        if (uploadType === "knowledge" || isPdf) {
+          const isDuplicate = await checkDuplicate(partFile.name, hash);
+          if (isDuplicate) {
+            toast.warning(`"${partFile.name}" já foi carregado anteriormente. A ignorar.`);
+            continue;
+          }
         }
 
         const base: UploadedFile = {
