@@ -888,6 +888,9 @@ const TECHNICAL_ATTR_NAMES = new Set([
 
 const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
 
+/** Detects if a value looks like an EAN/barcode (8-14 digits) */
+const isEanLikeValue = (val: string): boolean => /^\d{8,14}$/.test(String(val || "").trim());
+
 // ── Smart attribute name inference ──
 const SIZE_PATTERN = /\b(\d+[\.,]?\d*)\s*(cm|mm|m|ml|cl|l|lt|kg|g|oz|"|''|pol)\b/i;
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
