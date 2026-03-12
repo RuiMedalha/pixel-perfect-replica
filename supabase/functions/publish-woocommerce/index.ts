@@ -1477,8 +1477,14 @@ async function publishVariation(
       varWooData = existingVarWooId
         ? await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${existingVarWooId}`, "PUT", variationPayload)
         : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
-    } catch (skuErr) {
-      if (skuErr instanceof WooSkuConflictError) {
+    } catch (err) {
+      if (err instanceof WooNotFoundError && existingVarWooId) {
+        // Stale variation woocommerce_id → clear and create fresh
+        console.warn(`Variation ${variation.id} WC#${existingVarWooId} not found, creating new.`);
+        await supabase.from("products").update({ woocommerce_id: null }).eq("id", variation.id);
+        varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
+        action = "created";
+      } else if (err instanceof WooSkuConflictError) {
         console.log(`SKU conflict for standalone variation ${variation.id}, handling properly`);
         varWooData = await handleVariationSkuConflict(
           baseUrl,
@@ -1487,12 +1493,12 @@ async function publishVariation(
           variation.id,
           variation.sku || "",
           variationPayload,
-          skuErr,
+          err,
           supabase
         );
         action = "updated";
       } else {
-        throw skuErr;
+        throw err;
       }
     }
 
