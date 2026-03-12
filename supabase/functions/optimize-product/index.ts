@@ -966,16 +966,21 @@ IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variaçõ
           // Use semantic matching to find best candidate categories
           const semanticMatches = findSemanticCategory(
             product.original_title || "",
-            product.category || "",
+            product.category || product.original_description || "",
             existingCategories
           );
+          // Prefer hierarchical categories (with ">") for better context
+          const hierarchicalCats = existingCategories.filter(c => c.includes(">"));
           const catList = existingCategories.length > 0
-            ? `\nCATEGORIAS DISPONÍVEIS (usa APENAS uma destas, NÃO inventes novas): ${existingCategories.join(", ")}`
+            ? `\nCATEGORIAS DISPONÍVEIS (usa APENAS uma destas, NÃO inventes novas):\n${(hierarchicalCats.length > 0 ? hierarchicalCats : existingCategories).join("\n")}`
             : "";
           const semanticHint = semanticMatches.length > 0
             ? `\nCATEGORIAS MAIS RELEVANTES (por análise semântica): ${semanticMatches.join(", ")}`
             : "";
-          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE. NÃO cries categorias novas — usa APENAS as categorias da lista abaixo. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se nenhuma categoria existente se aplicar, devolve a string vazia.")}${catList}${semanticHint}`);
+          const noCatHint = !product.category 
+            ? "\nATENÇÃO: Este produto NÃO tem categoria atribuída. Analisa o título, descrição e especificações técnicas para sugerir a categoria mais adequada da lista."
+            : "";
+          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE. NÃO cries categorias novas — usa APENAS as categorias da lista abaixo. Prefere categorias com subcategorias (formato 'Pai > Filho') quando disponíveis. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se nenhuma categoria existente se aplicar, devolve a string vazia.")}${catList}${semanticHint}${noCatHint}`);
         }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
