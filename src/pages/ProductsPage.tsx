@@ -2002,7 +2002,7 @@ const ProductsPage = () => {
             open={showPublishModal}
             onClose={() => setShowPublishModal(false)}
             productCount={allPublishIds.length}
-            variableParentCount={variableParentIds.length}
+            variableParentCount={allFamilyParentIds.length}
             autoIncludedVariationsCount={variationCount}
             isPending={isCreatingPublish}
             products={products.filter(p => allPublishIds.includes(p.id))}
