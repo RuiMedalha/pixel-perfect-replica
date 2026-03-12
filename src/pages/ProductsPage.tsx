@@ -162,7 +162,7 @@ const ProductsPage = () => {
   const getProductPhases = useCallback((p: Product) => {
     const p1 = !!(p.optimized_title || p.optimized_description || p.optimized_short_description);
     const p2 = !!(p.meta_title || p.meta_description || p.seo_slug || (p.faq && (Array.isArray(p.faq) ? (p.faq as any[]).length > 0 : true)));
-    const p3 = !!(p.optimized_price || p.upsell_skus || p.crosssell_skus);
+    const p3 = !!((p.upsell_skus && (p.upsell_skus as any[]).length > 0) || (p.crosssell_skus && (p.crosssell_skus as any[]).length > 0));
     return { p1, p2, p3 };
   }, []);
 
@@ -480,7 +480,7 @@ const ProductsPage = () => {
   const PhaseIndicator = ({ product }: { product: Product }) => {
     const p1 = !!(product.optimized_title || product.optimized_description || product.optimized_short_description);
     const p2 = !!(product.meta_title || product.meta_description || product.seo_slug || product.faq);
-    const p3 = !!(product.optimized_price || (product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
+    const p3 = !!((product.upsell_skus && (product.upsell_skus as any[]).length > 0) || (product.crosssell_skus && (product.crosssell_skus as any[]).length > 0));
     return (
       <div className="flex items-center justify-center gap-0.5">
         {[
@@ -512,7 +512,7 @@ const ProductsPage = () => {
     { key: "meta_description", label: "Meta Desc" },
     { key: "seo_slug", label: "Slug" },
     { key: "tags", label: "Tags" },
-    { key: "optimized_price", label: "Preço" },
+    
     { key: "image_urls", label: "Imagens" },
     { key: "focus_keyword", label: "Keyword" },
   ];

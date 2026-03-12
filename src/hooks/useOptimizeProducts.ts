@@ -5,7 +5,7 @@ import { toast } from "sonner";
 export type OptimizationField = 
   | "title" | "description" | "short_description"
   | "meta_title" | "meta_description" | "seo_slug"
-  | "tags" | "price" | "faq" | "upsells" | "crosssells"
+  | "tags" | "faq" | "upsells" | "crosssells"
   | "image_alt" | "category";
 
 export const OPTIMIZATION_PHASES = [
@@ -24,8 +24,8 @@ export const OPTIMIZATION_PHASES = [
   {
     phase: 3 as const,
     label: "Comercial",
-    description: "Preço, upsells e cross-sells",
-    fields: ["price", "upsells", "crosssells"] as OptimizationField[],
+    description: "Upsells e cross-sells",
+    fields: ["upsells", "crosssells"] as OptimizationField[],
   },
 ];
 
@@ -40,7 +40,7 @@ export const OPTIMIZATION_FIELDS: { key: OptimizationField; label: string; phase
   { key: "seo_slug", label: "SEO Slug", phase: 2 },
   { key: "faq", label: "FAQ", phase: 2 },
   { key: "image_alt", label: "Alt Text Imagens", phase: 2 },
-  { key: "price", label: "Preço", phase: 3 },
+  
   { key: "upsells", label: "Upsells", phase: 3 },
   { key: "crosssells", label: "Cross-sells", phase: 3 },
 ];
