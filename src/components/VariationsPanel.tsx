@@ -167,7 +167,9 @@ export function VariationsPanel({ product, allProducts, updateProduct }: Props) 
         const option = inferVariationOption(parentTitle, childTitle);
         if (option) {
           const name = inferAttrNameFromOption(option);
-          result.push({ childId: child.id, attrName: name, attrValue: option, source: "inferred" });
+          // If source is Excel (has source_file and no web enrichment), treat as "db" (trusted)
+          const isFromExcel = !!child.source_file && !child.supplier_ref;
+          result.push({ childId: child.id, attrName: name, attrValue: option, source: isFromExcel ? "db" : "inferred" });
         }
       }
     }
