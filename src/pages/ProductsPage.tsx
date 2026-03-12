@@ -889,6 +889,26 @@ const ProductsPage = () => {
         </Card>
       )}
 
+      {/* Image Processing Progress Bar */}
+      {imgProgress && imgProgress.done < imgProgress.total && (
+        <Card className="border-purple-500/30 bg-purple-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+                <span className="text-sm font-medium">
+                  A processar imagens: {imgProgress.currentProduct}
+                </span>
+              </div>
+              <span className="text-sm font-mono text-muted-foreground">
+                {imgProgress.done}/{imgProgress.total}
+              </span>
+            </div>
+            <Progress value={(imgProgress.done / imgProgress.total) * 100} className="h-2" />
+          </CardContent>
+        </Card>
+      )}
+
       {activeJob && activeJob.status !== "completed" && activeJob.status !== "cancelled" && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4">
