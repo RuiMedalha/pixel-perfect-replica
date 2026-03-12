@@ -598,13 +598,27 @@ const ProductsPage = () => {
             </Button>
           </div>
         ) : (
-          <span
-            className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
-            onDoubleClick={() => startInlineEdit(product.id, "category", product.category ?? "")}
-            title="Duplo-clique para editar"
-          >
-            {product.category ?? "—"}
-          </span>
+          <>
+            <span
+              className="truncate block text-xs cursor-text hover:bg-primary/5 rounded px-1 -mx-1"
+              onDoubleClick={() => startInlineEdit(product.id, "category", product.category ?? "")}
+              title="Duplo-clique para editar"
+            >
+              {product.category ?? "—"}
+            </span>
+            {(product as any).suggested_category && (product as any).suggested_category !== product.category && (
+              <span
+                className="truncate block text-[10px] text-muted-foreground italic mt-0.5 cursor-pointer hover:text-primary"
+                title={`Proposta IA: ${(product as any).suggested_category} — Clique para aceitar`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  updateProduct.mutate({ id: product.id, updates: { category: (product as any).suggested_category, suggested_category: null } });
+                }}
+              >
+                💡 {(product as any).suggested_category}
+              </span>
+            )}
+          </>
         )}
       </td>
       <td className="p-3 max-w-[140px]" onClick={(e) => e.stopPropagation()}>

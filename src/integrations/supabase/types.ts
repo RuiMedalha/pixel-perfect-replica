@@ -527,6 +527,7 @@ export type Database = {
           sku: string | null
           source_file: string | null
           status: Database["public"]["Enums"]["product_status"]
+          suggested_category: string | null
           supplier_ref: string | null
           tags: string[] | null
           technical_specs: string | null
@@ -566,6 +567,7 @@ export type Database = {
           sku?: string | null
           source_file?: string | null
           status?: Database["public"]["Enums"]["product_status"]
+          suggested_category?: string | null
           supplier_ref?: string | null
           tags?: string[] | null
           technical_specs?: string | null
@@ -605,6 +607,7 @@ export type Database = {
           sku?: string | null
           source_file?: string | null
           status?: Database["public"]["Enums"]["product_status"]
+          suggested_category?: string | null
           supplier_ref?: string | null
           tags?: string[] | null
           technical_specs?: string | null
@@ -1007,6 +1010,7 @@ export type Database = {
           sku: string
           source_file: string
           status: Database["public"]["Enums"]["product_status"]
+          suggested_category: string
           supplier_ref: string
           tags: string[]
           technical_specs: string

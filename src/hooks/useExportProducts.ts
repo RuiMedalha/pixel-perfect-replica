@@ -18,6 +18,7 @@ const EXPORT_COLUMNS = [
   { key: "optimized_price", header: "Preço Otimizado" },
   { key: "optimized_sale_price", header: "Preço Promocional Otimizado" },
   { key: "category", header: "Categoria" },
+  { key: "suggested_category", header: "Categoria Proposta (IA)" },
   { key: "supplier_ref", header: "Ref. Fornecedor" },
   { key: "tags", header: "Tags" },
   { key: "meta_title", header: "Meta Title SEO" },
