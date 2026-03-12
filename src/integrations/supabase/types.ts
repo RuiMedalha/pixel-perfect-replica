@@ -990,6 +990,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_scraping_credits: {
+        Args: { _workspace_id: string }
+        Returns: undefined
+      }
       is_approved: { Args: { _user_id: string }; Returns: boolean }
       search_knowledge:
         | {
