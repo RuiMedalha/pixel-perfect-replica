@@ -19,7 +19,7 @@ import { usePublishWooCommerce, type PublishResult } from "@/hooks/usePublishWoo
 import { usePublishJob } from "@/hooks/usePublishJob";
 import { useDeleteProducts } from "@/hooks/useDeleteProducts";
 import { useUpdateProduct } from "@/hooks/useUpdateProduct";
-import { exportProductsToExcel } from "@/hooks/useExportProducts";
+import { exportProductsToExcel, exportAllProductsToExcel } from "@/hooks/useExportProducts";
 import { ProductDetailModal } from "@/components/ProductDetailModal";
 import { WooPublishModal } from "@/components/WooPublishModal";
 import { useDetectVariations, useApplyVariations, type VariationGroup } from "@/hooks/useVariableProducts";
