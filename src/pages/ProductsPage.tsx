@@ -1900,13 +1900,20 @@ const ProductsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setShowExportDialog(false)}>Cancelar</Button>
-            <Button size="sm" onClick={() => {
-              const prods = exportTarget === "selected"
-                ? products.filter(p => selected.has(p.id))
-                : products.filter(p => statusFilter === "all" ? true : p.status === "optimized");
+            <Button size="sm" onClick={async () => {
               const prefix = exportSkuPrefix.trim() || undefined;
-              exportProductsToExcel(prods, exportTarget === "selected" ? "produtos-selecionados" : "produtos-otimizados", prefix);
-              if (exportTarget === "selected") setSelected(new Set());
+              if (exportTarget === "selected") {
+                const prods = products.filter(p => selected.has(p.id));
+                exportProductsToExcel(prods, "produtos-selecionados", prefix);
+                setSelected(new Set());
+              } else {
+                // Fetch ALL products from DB, not just current page
+                await exportAllProductsToExcel(activeWorkspace?.id || "", {
+                  fileName: "produtos-todos",
+                  skuPrefix: prefix,
+                  statusFilter,
+                });
+              }
               setShowExportDialog(false);
             }}>
               <Download className="w-4 h-4 mr-1" />
