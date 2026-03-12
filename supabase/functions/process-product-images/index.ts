@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
         // Get product
         const { data: product } = await sb
           .from("products")
-          .select("id, sku, original_title, image_urls, product_type")
+          .select("id, sku, original_title, image_urls, product_type, parent_product_id")
           .eq("id", productId)
           .single();
 
