@@ -644,12 +644,13 @@ const ProductsPage = () => {
               WC
             </Badge>
           )}
-          {product.technical_specs && (
+      {product.technical_specs && (
             <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 gap-0.5" title="Enriquecido via Web">
               <Globe className="w-2.5 h-2.5" />
               Web
             </Badge>
           )}
+          <EmptyFieldsIndicator product={product} />
         </div>
       </td>
       <td className="p-3 text-center">
