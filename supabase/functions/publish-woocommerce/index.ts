@@ -888,6 +888,9 @@ const TECHNICAL_ATTR_NAMES = new Set([
 
 const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
 
+/** Detects if a value looks like an EAN/barcode (8-14 digits) */
+const isEanLikeValue = (val: string): boolean => /^\d{8,14}$/.test(String(val || "").trim());
+
 // ── Smart attribute name inference ──
 const SIZE_PATTERN = /\b(\d+[\.,]?\d*)\s*(cm|mm|m|ml|cl|l|lt|kg|g|oz|"|''|pol)\b/i;
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
@@ -1095,6 +1098,8 @@ function buildAttributesForParent(
     const v = String(value || "").trim();
     if (!n || !v) return;
     if (isTechnicalAttrName(n)) return;
+    // Skip EAN/barcode-like values (8-14 digits) from variation attributes
+    if (isEanLikeValue(v)) return;
     if (!attrMap.has(n)) attrMap.set(n, new Set());
     attrMap.get(n)!.add(v);
   };
@@ -1112,12 +1117,14 @@ function buildAttributesForParent(
     }
   }
 
-  return Array.from(attrMap.entries()).map(([name, values]) => ({
-    name,
-    options: Array.from(values),
-    variation: true,
-    visible: true,
-  }));
+  return Array.from(attrMap.entries())
+    .filter(([_, values]) => values.size > 0) // Remove attrs where all values were filtered (e.g. all EANs)
+    .map(([name, values]) => ({
+      name,
+      options: Array.from(values),
+      variation: true,
+      visible: true,
+    }));
 }
 
 function buildStaticAttributesForParent(
@@ -1175,8 +1182,10 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     if (isTechnicalAttrName(n)) continue;
 
     const raw = String(attr?.value || "").trim();
+    // Skip EAN/barcode-like values masquerading as variation options
+    if (isEanLikeValue(raw)) continue;
     const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
-    if (option) out.push({ name: n, option });
+    if (option && !isEanLikeValue(option)) out.push({ name: n, option });
   }
 
   if (out.length > 0) return out;
