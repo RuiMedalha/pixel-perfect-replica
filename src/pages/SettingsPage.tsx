@@ -64,6 +64,7 @@ Gera:
 IMPORTANTE: Mantém e melhora as características técnicas do produto (dimensões, peso, potência, etc.) na descrição otimizada. Não percas informação técnica.`;
 
 const SettingsPage = () => {
+  const { activeWorkspace } = useWorkspaceContext();
   const { data: settings, isLoading } = useSettings();
   const saveSettings = useSaveSettings();
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
