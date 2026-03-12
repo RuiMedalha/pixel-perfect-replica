@@ -1348,18 +1348,21 @@ async function publishSingleProduct(
   markupPercent: number,
   discountPercent: number
 ): Promise<WooResult> {
+  // Enrich images from images table (optimized/lifestyle)
+  const enrichedProduct = has("images") ? await enrichProductImages(product, supabase) : product;
+
   // Handle variable products
-  if (product.product_type === "variable") {
-    return await publishVariableProduct(product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
+  if (enrichedProduct.product_type === "variable") {
+    return await publishVariableProduct(enrichedProduct, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
   }
 
   // Handle standalone variations
-  if (product.parent_product_id) {
-    return await publishVariation(product, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
+  if (enrichedProduct.parent_product_id) {
+    return await publishVariation(enrichedProduct, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
   }
 
   // Simple product
-  const wooProduct = await buildBasePayload(product, supabase, baseUrl, auth, has, markupPercent, discountPercent);
+  const wooProduct = await buildBasePayload(enrichedProduct, supabase, baseUrl, auth, has, markupPercent, discountPercent);
 
   if (has("upsells")) {
     const upsellIds = await resolveSkusToWooIds(supabase, adminClient, baseUrl, auth, product.upsell_skus || []);
