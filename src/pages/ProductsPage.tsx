@@ -162,7 +162,7 @@ const ProductsPage = () => {
   const getProductPhases = useCallback((p: Product) => {
     const p1 = !!(p.optimized_title || p.optimized_description || p.optimized_short_description);
     const p2 = !!(p.meta_title || p.meta_description || p.seo_slug || (p.faq && (Array.isArray(p.faq) ? (p.faq as any[]).length > 0 : true)));
-    const p3 = !!(p.optimized_price || p.upsell_skus || p.crosssell_skus);
+    const p3 = !!((p.upsell_skus && (p.upsell_skus as any[]).length > 0) || (p.crosssell_skus && (p.crosssell_skus as any[]).length > 0));
     return { p1, p2, p3 };
   }, []);
 
