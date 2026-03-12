@@ -51,6 +51,93 @@ Deno.serve(async (req) => {
 
     const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
 
+    // Service-role client for scrape_cache (bypasses RLS)
+    const supabaseAdmin = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    // Helper: generate a simple hash for URL caching
+    const hashUrl = (url: string): string => {
+      let hash = 0;
+      for (let i = 0; i < url.length; i++) {
+        const char = url.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0;
+      }
+      return Math.abs(hash).toString(36);
+    };
+
+    // Helper: check scrape cache
+    const getCachedScrape = async (url: string, wsId: string) => {
+      const urlHash = hashUrl(url);
+      const { data } = await supabaseAdmin.from("scrape_cache")
+        .select("content_markdown, content_html, metadata")
+        .eq("url_hash", urlHash)
+        .eq("workspace_id", wsId)
+        .gt("expires_at", new Date().toISOString())
+        .maybeSingle();
+      return data;
+    };
+
+    // Helper: store scrape result in cache
+    const cacheScrape = async (url: string, wsId: string, markdown: string, html: string, meta: any = {}) => {
+      const urlHash = hashUrl(url);
+      await supabaseAdmin.from("scrape_cache").upsert({
+        url, url_hash: urlHash, workspace_id: wsId,
+        content_markdown: markdown, content_html: html, metadata: meta,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      }, { onConflict: "url_hash,workspace_id" });
+    };
+
+    // Helper: log errors centrally
+    const logError = async (source: string, errorMessage: string, context: any = {}) => {
+      try {
+        await supabaseAdmin.from("error_logs").insert({
+          user_id: userId, workspace_id: workspaceId, source,
+          error_message: errorMessage, context, severity: 'error',
+        });
+      } catch (e) { console.error("Failed to log error:", e); }
+    };
+
+    // Helper: check/update scraping credits
+    const checkCredits = async (wsId: string): Promise<{ allowed: boolean; remaining: number }> => {
+      const now = new Date();
+      const { data } = await supabaseAdmin.from("scraping_credits")
+        .select("*").eq("workspace_id", wsId).maybeSingle();
+      
+      if (!data) {
+        // Auto-create credits record
+        await supabaseAdmin.from("scraping_credits").insert({
+          workspace_id: wsId, monthly_limit: 1000, used_this_month: 0,
+          reset_at: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString(),
+        });
+        return { allowed: true, remaining: 1000 };
+      }
+      
+      // Reset if past reset date
+      if (new Date(data.reset_at) <= now) {
+        await supabaseAdmin.from("scraping_credits").update({
+          used_this_month: 0,
+          reset_at: new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString(),
+          updated_at: now.toISOString(),
+        }).eq("workspace_id", wsId);
+        return { allowed: true, remaining: data.monthly_limit };
+      }
+      
+      return { allowed: data.used_this_month < data.monthly_limit, remaining: data.monthly_limit - data.used_this_month };
+    };
+
+    const incrementCredits = async (wsId: string) => {
+      await supabaseAdmin.rpc("increment_scraping_credits" as any, { _workspace_id: wsId }).catch(() => {
+        // Fallback: direct update
+        supabaseAdmin.from("scraping_credits")
+          .update({ used_this_month: 1, updated_at: new Date().toISOString() })
+          .eq("workspace_id", wsId);
+      });
+    };
+
     // Load scraping instructions from supplier config
     const scrapingInstructions: Record<string, string> = {};
     for (const sp of supplierPrefixes) {
