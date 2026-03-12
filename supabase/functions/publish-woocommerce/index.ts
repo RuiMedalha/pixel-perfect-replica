@@ -1180,8 +1180,10 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     if (isTechnicalAttrName(n)) continue;
 
     const raw = String(attr?.value || "").trim();
+    // Skip EAN/barcode-like values masquerading as variation options
+    if (isEanLikeValue(raw)) continue;
     const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
-    if (option) out.push({ name: n, option });
+    if (option && !isEanLikeValue(option)) out.push({ name: n, option });
   }
 
   if (out.length > 0) return out;
