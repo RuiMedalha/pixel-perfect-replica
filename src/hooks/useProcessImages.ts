@@ -57,6 +57,8 @@ export function useProcessImages() {
         totalFailed += data.failed || 0;
 
         qc.invalidateQueries({ queryKey: ["products"] });
+        qc.invalidateQueries({ queryKey: ["processed-images"] });
+        qc.invalidateQueries({ queryKey: ["product-images"] });
       }
 
       setProgress({
@@ -77,6 +79,8 @@ export function useProcessImages() {
       }
 
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["processed-images"] });
+      qc.invalidateQueries({ queryKey: ["product-images"] });
       return { totalProcessed, totalSkipped, totalFailed };
     } catch (err) {
       toast.error(

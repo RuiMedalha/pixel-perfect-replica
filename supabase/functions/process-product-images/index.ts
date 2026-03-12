@@ -84,74 +84,115 @@ Deno.serve(async (req) => {
         }
 
         const processedUrls: string[] = [];
+        const lifestyleUrls: string[] = [];
+
+        const { data: latestImageRow } = await sb
+          .from("images")
+          .select("sort_order")
+          .eq("product_id", productId)
+          .order("sort_order", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        let nextSortOrder =
+          typeof latestImageRow?.sort_order === "number"
+            ? latestImageRow.sort_order + 1
+            : (product.image_urls?.length ?? 0);
 
         for (let i = 0; i < product.image_urls.length; i++) {
           const originalUrl = product.image_urls[i];
           if (!originalUrl) continue;
 
           try {
-            if (mode === "lifestyle" && i === 0 && lovableKey) {
-              // Generate lifestyle image using AI
-              const productName = product.original_title || product.sku || "produto";
-              const prompt = `Place this product in a realistic, professional commercial environment. The product should be the main focus, centered and prominent. The environment should match the product category - for example, kitchen equipment in a modern professional kitchen, furniture in an elegant room. Professional lighting, high quality commercial photography style. Product: ${productName}`;
+            if (mode === "lifestyle") {
+              // Lifestyle mode: generate only from first image
+              if (i > 0) continue;
 
-              const aiResp = await fetch(
-                "https://ai.gateway.lovable.dev/v1/chat/completions",
-                {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${lovableKey}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    model: "google/gemini-3.1-flash-image-preview",
-                    messages: [
-                      {
-                        role: "user",
-                        content: [
-                          { type: "text", text: prompt },
-                          {
-                            type: "image_url",
-                            image_url: { url: originalUrl },
-                          },
-                        ],
-                      },
-                    ],
-                    modalities: ["image", "text"],
-                  }),
-                }
-              );
+              if (lovableKey) {
+                const productName = product.original_title || product.sku || "produto";
+                const prompt = `Place this product in a realistic, professional commercial environment. The product should be the main focus, centered and prominent. The environment should match the product category - for example, kitchen equipment in a modern professional kitchen, furniture in an elegant room. Professional lighting, high quality commercial photography style. Product: ${productName}`;
 
-              const aiData = await aiResp.json();
-              const genImage =
-                aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
-              if (genImage) {
-                const base64Data = genImage.replace(
-                  /^data:image\/\w+;base64,/,
-                  ""
+                const aiResp = await fetch(
+                  "https://ai.gateway.lovable.dev/v1/chat/completions",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${lovableKey}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      model: "google/gemini-3.1-flash-image-preview",
+                      messages: [
+                        {
+                          role: "user",
+                          content: [
+                            { type: "text", text: prompt },
+                            {
+                              type: "image_url",
+                              image_url: { url: originalUrl },
+                            },
+                          ],
+                        },
+                      ],
+                      modalities: ["image", "text"],
+                    }),
+                  }
                 );
-                const bytes = Uint8Array.from(atob(base64Data), (c) =>
-                  c.charCodeAt(0)
-                );
-                const path = `${workspaceId}/${productId}/lifestyle_0.webp`;
-                await sb.storage
-                  .from("product-images")
-                  .upload(path, bytes, {
-                    contentType: "image/webp",
-                    upsert: true,
+
+                const aiData = await aiResp.json();
+                const genImage =
+                  aiData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+
+                if (genImage) {
+                  const base64Data = genImage.replace(
+                    /^data:image\/\w+;base64,/,
+                    ""
+                  );
+                  const bytes = Uint8Array.from(atob(base64Data), (c) =>
+                    c.charCodeAt(0)
+                  );
+
+                  const lifestyleId = `${Date.now()}_${crypto
+                    .randomUUID()
+                    .slice(0, 8)}`;
+                  const path = `${workspaceId}/${productId}/lifestyle_${lifestyleId}.webp`;
+
+                  await sb.storage
+                    .from("product-images")
+                    .upload(path, bytes, {
+                      contentType: "image/webp",
+                      upsert: true,
+                    });
+
+                  const { data: urlData } = sb.storage
+                    .from("product-images")
+                    .getPublicUrl(path);
+
+                  const lifestyleUrl = urlData.publicUrl;
+                  lifestyleUrls.push(lifestyleUrl);
+                  processedUrls.push(lifestyleUrl);
+
+                  await sb.from("images").insert({
+                    product_id: productId,
+                    original_url: originalUrl,
+                    optimized_url: lifestyleUrl,
+                    s3_key: path,
+                    sort_order: nextSortOrder,
+                    status: "done",
                   });
 
-                const { data: urlData } = sb.storage
-                  .from("product-images")
-                  .getPublicUrl(path);
-                processedUrls.push(urlData.publicUrl);
-
-                // Also store optimized version of original
+                  nextSortOrder += 1;
+                } else {
+                  processedUrls.push(originalUrl);
+                }
+              } else {
+                processedUrls.push(originalUrl);
               }
+
+              continue;
             }
 
-            // Standard optimization: pad to square with white background
+            // Standard optimization mode: pad to square with white background
             if (lovableKey) {
               const padPrompt = `Take this product image and place it centered on a pure white square background. Maintain the original proportions without any cropping or distortion. Add equal white padding on all sides so the final image is perfectly square. The product should occupy about 80% of the frame. Clean, professional e-commerce style. Do not add any text, watermarks or extra elements.`;
 
@@ -242,7 +283,24 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Keep original image_urls intact — optimized versions are in the images table
+        // Lifestyle mode keeps originals and appends generated URLs for quick access
+        if (mode === "lifestyle" && lifestyleUrls.length > 0) {
+          const existingUrls = Array.isArray(product.image_urls)
+            ? product.image_urls
+            : [];
+          const mergedUrls = [...existingUrls];
+
+          for (const lifestyleUrl of lifestyleUrls) {
+            if (!mergedUrls.includes(lifestyleUrl)) mergedUrls.push(lifestyleUrl);
+          }
+
+          await sb
+            .from("products")
+            .update({ image_urls: mergedUrls })
+            .eq("id", productId)
+            .eq("user_id", user.id);
+        }
+
         if (processedUrls.length > 0) {
           // Increment credits
           await sb.rpc("increment_image_credits", {

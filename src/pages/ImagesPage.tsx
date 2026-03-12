@@ -36,7 +36,7 @@ const ImagesPage = () => {
       // Get all images with optimized_url set, joined with product info
       const { data, error } = await supabase
         .from("images")
-        .select("id, product_id, original_url, optimized_url, alt_text, status, sort_order, created_at")
+        .select("id, product_id, original_url, optimized_url, alt_text, status, sort_order, created_at, s3_key")
         .not("optimized_url", "is", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -54,9 +54,8 @@ const ImagesPage = () => {
 
       return (data || []).map(img => {
         const product = productMap.get(img.product_id);
-        // Detect if it's a lifestyle image (added to image_urls but not original)
-        const isLifestyle = img.original_url && img.optimized_url &&
-          img.optimized_url.includes("lifestyle");
+        const path = `${img.s3_key || ""} ${img.optimized_url || ""}`.toLowerCase();
+        const isLifestyle = path.includes("lifestyle");
         return {
           ...img,
           productTitle: product?.optimized_title || product?.original_title || product?.sku || "Sem título",
