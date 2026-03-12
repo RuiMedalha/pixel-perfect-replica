@@ -123,7 +123,7 @@ function UpdateFieldsSelector({ selectedFields, onChange }: { selectedFields: st
 const UploadPage = () => {
   const {
     files, addFiles, processAllFiles: processAll, processFile, removeFile,
-    setColumnMapping, confirmMapping, selectSheet, setUpdateFields,
+    setColumnMapping, confirmMapping, reopenMapping, selectSheet, setUpdateFields,
     allFields, customFields, addCustomField, removeCustomField,
   } = useUploadCatalog();
   const { data: uploadHistory } = useUploadedFiles();
@@ -358,38 +358,73 @@ const UploadPage = () => {
         </div>
       )}
 
-      {/* Column mapping cards for Excel files */}
+      {/* Column mapping cards for Excel files — visible even after confirmation */}
       {files
-        .filter((f) => f.status === "a_mapear" && f.excelHeaders)
-        .map((file) => (
-          <div key={file.id} className="space-y-4">
-            <ColumnMapper
-              fileName={file.name}
-              headers={file.excelHeaders!}
-              previewRows={file.previewRows || []}
-              mapping={file.columnMapping || {}}
-              sheetNames={file.sheetNames}
-              selectedSheet={file.selectedSheet}
-              fields={allFields}
-              onSheetChange={(s) => selectSheet(file.id, s)}
-              onMappingChange={(m) => setColumnMapping(file.id, m)}
-              onConfirm={() => {
-                if (file.uploadType === "update" && (!file.updateFields || file.updateFields.length === 0)) {
-                  toast.error("Selecione pelo menos um campo para atualizar.");
-                  return;
-                }
-                confirmMapping(file.id);
-              }}
-            />
-            {/* Update fields selector for update mode */}
-            {file.uploadType === "update" && (
-              <UpdateFieldsSelector
-                selectedFields={file.updateFields || []}
-                onChange={(fields) => setUpdateFields(file.id, fields)}
-              />
-            )}
-          </div>
-        ))}
+        .filter((f) => f.excelHeaders && (f.status === "a_mapear" || f.status === "aguardando"))
+        .map((file) => {
+          const isConfirmed = file.status === "aguardando";
+          return (
+            <div key={file.id} className="space-y-4">
+              {isConfirmed ? (
+                <Card className="border-green-500/30 bg-green-500/5">
+                  <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                      Mapeamento Confirmado — <span className="font-normal text-muted-foreground">{file.name}</span>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {Object.keys(file.columnMapping || {}).length} campos mapeados
+                      </Badge>
+                    </CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => reopenMapping(file.id)}
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Editar Mapeamento
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex flex-wrap gap-1.5">
+                      {allFields.filter((f) => file.columnMapping?.[f.key]).map((f) => (
+                        <Badge key={f.key} variant="outline" className="text-[10px] font-normal gap-1">
+                          {f.label} <span className="text-muted-foreground">← {file.columnMapping?.[f.key]}</span>
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <ColumnMapper
+                  fileName={file.name}
+                  headers={file.excelHeaders!}
+                  previewRows={file.previewRows || []}
+                  mapping={file.columnMapping || {}}
+                  sheetNames={file.sheetNames}
+                  selectedSheet={file.selectedSheet}
+                  fields={allFields}
+                  onSheetChange={(s) => selectSheet(file.id, s)}
+                  onMappingChange={(m) => setColumnMapping(file.id, m)}
+                  onConfirm={() => {
+                    if (file.uploadType === "update" && (!file.updateFields || file.updateFields.length === 0)) {
+                      toast.error("Selecione pelo menos um campo para atualizar.");
+                      return;
+                    }
+                    confirmMapping(file.id);
+                  }}
+                />
+              )}
+              {/* Update fields selector for update mode */}
+              {file.uploadType === "update" && (
+                <UpdateFieldsSelector
+                  selectedFields={file.updateFields || []}
+                  onChange={(fields) => setUpdateFields(file.id, fields)}
+                />
+              )}
+            </div>
+          );
+        })}
 
       {/* File list */}
       {files.length > 0 && (
