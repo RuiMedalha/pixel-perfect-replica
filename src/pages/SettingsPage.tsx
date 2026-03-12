@@ -20,6 +20,7 @@ import { DescriptionTemplateEditor } from "@/components/DescriptionTemplateEdito
 import { AI_MODELS } from "@/hooks/useOptimizeProducts";
 import { WOO_PUBLISH_GROUPS, DEFAULT_WOO_FIELDS, SETTING_KEY_WOO_PUBLISH_FIELDS } from "@/lib/wooPublishFields";
 import { WooSitesManager } from "@/components/WooSitesManager";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 
 interface Supplier {
   name: string;
