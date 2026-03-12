@@ -1,12 +1,15 @@
-import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3, TrendingUp, AlertTriangle, Tag, Cpu } from "lucide-react";
+import { Package, CheckCircle, Clock, Activity, Loader2, Brain, BookOpen, Globe, Database, Search, Layers, BarChart3, TrendingUp, AlertTriangle, Tag, Cpu, ImageIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { useNavigate } from "react-router-dom";
 import { useProductStats } from "@/hooks/useProducts";
 import { useRecentActivity } from "@/hooks/useActivityLog";
 import { useTokenUsageSummary, useQualityMetrics } from "@/hooks/useOptimizationLogs";
 import { useWorkspaceContext } from "@/hooks/useWorkspaces";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
 import { pt } from "date-fns/locale";
 
