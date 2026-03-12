@@ -116,8 +116,21 @@ export function ProductDetailModal({ product, onClose }: Props) {
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <span className="font-mono text-xs bg-muted px-2 py-1 rounded">{product.sku ?? "—"}</span>
-            <span className="truncate">{product.original_title ?? "Sem título"}</span>
+            {product.image_urls && product.image_urls.length > 0 ? (
+              <img
+                src={product.image_urls[0]}
+                alt={product.original_title || "Produto"}
+                className="w-14 h-14 rounded-lg border object-contain bg-background shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-lg border bg-muted/30 flex items-center justify-center shrink-0">
+                <ImageIcon className="w-6 h-6 text-muted-foreground/40" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <span className="font-mono text-xs bg-muted px-2 py-1 rounded">{product.sku ?? "—"}</span>
+              <p className="truncate mt-1 text-base">{product.original_title ?? "Sem título"}</p>
+            </div>
           </DialogTitle>
         </DialogHeader>
 
