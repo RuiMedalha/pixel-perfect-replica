@@ -577,6 +577,28 @@ const UploadPage = () => {
                           Ver Conteúdo
                         </Button>
                       )}
+                      {record.storage_path && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] shrink-0 gap-1"
+                          onClick={async () => {
+                            const { data, error } = await supabase.storage
+                              .from("catalogs")
+                              .createSignedUrl(record.storage_path, 60);
+                            if (error || !data?.signedUrl) {
+                              toast.error("Erro ao gerar link de download.");
+                              return;
+                            }
+                            const a = document.createElement("a");
+                            a.href = data.signedUrl;
+                            a.download = record.file_name;
+                            a.click();
+                          }}
+                        >
+                          <Download className="w-3 h-3" />
+                          Descarregar
+                        </Button>
                       {record.products_count > 0 && (
                         <span className="text-xs text-muted-foreground">{record.products_count} produtos</span>
                       )}
