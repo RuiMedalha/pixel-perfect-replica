@@ -972,7 +972,7 @@ REGRAS GLOBAIS:
         if (fields.includes("meta_description")) { toolProperties.meta_description = { type: "string" }; requiredFields.push("meta_description"); }
         if (fields.includes("seo_slug")) { toolProperties.seo_slug = { type: "string" }; requiredFields.push("seo_slug"); }
         if (fields.includes("tags")) { toolProperties.tags = { type: "array", items: { type: "string" } }; requiredFields.push("tags"); }
-        if (fields.includes("price")) { toolProperties.optimized_price = { type: "number" }; }
+        
         if (fields.includes("faq")) {
           toolProperties.faq = {
             type: "array",
