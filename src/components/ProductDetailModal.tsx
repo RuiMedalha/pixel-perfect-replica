@@ -7,7 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns, GitBranch, PackageSearch } from "lucide-react";
+import { Check, X, ExternalLink, RotateCcw, History, Send, ArrowUpRight, Shuffle, AlertTriangle, Brain, BookOpen, Globe, Database, Loader2, BarChart3, Columns, GitBranch, PackageSearch, ImageIcon, Sparkles, Camera } from "lucide-react";
+import { useProcessImages } from "@/hooks/useProcessImages";
+import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { VariationsPanel } from "@/components/VariationsPanel";
 import { cn } from "@/lib/utils";
@@ -37,6 +39,8 @@ export function ProductDetailModal({ product, onClose }: Props) {
   const { data: versions } = useProductVersions(product?.id ?? null);
   const { data: optLogs, isLoading: logsLoading } = useProductOptimizationLogs(product?.id ?? null);
   const restoreVersion = useRestoreVersion();
+  const { processImages, isProcessing, progress: imgProgress } = useProcessImages();
+  const { activeWorkspace } = useWorkspaceContext();
 
   // Editable fields state
   const [editData, setEditData] = useState<Record<string, any>>({});
@@ -403,7 +407,42 @@ export function ProductDetailModal({ product, onClose }: Props) {
           <TabsContent value="imagens" className="mt-4">
             {product.image_urls && product.image_urls.length > 0 ? (
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">{product.image_urls.length} imagem(ns)</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">{product.image_urls.length} imagem(ns)</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isProcessing || !activeWorkspace}
+                      onClick={() => activeWorkspace && processImages({
+                        workspaceId: activeWorkspace.id,
+                        productIds: [product.id],
+                        mode: "optimize",
+                      })}
+                    >
+                      {isProcessing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ImageIcon className="w-3 h-3 mr-1" />}
+                      Otimizar Imagens
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isProcessing || !activeWorkspace}
+                      onClick={() => activeWorkspace && processImages({
+                        workspaceId: activeWorkspace.id,
+                        productIds: [product.id],
+                        mode: "lifestyle",
+                      })}
+                    >
+                      {isProcessing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Sparkles className="w-3 h-3 mr-1" />}
+                      Gerar Lifestyle
+                    </Button>
+                  </div>
+                </div>
+                {imgProgress && (
+                  <div className="text-xs text-muted-foreground">
+                    A processar... {imgProgress.done}/{imgProgress.total}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   {product.image_urls.map((url, i) => {
                     const altTexts = Array.isArray((product as any).image_alt_texts) ? (product as any).image_alt_texts : [];
@@ -411,7 +450,7 @@ export function ProductDetailModal({ product, onClose }: Props) {
                     const altText = altEntry?.alt_text || "";
                     return (
                       <div key={i} className="space-y-2">
-                        <img src={url} alt={altText || `Produto ${i + 1}`} className="rounded-lg border object-cover aspect-square w-full" />
+                        <img src={url} alt={altText || `Produto ${i + 1}`} className="rounded-lg border object-contain aspect-square w-full bg-background" />
                         <div>
                           <label className="text-xs text-muted-foreground">Alt Text (SEO)</label>
                           <Input

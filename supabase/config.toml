@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.enrich-products]
 verify_jwt = false
+
+[functions.process-product-images]
+verify_jwt = false
