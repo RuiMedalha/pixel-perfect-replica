@@ -362,7 +362,7 @@ const UploadPage = () => {
       {files
         .filter((f) => f.excelHeaders && (f.status === "a_mapear" || f.status === "aguardando" || f.status === "concluido" || f.status === "erro"))
         .map((file) => {
-          const isConfirmed = file.status === "aguardando";
+          const isConfirmed = file.status === "aguardando" || file.status === "concluido" || file.status === "erro";
           return (
             <div key={file.id} className="space-y-4">
               {isConfirmed ? (
