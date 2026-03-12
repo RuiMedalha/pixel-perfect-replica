@@ -79,6 +79,8 @@ export function useProcessImages() {
       }
 
       qc.invalidateQueries({ queryKey: ["products"] });
+      qc.invalidateQueries({ queryKey: ["processed-images"] });
+      qc.invalidateQueries({ queryKey: ["product-images"] });
       return { totalProcessed, totalSkipped, totalFailed };
     } catch (err) {
       toast.error(
