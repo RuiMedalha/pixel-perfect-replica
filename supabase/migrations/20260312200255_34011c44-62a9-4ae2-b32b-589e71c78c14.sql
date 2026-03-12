@@ -1,0 +1,1 @@
+ALTER TABLE public.images ADD CONSTRAINT images_product_id_sort_order_unique UNIQUE (product_id, sort_order);
