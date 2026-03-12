@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle } from "lucide-react";
+import { Search, Check, X, Edit, Sparkles, Loader2, Download, Send, Trash2, Settings2, Save, GitBranch, Layers, Plus, Ban, Filter, ChevronDown, ChevronRight, Rocket, XCircle, List, Network, Globe, Copy, AlertTriangle, ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useProducts, useAllProductIds, useUpdateProductStatus, useProductFilterOptions, type Product, type ProductFilters } from "@/hooks/useProducts";
@@ -29,6 +29,7 @@ import { useWorkspaceContext } from "@/hooks/useWorkspaces";
 import { calculateSeoScore, getSeoScoreColor } from "@/lib/seoScore";
 import { useRepairAttributes } from "@/hooks/useRepairAttributes";
 import { useEnrichProducts } from "@/hooks/useEnrichProducts";
+import { useProcessImages } from "@/hooks/useProcessImages";
 import { useSettings } from "@/hooks/useSettings";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useDuplicateDetection } from "@/hooks/useDuplicateDetection";
@@ -60,6 +61,7 @@ const ProductsPage = () => {
   const { activeWorkspace, toggleVariableProducts } = useWorkspaceContext();
   useRepairAttributes();
   const { enrich, isEnriching, missingVariations, createMissingVariations, progress: enrichProgress } = useEnrichProducts();
+  const { processImages, isProcessing: isProcessingImages, progress: imgProgress } = useProcessImages();
   const { data: settings } = useSettings();
   const updateStatus = useUpdateProductStatus();
   const optimizeProducts = useOptimizeProducts();
@@ -742,6 +744,24 @@ const ProductsPage = () => {
             {isEnriching ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Globe className="w-3.5 h-3.5 mr-1" />}
             <span className="hidden sm:inline">Enriquecer </span>Web{selected.size > 0 ? ` (${selected.size})` : ""}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs h-8"
+            onClick={() => {
+              if (!activeWorkspace) return;
+              const ids = selected.size > 0 ? Array.from(selected) : (allProductsLight ?? []).filter((p: any) => p.image_urls?.length > 0).map((p: any) => p.id).slice(0, 50);
+              if (ids.length === 0) {
+                toast.warning("Nenhum produto com imagens para processar.");
+                return;
+              }
+              processImages({ workspaceId: activeWorkspace.id, productIds: ids, mode: "optimize" });
+            }}
+            disabled={isProcessingImages}
+          >
+            {isProcessingImages ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5 mr-1" />}
+            <span className="hidden sm:inline">Otimizar </span>Imagens{selected.size > 0 ? ` (${selected.size})` : ""}
+          </Button>
           {activeWorkspace?.has_variable_products && (
             <Button
               size="sm"
@@ -865,6 +885,26 @@ const ProductsPage = () => {
               </div>
             </div>
             <Progress value={(enrichProgress.done / enrichProgress.total) * 100} className="h-2" />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Image Processing Progress Bar */}
+      {imgProgress && imgProgress.done < imgProgress.total && (
+        <Card className="border-purple-500/30 bg-purple-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-purple-500" />
+                <span className="text-sm font-medium">
+                  A processar imagens: {imgProgress.currentProduct}
+                </span>
+              </div>
+              <span className="text-sm font-mono text-muted-foreground">
+                {imgProgress.done}/{imgProgress.total}
+              </span>
+            </div>
+            <Progress value={(imgProgress.done / imgProgress.total) * 100} className="h-2" />
           </CardContent>
         </Card>
       )}
