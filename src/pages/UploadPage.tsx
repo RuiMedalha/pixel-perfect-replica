@@ -379,7 +379,7 @@ const UploadPage = () => {
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs gap-1"
-                      onClick={() => updateFile(file.id, { status: "a_mapear" as const })}
+                      onClick={() => reopenMapping(file.id)}
                     >
                       <RefreshCw className="w-3 h-3" />
                       Editar Mapeamento
