@@ -1328,7 +1328,7 @@ const ProductsPage = () => {
                   <tr className="border-b bg-muted/50">
                     <th className="p-3 w-10">
                       <Checkbox
-                        checked={filtered.length > 0 && selected.size === filtered.length}
+                        checked={filtered.length > 0 && (selected.size >= filtered.length || allPagesSelected)}
                         onCheckedChange={toggleSelectAll}
                       />
                     </th>
