@@ -718,8 +718,30 @@ async function resolveImageRef(
     return img;
   }
 
-  // 2. Full URL → send as src
+  // 2. Full URL
   if (trimmed.startsWith("http")) {
+    // 2a. Supabase Storage URL → upload directly to WP Media Library for reliability
+    if (SUPABASE_STORAGE_PATTERN.test(trimmed)) {
+      const cached = imageCache.get(trimmed);
+      if (cached) {
+        const result = { ...cached, position };
+        if (hasAlt && altText) result.alt = altText;
+        return result;
+      }
+
+      const mediaId = await uploadImageToWPMedia(trimmed, baseUrl, auth);
+      if (mediaId) {
+        const entry: Record<string, unknown> = { id: mediaId };
+        imageCache.set(trimmed, entry);
+        img.id = mediaId;
+        if (hasAlt && altText) img.alt = altText;
+        console.log(`✅ Supabase image uploaded to WP Media: ${trimmed} → ID ${mediaId}`);
+        return img;
+      }
+      // Fallback: send as src if upload fails
+      console.warn(`⚠️ Failed to upload Supabase image to WP, falling back to src: ${trimmed}`);
+    }
+
     img.src = trimmed;
     if (hasAlt && altText) img.alt = altText;
     return img;
