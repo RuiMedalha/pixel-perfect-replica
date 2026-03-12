@@ -21,6 +21,7 @@ const navItems = [
   { to: "/variacoes", icon: GitBranch, label: "Variações" },
   { to: "/categorias", icon: FolderTree, label: "Categorias" },
   { to: "/importar-woo", icon: ShoppingCart, label: "Importar WooCommerce" },
+  { to: "/imagens", icon: ImageIcon, label: "Imagens" },
 ];
 
 const adminItems = [
