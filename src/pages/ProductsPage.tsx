@@ -575,8 +575,8 @@ const ProductsPage = () => {
           onCheckedChange={() => toggleSelect(product.id)}
         />
       </td>
-      <td className="p-3 font-mono text-xs">{product.sku ?? "—"}</td>
-      <td className="p-3 max-w-[180px] truncate">{product.original_title ?? "—"}</td>
+      <td className="p-3 font-mono text-xs" title={product.sku ?? undefined}>{product.sku ?? "—"}</td>
+      <td className="p-3 max-w-[180px] truncate" title={product.original_title ?? undefined}>{product.original_title ?? "—"}</td>
       <td className="p-3 max-w-[180px]" onClick={(e) => e.stopPropagation()}>
         {editingCell?.id === product.id && editingCell.field === "optimized_title" ? (
           <div className="flex gap-1">
