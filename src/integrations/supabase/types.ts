@@ -1025,6 +1025,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_image_credits: {
+        Args: { _workspace_id: string }
+        Returns: undefined
+      }
       increment_scraping_credits: {
         Args: { _workspace_id: string }
         Returns: undefined
