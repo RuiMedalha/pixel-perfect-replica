@@ -1352,12 +1352,15 @@ function buildAttributesForParent(
   for (const v of variations) {
     const childTitle = v?.optimized_title || v?.original_title || "";
     const attrs = Array.isArray(v?.attributes) ? v.attributes : [];
+    const dims = extractDimensionFromAttrs(attrs);
 
     for (const name of names) {
       const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
       const raw = String(found?.value || "").trim();
-      const option = (raw && !isEanLikeValue(raw)) ? raw : inferVariationOptionFromTitle(parentTitle, childTitle);
+      let option = (raw && !isEanLikeValue(raw)) ? raw : inferVariationOptionFromTitle(parentTitle, childTitle);
       if (option) {
+        // Enrich with dimensions in the dropdown label
+        option = enrichOptionWithDimensions(option, dims);
         const effectiveName = (!raw || isEanLikeValue(raw)) ? inferAttrNameFromOption(option) : name;
         add(effectiveName, option);
       }
