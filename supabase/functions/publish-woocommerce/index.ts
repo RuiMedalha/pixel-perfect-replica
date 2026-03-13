@@ -1168,17 +1168,21 @@ async function buildVariationPayload(
       finalDesc = finalDesc + `<div class="technical-specs">${varSpecs}</div>`;
     }
 
-    // Use WooCommerce native variation description so it swaps dynamically
-    const tabDescription = String(finalDesc || "").trim();
-    payload.description = tabDescription;
+    // Keep Woo native variation description empty (avoids rendering near price)
+    payload.description = "";
 
-    // Also store in meta for themes that read from meta keys (XStore etc.)
+    const tabDescription = String(finalDesc || "").trim();
+
+    // Store in multiple meta keys for theme/plugin compatibility (XStore + common keys)
     if (tabDescription) {
       upsertMeta("_variation_description", tabDescription);
+      upsertMeta("variation_description", tabDescription);
       upsertMeta("_variation_tab_description", tabDescription);
       upsertMeta("variation_tab_description", tabDescription);
       upsertMeta("_xstore_variation_description", tabDescription);
       upsertMeta("xstore_variation_description", tabDescription);
+      upsertMeta("_et_variation_description", tabDescription);
+      upsertMeta("et_variation_description", tabDescription);
     }
   }
 
