@@ -1512,11 +1512,11 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
                       messages: [
                         {
                           role: "system",
-                          content: "You extract variation attributes from product titles. Compare the parent title with each child title to identify the differentiating attribute (e.g. Color, Size, Material). Return structured data via the tool."
+                          content: "You extract variation attributes from product titles. Compare the parent title with each child title to identify the differentiating attribute (e.g. Color, Size, Material, Capacity, Dimensions). Return structured data via the tool. CRITICAL: NEVER use EAN codes, barcodes, numeric references (8+ digit numbers), brand names, or SKU codes as attribute values. Only use meaningful physical attributes like size, color, capacity, material."
                         },
                         {
                           role: "user",
-                          content: `Parent product title: "${parentTitleForAI}"\n\nChild variation titles:\n${Object.entries(childTitles).map(([id, t]) => `- ID ${id}: "${t}"`).join("\n")}\n\nExtract the variation attribute name and value for each child.`
+                          content: `Parent product title: "${parentTitleForAI}"\n\nChild variation titles:\n${Object.entries(childTitles).map(([id, t]) => `- ID ${id}: "${t}"`).join("\n")}\n\nExtract the variation attribute name and value for each child. The differentiating attribute should be a PHYSICAL characteristic (size, color, capacity, dimensions, etc.), NEVER an EAN code, barcode, reference number, or brand name.`
                         }
                       ],
                       tools: [{
