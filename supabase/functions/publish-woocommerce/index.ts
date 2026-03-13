@@ -1196,54 +1196,20 @@ async function buildVariationPayload(
     payload.meta_data = existingMeta;
   };
 
-  // ── Build variation-specific content ──
-  // IMPORTANT: keep variation.description empty to avoid rendering near price.
-  // Store full variation content in meta keys so themes/plugins can render it in tabs.
+  // ── Build variation-specific content for the native Woo variation description field ──
+  // This is theme-agnostic and renders in `.woocommerce-variation-description`.
   if (has("description")) {
-    const specLines: string[] = [];
-    const attrs = Array.isArray(variation.attributes) ? variation.attributes : [];
-    for (const attr of attrs) {
-      const n = String(attr?.name || "").trim();
-      if (!n) continue;
-      const val = String(attr?.value || "").trim();
-      if (!val || isEanLikeValue(val)) continue;
-      specLines.push(`<strong>${n}:</strong> ${val}`);
-    }
+    const inlineDescription = buildVariationInlineDescription(variation, parent);
 
-    const varSpecs = variation.technical_specs || "";
-    const varOwnDesc = variation.optimized_description || variation.original_description || "";
-    const parentDesc = parent?.optimized_description || parent?.original_description || "";
-    const baseDesc = varOwnDesc || parentDesc || "";
+    // Keep it short and variation-specific (e.g. "1.8L - 22,5 x 15 x 10,5 cm")
+    payload.description = inlineDescription || "";
 
-    let finalDesc = baseDesc;
-    if (specLines.length > 0) {
-      const specsHtml = `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines
-        .map((l) => `<li>${l}</li>`)
-        .join("")}</ul></div>`;
-      if (!finalDesc.includes("variation-specs")) {
-        finalDesc = finalDesc + specsHtml;
-      }
-    }
-
-    if (varSpecs && !finalDesc.includes(varSpecs.substring(0, 30))) {
-      finalDesc = finalDesc + `<div class="technical-specs">${varSpecs}</div>`;
-    }
-
-    // Keep Woo native variation description empty (avoids rendering near price)
-    payload.description = "";
-
-    const tabDescription = String(finalDesc || "").trim();
-
-    // Store in multiple meta keys for theme/plugin compatibility (XStore + common keys)
-    if (tabDescription) {
-      upsertMeta("_variation_description", tabDescription);
-      upsertMeta("variation_description", tabDescription);
-      upsertMeta("_variation_tab_description", tabDescription);
-      upsertMeta("variation_tab_description", tabDescription);
-      upsertMeta("_xstore_variation_description", tabDescription);
-      upsertMeta("xstore_variation_description", tabDescription);
-      upsertMeta("_et_variation_description", tabDescription);
-      upsertMeta("et_variation_description", tabDescription);
+    // Store in generic meta keys as fallback for themes/builders that read meta
+    if (inlineDescription) {
+      upsertMeta("_variation_description", inlineDescription);
+      upsertMeta("variation_description", inlineDescription);
+      upsertMeta("_variation_tab_description", inlineDescription);
+      upsertMeta("variation_tab_description", inlineDescription);
     }
   }
 
