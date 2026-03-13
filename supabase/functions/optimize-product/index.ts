@@ -1354,14 +1354,23 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
               }
             }
 
+            const TECH_ATTR_NAMES = new Set(["marca","brand","ean","ean13","gtin","barcode","modelo","model","referência","reference","código","code"]);
+            const isEanLike = (v: string) => /^\d{8,14}$/.test(v.replace(/\s/g, ""));
+
             let propagated = 0;
             for (const variation of variations) {
-              // Build attribute suffix (e.g., "- Vermelho, 16 cm")
+              // Build attribute suffix ONLY from variation=true attrs, excluding tech values
               const attrParts: string[] = [];
               if (Array.isArray(variation.attributes)) {
                 for (const attr of variation.attributes as any[]) {
+                  // Skip non-variation and technical attributes
+                  if (attr.variation === false) continue;
+                  const attrName = (attr.name || "").toLowerCase().trim();
+                  if (TECH_ATTR_NAMES.has(attrName)) continue;
                   const vals = Array.isArray(attr.values) ? attr.values.join("/") : (attr.value || "");
-                  if (vals) attrParts.push(vals);
+                  // Skip EAN-like values (pure numbers 8+ digits)
+                  if (!vals || isEanLike(vals)) continue;
+                  attrParts.push(vals);
                 }
               }
               const suffix = attrParts.length > 0 ? ` - ${attrParts.join(", ")}` : "";
