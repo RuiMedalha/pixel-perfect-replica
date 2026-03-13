@@ -25,24 +25,6 @@ import { Loader2 } from "lucide-react";
 const queryClient = new QueryClient();
 
 function ProtectedRoutes() {
-  const { user, loading } = useAuth();
-  const { data: profile, isLoading: profileLoading } = useCurrentUserProfile();
-
-  if (loading || profileLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (!user) return <Navigate to="/login" replace />;
-
-  // Check if user is approved
-  if (profile && !profile.isApproved) {
-    return <PendingApproval />;
-  }
-
   return (
     <WorkspaceProvider>
       <Routes>
@@ -54,12 +36,8 @@ function ProtectedRoutes() {
           <Route path="/categorias" element={<CategoriesPage />} />
           <Route path="/importar-woo" element={<WooImportPage />} />
           <Route path="/imagens" element={<ImagesPage />} />
-          {profile?.isAdmin && (
-            <>
-              <Route path="/configuracoes" element={<SettingsPage />} />
-              <Route path="/admin/utilizadores" element={<AdminUsersPage />} />
-            </>
-          )}
+          <Route path="/configuracoes" element={<SettingsPage />} />
+          <Route path="/admin/utilizadores" element={<AdminUsersPage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
