@@ -1487,8 +1487,45 @@ async function publishVariableProduct(
     }
   }
 
-  const variationAttributes = buildAttributesForParent(parent, children || []);
+  let variationAttributes = buildAttributesForParent(parent, children || []);
   const staticAttributes = buildStaticAttributesForParent(parent, children || []);
+
+  // Consolidate duplicate size-like attributes (e.g., "Tamanho" + "Capacidade") into a single attribute
+  const SIZE_ATTR_NAMES = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
+  const sizeAttrs = variationAttributes.filter(a => SIZE_ATTR_NAMES.has(a.name.toLowerCase().trim()));
+  if (sizeAttrs.length > 1) {
+    // Merge all size-like attributes into the first one
+    const primary = sizeAttrs[0];
+    const allOptions = new Set<string>(primary.options);
+    for (let i = 1; i < sizeAttrs.length; i++) {
+      for (const opt of sizeAttrs[i].options) allOptions.add(opt);
+    }
+    primary.options = Array.from(allOptions);
+    // Remove the duplicates
+    const sizeNames = new Set(sizeAttrs.slice(1).map(a => a.name));
+    variationAttributes = variationAttributes.filter(a => !sizeNames.has(a.name));
+    console.log(`[publish-variable] Consolidated ${sizeAttrs.length} size attributes into "${primary.name}" with ${primary.options.length} options`);
+  }
+
+  // Extract brand from static attributes for XStore meta_data
+  let brandValue: string | null = null;
+  for (const s of staticAttributes) {
+    const sLower = s.name.toLowerCase().trim();
+    if (sLower === "marca" || sLower === "brand") {
+      brandValue = s.options[0] || null;
+      break;
+    }
+  }
+  // Also check parent attributes directly
+  if (!brandValue && Array.isArray(parent.attributes)) {
+    for (const attr of parent.attributes) {
+      const n = String(attr?.name || "").toLowerCase().trim();
+      if (n === "marca" || n === "brand") {
+        brandValue = String(attr?.value || attr?.options?.[0] || "").trim() || null;
+        break;
+      }
+    }
+  }
 
   if (variationAttributes.length > 0 || staticAttributes.length > 0) {
     const merged: any[] = [...variationAttributes];
@@ -1506,6 +1543,15 @@ async function publishVariableProduct(
     }
 
     parentPayload.attributes = merged;
+  }
+
+  // Add XStore brand meta_data
+  if (brandValue) {
+    const existingMeta = Array.isArray((parentPayload as any).meta_data) ? (parentPayload as any).meta_data : [];
+    existingMeta.push({ key: "_brand", value: brandValue });
+    existingMeta.push({ key: "xstore_brand", value: brandValue });
+    (parentPayload as any).meta_data = existingMeta;
+    console.log(`[publish-variable] Added brand meta: ${brandValue}`);
   }
 
   console.log(`[publish-variable] Payload keys: ${Object.keys(parentPayload).join(", ")}, name=${parentPayload.name}, images=${Array.isArray(parentPayload.images) ? (parentPayload.images as any[]).length : 0}, attrs=${JSON.stringify(parentPayload.attributes)}`);
