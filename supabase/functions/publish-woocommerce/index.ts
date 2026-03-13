@@ -1089,11 +1089,54 @@ async function buildVariationPayload(
 ): Promise<Record<string, unknown>> {
   const payload: Record<string, unknown> = {};
 
-  // Inherit description from parent (includes dimensions/specs) instead of clearing it
+  // ── Build variation-specific description with its own specs ──
   if (has("description")) {
     const varDesc = variation.optimized_description || variation.original_description || "";
     const parentDesc = parent?.optimized_description || parent?.original_description || "";
-    payload.description = varDesc || parentDesc || "";
+    const baseDesc = varDesc || parentDesc || "";
+    
+    // Build specs block from this variation's attributes (dimensions, color, capacity, etc.)
+    const specLines: string[] = [];
+    const attrs = Array.isArray(variation.attributes) ? variation.attributes : [];
+    for (const attr of attrs) {
+      const n = String(attr?.name || "").trim();
+      if (!n) continue;
+      const val = String(attr?.value || "").trim();
+      if (!val || isEanLikeValue(val)) continue;
+      specLines.push(`<strong>${n}:</strong> ${val}`);
+    }
+    // Add technical_specs if the variation has its own
+    const varSpecs = variation.technical_specs || "";
+    
+    // Compose: base description + variation-specific specs
+    let finalDesc = baseDesc;
+    if (specLines.length > 0 || varSpecs) {
+      const specsHtml = specLines.length > 0
+        ? `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines.map(l => `<li>${l}</li>`).join("")}</ul></div>`
+        : "";
+      const techHtml = varSpecs ? `<div class="technical-specs">${varSpecs}</div>` : "";
+      // Only append if specs aren't already in the description
+      if (specsHtml && !finalDesc.includes("variation-specs")) {
+        finalDesc = finalDesc + specsHtml;
+      }
+      if (techHtml && !finalDesc.includes(varSpecs.substring(0, 30))) {
+        finalDesc = finalDesc + techHtml;
+      }
+    }
+    payload.description = finalDesc;
+  }
+
+  // ── Pass variation title for themes that support title swapping (XStore) ──
+  if (has("title")) {
+    const varTitle = variation.optimized_title || variation.original_title || "";
+    if (varTitle) {
+      const meta: Array<{ key: string; value: string }> = [];
+      meta.push({ key: "_variation_title", value: varTitle });
+      meta.push({ key: "variation_title", value: varTitle });
+      // Also set the WooCommerce variation description title for display
+      payload.name = varTitle;
+      payload.meta_data = meta;
+    }
   }
 
   if (has("price")) {
