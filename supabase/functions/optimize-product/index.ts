@@ -1405,6 +1405,71 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
             }
             console.log(`📦 Propagated optimization to ${propagated} variations of variable product ${product.sku}`);
 
+            // === PROPAGATE LIFESTYLE IMAGES to all family members ===
+            try {
+              // Collect all lifestyle images from parent + all variations
+              const allFamilyIds = [product.id, ...variations.map((v: any) => v.id)];
+              const { data: allLifestyleImages } = await supabase
+                .from("images")
+                .select("product_id, optimized_url, original_url")
+                .in("product_id", allFamilyIds)
+                .like("s3_key", "%lifestyle%")
+                .eq("status", "done");
+
+              if (allLifestyleImages && allLifestyleImages.length > 0) {
+                // Unique lifestyle URLs
+                const lifestyleUrls = [...new Set(allLifestyleImages.map((img: any) => img.optimized_url).filter(Boolean))];
+                
+                if (lifestyleUrls.length > 0) {
+                  console.log(`🖼️ Found ${lifestyleUrls.length} lifestyle images to propagate across ${allFamilyIds.length} family members`);
+                  
+                  for (const fid of allFamilyIds) {
+                    const { data: famProduct } = await supabase
+                      .from("products")
+                      .select("id, image_urls")
+                      .eq("id", fid)
+                      .single();
+                    
+                    if (!famProduct) continue;
+                    const existing = Array.isArray(famProduct.image_urls) ? famProduct.image_urls : [];
+                    const merged = [...existing];
+                    let added = 0;
+                    for (const url of lifestyleUrls) {
+                      if (!merged.includes(url)) { merged.push(url); added++; }
+                    }
+                    
+                    if (added > 0) {
+                      await supabase.from("products").update({ image_urls: merged }).eq("id", fid);
+                      
+                      // Also ensure image records exist for this family member
+                      const { data: existingImgRecords } = await supabase
+                        .from("images")
+                        .select("optimized_url")
+                        .eq("product_id", fid)
+                        .like("s3_key", "%lifestyle%");
+                      const existingOptUrls = new Set((existingImgRecords || []).map((r: any) => r.optimized_url));
+                      
+                      for (const url of lifestyleUrls) {
+                        if (!existingOptUrls.has(url)) {
+                          await supabase.from("images").insert({
+                            product_id: fid,
+                            original_url: existing[0] || null,
+                            optimized_url: url,
+                            s3_key: `lifestyle_shared_from_family`,
+                            sort_order: merged.indexOf(url),
+                            status: "done",
+                          });
+                        }
+                      }
+                      console.log(`  ✅ Added ${added} lifestyle images to ${fid}`);
+                    }
+                  }
+                }
+              }
+            } catch (lifestyleErr) {
+              console.warn("Lifestyle propagation error (non-fatal):", lifestyleErr);
+            }
+
             // ── AI attribute extraction for variable products ──
             // Check if children lack proper variation attributes
             const childrenNeedAttrs = variations.filter((v: any) => {
