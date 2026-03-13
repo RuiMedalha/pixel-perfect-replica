@@ -1106,34 +1106,6 @@ function enrichOptionWithDimensions(option: string, dimensions: string | null): 
   if (option.includes(dimensions)) return option;
   return `${option} - ${dimensions}`;
 }
-function buildVariationInlineDescription(variation: any, parent?: any): string {
-  const attrs = Array.isArray(variation?.attributes) ? variation.attributes : [];
-  const dims = extractDimensionForVariation(variation);
-
-  const pieces: string[] = [];
-  for (const attr of attrs) {
-    const name = String(attr?.name || "").trim();
-    const val = String(attr?.value || "").trim();
-    if (!name || !val) continue;
-    if (isTechnicalAttrName(name) || isDimensionAttrName(name) || isEanLikeValue(val)) continue;
-    pieces.push(val);
-  }
-
-  let base = pieces.join(" • ").trim();
-  if (!base) {
-    const parentTitle = parent?.optimized_title || parent?.original_title || "";
-    const childTitle = variation?.optimized_title || variation?.original_title || "";
-    base = inferVariationOptionFromTitle(parentTitle, childTitle) || "";
-  }
-
-  if (dims) {
-    if (!base) return dims;
-    if (base.includes(dims)) return base;
-    return `${base} - ${dims}`;
-  }
-
-  return base;
-}
 
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
 const COLOR_WORDS = new Set([
