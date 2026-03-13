@@ -1106,9 +1106,10 @@ ${productInfo}${knowledgeContext}${supplierContext}${catalogContext}
 INSTRUÇÕES POR CAMPO:
 ${fieldInstructions.join("\n\n---\n\n")}
 
-REGRAS GLOBAIS:
-- NUNCA incluas o nome da marca (ex: LIZOTEL, Sammic, etc.) nos títulos otimizados nem nas descrições comerciais. Foca-te na função técnica, aplicações profissionais e linha/série do equipamento.
-- NUNCA incluas códigos EAN, SKU, códigos de barras ou referências numéricas nos títulos otimizados.
+REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
+- NUNCA incluas o nome da marca/fabricante (ex: LIZOTEL, Zanussi, Sammic, Fagor, Electrolux, etc.) em NENHUM campo de texto (título, descrição, meta title, meta description, slug, tags, alt text). A marca é tratada separadamente como atributo técnico.
+- NUNCA incluas códigos EAN, GTIN, códigos de barras, referências numéricas de fornecedor ou SKUs no título ou na descrição curta.
+- NUNCA incluas quantidades de embalagem (ex: "Pack 6", "caixa de 12") no título.
 - Mantém specs técnicas na tabela, texto comercial nos parágrafos
 - Se existir informação de referência ou do fornecedor, usa-a
 - Para upsells/cross-sells, usa APENAS SKUs do catálogo. NÃO inventes.
