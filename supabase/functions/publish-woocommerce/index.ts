@@ -1121,8 +1121,23 @@ async function buildVariationPayload(
 ): Promise<Record<string, unknown>> {
   const payload: Record<string, unknown> = {};
 
-  // ── Build variation-specific description with its own specs ──
-  // Specs go ONLY in the variation description (the tab below), NOT mixed with parent description
+  const upsertMeta = (key: string, value: string) => {
+    if (!key || !value) return;
+    const existingMeta = Array.isArray(payload.meta_data)
+      ? (payload.meta_data as Array<{ key: string; value: string }>)
+      : [];
+    const idx = existingMeta.findIndex((m) => String(m?.key || "") === key);
+    if (idx >= 0) {
+      existingMeta[idx] = { key, value };
+    } else {
+      existingMeta.push({ key, value });
+    }
+    payload.meta_data = existingMeta;
+  };
+
+  // ── Build variation-specific content ──
+  // IMPORTANT: keep variation.description empty to avoid rendering near price.
+  // Store full variation content in meta keys so themes/plugins can render it in tabs.
   if (has("description")) {
     const specLines: string[] = [];
     const attrs = Array.isArray(variation.attributes) ? variation.attributes : [];
@@ -1133,36 +1148,46 @@ async function buildVariationPayload(
       if (!val || isEanLikeValue(val)) continue;
       specLines.push(`<strong>${n}:</strong> ${val}`);
     }
+
     const varSpecs = variation.technical_specs || "";
-    
-    // Use variation's own description if it has one, otherwise use parent's
     const varOwnDesc = variation.optimized_description || variation.original_description || "";
     const parentDesc = parent?.optimized_description || parent?.original_description || "";
     const baseDesc = varOwnDesc || parentDesc || "";
-    
-    // Append variation-specific specs block to the description
+
     let finalDesc = baseDesc;
     if (specLines.length > 0) {
-      const specsHtml = `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines.map(l => `<li>${l}</li>`).join("")}</ul></div>`;
+      const specsHtml = `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines
+        .map((l) => `<li>${l}</li>`)
+        .join("")}</ul></div>`;
       if (!finalDesc.includes("variation-specs")) {
         finalDesc = finalDesc + specsHtml;
       }
     }
+
     if (varSpecs && !finalDesc.includes(varSpecs.substring(0, 30))) {
       finalDesc = finalDesc + `<div class="technical-specs">${varSpecs}</div>`;
     }
-    payload.description = finalDesc;
+
+    // Clear Woo native variation description block (shown near price)
+    payload.description = "";
+
+    const tabDescription = String(finalDesc || "").trim();
+    if (tabDescription) {
+      upsertMeta("_variation_description", tabDescription);
+      upsertMeta("_variation_tab_description", tabDescription);
+      upsertMeta("variation_tab_description", tabDescription);
+      upsertMeta("_xstore_variation_description", tabDescription);
+      upsertMeta("xstore_variation_description", tabDescription);
+    }
   }
 
   // ── Pass variation title for themes that support title swapping (XStore) ──
   if (has("title")) {
     const varTitle = variation.optimized_title || variation.original_title || "";
     if (varTitle) {
-      const meta: Array<{ key: string; value: string }> = [];
-      meta.push({ key: "_variation_title", value: varTitle });
-      meta.push({ key: "variation_title", value: varTitle });
       payload.name = varTitle;
-      payload.meta_data = meta;
+      upsertMeta("_variation_title", varTitle);
+      upsertMeta("variation_title", varTitle);
     }
   }
 
@@ -1179,11 +1204,9 @@ async function buildVariationPayload(
     }
   }
   if (brandValue) {
-    const existingMeta = Array.isArray(payload.meta_data) ? payload.meta_data as any[] : [];
-    existingMeta.push({ key: "_brand", value: brandValue });
-    existingMeta.push({ key: "xstore_brand", value: brandValue });
-    existingMeta.push({ key: "brand_id", value: brandValue });
-    payload.meta_data = existingMeta;
+    upsertMeta("_brand", brandValue);
+    upsertMeta("xstore_brand", brandValue);
+    upsertMeta("brand_id", brandValue);
   }
 
   if (has("price")) {
