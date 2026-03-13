@@ -1168,10 +1168,11 @@ async function buildVariationPayload(
       finalDesc = finalDesc + `<div class="technical-specs">${varSpecs}</div>`;
     }
 
-    // Clear Woo native variation description block (shown near price)
-    payload.description = "";
-
+    // Use WooCommerce native variation description so it swaps dynamically
     const tabDescription = String(finalDesc || "").trim();
+    payload.description = tabDescription;
+
+    // Also store in meta for themes that read from meta keys (XStore etc.)
     if (tabDescription) {
       upsertMeta("_variation_description", tabDescription);
       upsertMeta("_variation_tab_description", tabDescription);
