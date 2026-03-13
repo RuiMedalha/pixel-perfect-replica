@@ -1258,8 +1258,10 @@ function buildAttributesForParent(
     }
   }
 
-  const result = Array.from(attrMap.entries())
-    .filter(([_, values]) => values.size > 0)
+  // Only keep attributes where there are 2+ distinct values (i.e., values actually vary across variations)
+  // If only 1 unique value, it's static and should NOT be a variation attribute (no dropdown needed)
+  let result = Array.from(attrMap.entries())
+    .filter(([_, values]) => values.size > 1)
     .map(([name, values]) => ({
       name,
       options: Array.from(values),
@@ -1267,7 +1269,29 @@ function buildAttributesForParent(
       visible: true,
     }));
 
-  // Consolidate duplicate size-like attributes at the parent level too
+  // If ALL attributes were removed (all had 1 value), fall back to title-based inference
+  if (result.length === 0 && variations.length > 1) {
+    const inferredMap = new Map<string, Set<string>>();
+    for (const v of variations) {
+      const childTitle = v?.optimized_title || v?.original_title || "";
+      const option = inferVariationOptionFromTitle(parentTitle, childTitle);
+      if (option) {
+        const attrName = inferAttrNameFromOption(option);
+        if (!inferredMap.has(attrName)) inferredMap.set(attrName, new Set());
+        inferredMap.get(attrName)!.add(option);
+      }
+    }
+    result = Array.from(inferredMap.entries())
+      .filter(([_, values]) => values.size > 1)
+      .map(([name, values]) => ({
+        name,
+        options: Array.from(values),
+        variation: true,
+        visible: true,
+      }));
+  }
+
+  // Consolidate duplicate size-like attributes at the parent level
   const SIZE_ATTR_NAMES_PARENT = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
   const sizeResults = result.filter(a => SIZE_ATTR_NAMES_PARENT.has(a.name.toLowerCase().trim()));
   if (sizeResults.length > 1) {
