@@ -597,10 +597,11 @@ async function resolveSkusToWooIds(supabase: any, adminClient: any, baseUrl: str
 
 // ── Enrich product images from `images` table ──
 // Replaces original URLs with optimized versions and adds any extra processed images
+// Lifestyle images are inserted as 2nd/3rd position (never first)
 async function enrichProductImages(product: any, supabase: any): Promise<any> {
   const { data: imageRows } = await supabase
     .from("images")
-    .select("original_url, optimized_url, sort_order")
+    .select("original_url, optimized_url, sort_order, s3_key")
     .eq("product_id", product.id)
     .eq("status", "done")
     .not("optimized_url", "is", null)
@@ -610,10 +611,15 @@ async function enrichProductImages(product: any, supabase: any): Promise<any> {
 
   const urls: string[] = Array.isArray(product.image_urls) ? [...product.image_urls] : [];
 
-  // Map: original -> optimized (for substitution)
+  // Separate lifestyle from regular optimized images
+  const lifestyleUrls: string[] = [];
   const optimizedMap = new Map<string, string>();
+
   for (const row of imageRows) {
-    if (row.original_url && row.optimized_url) {
+    const isLifestyle = row.s3_key && String(row.s3_key).includes("lifestyle");
+    if (isLifestyle && row.optimized_url) {
+      lifestyleUrls.push(row.optimized_url);
+    } else if (row.original_url && row.optimized_url) {
       optimizedMap.set(row.original_url, row.optimized_url);
     }
   }
@@ -621,11 +627,23 @@ async function enrichProductImages(product: any, supabase: any): Promise<any> {
   // Replace originals with optimized versions
   const enriched = urls.map((url: string) => optimizedMap.get(url) || url);
 
-  // Add any optimized URLs not already in the list
+  // Add any non-lifestyle optimized URLs not already in the list
   for (const row of imageRows) {
-    if (row.optimized_url && !enriched.includes(row.optimized_url)) {
+    const isLifestyle = row.s3_key && String(row.s3_key).includes("lifestyle");
+    if (!isLifestyle && row.optimized_url && !enriched.includes(row.optimized_url)) {
       enriched.push(row.optimized_url);
     }
+  }
+
+  // Insert lifestyle images as 2nd/3rd position (after the first/main image)
+  if (lifestyleUrls.length > 0 && enriched.length > 0) {
+    const firstImage = enriched[0];
+    const rest = enriched.slice(1);
+    // Filter out lifestyle URLs that might already be in the list
+    const newLifestyle = lifestyleUrls.filter(u => !enriched.includes(u));
+    const finalList = [firstImage, ...newLifestyle, ...rest];
+    console.log(`[enrichProductImages] Product ${product.id}: ${urls.length} original → ${finalList.length} enriched (${lifestyleUrls.length} lifestyle inserted after first)`);
+    return { ...product, image_urls: finalList };
   }
 
   console.log(`[enrichProductImages] Product ${product.id}: ${urls.length} original → ${enriched.length} enriched (${imageRows.length} optimized rows)`);
