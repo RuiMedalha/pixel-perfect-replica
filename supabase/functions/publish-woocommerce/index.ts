@@ -1209,6 +1209,14 @@ function mergeWooAttributes(existing: any[], incoming: any[]): any[] {
       continue;
     }
 
+    // For variation attributes, replace options so stale old labels don't persist.
+    if (a.variation === true) {
+      current.options = inOptions.length > 0 ? inOptions : (current.options || []);
+      current.variation = true;
+      if (typeof a.visible === "boolean") current.visible = a.visible;
+      continue;
+    }
+
     const set = new Set<string>([...(current.options || []), ...inOptions].map((v) => String(v)));
     current.options = Array.from(set);
 
