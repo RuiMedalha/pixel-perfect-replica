@@ -967,6 +967,7 @@ async function buildBasePayload(
             const existingMeta = Array.isArray(wooProduct.meta_data) ? wooProduct.meta_data as any[] : [];
             existingMeta.push({ key: "_brand", value: brandVal });
             existingMeta.push({ key: "xstore_brand", value: brandVal });
+            existingMeta.push({ key: "brand_id", value: brandVal });
             wooProduct.meta_data = existingMeta;
           }
           break;
