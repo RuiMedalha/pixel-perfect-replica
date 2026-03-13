@@ -1591,6 +1591,7 @@ async function publishVariableProduct(
     const existingMeta = Array.isArray((parentPayload as any).meta_data) ? (parentPayload as any).meta_data : [];
     existingMeta.push({ key: "_brand", value: brandValue });
     existingMeta.push({ key: "xstore_brand", value: brandValue });
+    existingMeta.push({ key: "brand_id", value: brandValue });
     (parentPayload as any).meta_data = existingMeta;
     console.log(`[publish-variable] Added brand meta: ${brandValue}`);
   }
