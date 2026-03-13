@@ -1354,14 +1354,23 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
               }
             }
 
+            const TECH_ATTR_NAMES = new Set(["marca","brand","ean","ean13","gtin","barcode","modelo","model","referência","reference","código","code"]);
+            const isEanLike = (v: string) => /^\d{8,14}$/.test(v.replace(/\s/g, ""));
+
             let propagated = 0;
             for (const variation of variations) {
-              // Build attribute suffix (e.g., "- Vermelho, 16 cm")
+              // Build attribute suffix ONLY from variation=true attrs, excluding tech values
               const attrParts: string[] = [];
               if (Array.isArray(variation.attributes)) {
                 for (const attr of variation.attributes as any[]) {
+                  // Skip non-variation and technical attributes
+                  if (attr.variation === false) continue;
+                  const attrName = (attr.name || "").toLowerCase().trim();
+                  if (TECH_ATTR_NAMES.has(attrName)) continue;
                   const vals = Array.isArray(attr.values) ? attr.values.join("/") : (attr.value || "");
-                  if (vals) attrParts.push(vals);
+                  // Skip EAN-like values (pure numbers 8+ digits)
+                  if (!vals || isEanLike(vals)) continue;
+                  attrParts.push(vals);
                 }
               }
               const suffix = attrParts.length > 0 ? ` - ${attrParts.join(", ")}` : "";
@@ -1503,11 +1512,11 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
                       messages: [
                         {
                           role: "system",
-                          content: "You extract variation attributes from product titles. Compare the parent title with each child title to identify the differentiating attribute (e.g. Color, Size, Material). Return structured data via the tool."
+                          content: "You extract variation attributes from product titles. Compare the parent title with each child title to identify the differentiating attribute (e.g. Color, Size, Material, Capacity, Dimensions). Return structured data via the tool. CRITICAL: NEVER use EAN codes, barcodes, numeric references (8+ digit numbers), brand names, or SKU codes as attribute values. Only use meaningful physical attributes like size, color, capacity, material."
                         },
                         {
                           role: "user",
-                          content: `Parent product title: "${parentTitleForAI}"\n\nChild variation titles:\n${Object.entries(childTitles).map(([id, t]) => `- ID ${id}: "${t}"`).join("\n")}\n\nExtract the variation attribute name and value for each child.`
+                          content: `Parent product title: "${parentTitleForAI}"\n\nChild variation titles:\n${Object.entries(childTitles).map(([id, t]) => `- ID ${id}: "${t}"`).join("\n")}\n\nExtract the variation attribute name and value for each child. The differentiating attribute should be a PHYSICAL characteristic (size, color, capacity, dimensions, etc.), NEVER an EAN code, barcode, reference number, or brand name.`
                         }
                       ],
                       tools: [{
@@ -1555,8 +1564,19 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
                         const baseSlug = updateData.seo_slug || "";
                         const baseMetaTitle = updateData.meta_title || "";
 
-                        for (const v of extracted.variations) {
+                      for (const v of extracted.variations) {
                           if (!v.child_id || !v.value) continue;
+                          // Reject EAN-like values as variation attributes
+                          if (/^\d{8,14}$/.test(v.value.replace(/\s/g, ""))) {
+                            console.warn(`⚠️ Rejected EAN-like variation value: ${v.value} for child ${v.child_id}`);
+                            continue;
+                          }
+                          // Reject brand/model references as variation values
+                          const lowerVal = v.value.toLowerCase();
+                          if (lowerVal === "lizotel" || lowerVal.startsWith("lz") || /^[a-z]{2}\d{6,}$/i.test(v.value)) {
+                            console.warn(`⚠️ Rejected brand/ref-like variation value: ${v.value} for child ${v.child_id}`);
+                            continue;
+                          }
                           const child = variations.find((c: any) => c.id === v.child_id);
                           if (!child) continue;
                           const existingAttrs = Array.isArray(child.attributes) ? [...child.attributes as any[]] : [];
