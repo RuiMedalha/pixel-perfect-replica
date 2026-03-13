@@ -998,6 +998,38 @@ const isSizeLikeAttrName = (name: string) => SIZE_LIKE_ATTR_NAMES.has(String(nam
 const isEanLikeValue = (val: string): boolean => /^\d{8,14}$/.test(String(val || "").trim());
 
 const SIZE_PATTERN = /\b(\d+[\.,]?\d*)\s*(cm|mm|m|ml|cl|l|lt|kg|g|oz|"|''|pol)\b/i;
+
+// Dimension-like attribute names (used to enrich dropdown labels)
+const DIMENSION_ATTR_NAMES = new Set([
+  "dimensões", "dimensoes", "dimensions", "medidas", "medida",
+  "dimensões (lxpxa)", "dimensões (cxlxa)", "dim", "measures",
+]);
+
+function isDimensionAttrName(name: string): boolean {
+  const n = String(name || "").toLowerCase().trim();
+  return DIMENSION_ATTR_NAMES.has(n) || n.startsWith("dimensõ") || n.startsWith("dimenso") || n.startsWith("medida");
+}
+
+/** Extract dimension value from a variation's attributes */
+function extractDimensionFromAttrs(attrs: any[]): string | null {
+  if (!Array.isArray(attrs)) return null;
+  for (const attr of attrs) {
+    const n = String(attr?.name || "").trim();
+    if (isDimensionAttrName(n)) {
+      const v = String(attr?.value || "").trim();
+      if (v) return v;
+    }
+  }
+  return null;
+}
+
+/** Enrich an option value with dimensions if available, e.g. "1.8L" → "1.8L - 22,5 x 15 x 10,5 cm" */
+function enrichOptionWithDimensions(option: string, dimensions: string | null): string {
+  if (!dimensions) return option;
+  // Avoid duplicating if already present
+  if (option.includes(dimensions)) return option;
+  return `${option} - ${dimensions}`;
+}
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
 const COLOR_WORDS = new Set([
   "preto","branco","azul","vermelho","verde","amarelo","laranja","roxo","rosa",
@@ -1320,12 +1352,15 @@ function buildAttributesForParent(
   for (const v of variations) {
     const childTitle = v?.optimized_title || v?.original_title || "";
     const attrs = Array.isArray(v?.attributes) ? v.attributes : [];
+    const dims = extractDimensionFromAttrs(attrs);
 
     for (const name of names) {
       const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
       const raw = String(found?.value || "").trim();
-      const option = (raw && !isEanLikeValue(raw)) ? raw : inferVariationOptionFromTitle(parentTitle, childTitle);
+      let option = (raw && !isEanLikeValue(raw)) ? raw : inferVariationOptionFromTitle(parentTitle, childTitle);
       if (option) {
+        // Enrich with dimensions in the dropdown label
+        option = enrichOptionWithDimensions(option, dims);
         const effectiveName = (!raw || isEanLikeValue(raw)) ? inferAttrNameFromOption(option) : name;
         add(effectiveName, option);
       }
@@ -1425,6 +1460,7 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   const attrs = Array.isArray(product?.attributes) ? product.attributes : [];
   const parentTitle = parent?.optimized_title || parent?.original_title || "";
   const childTitle = product?.optimized_title || product?.original_title || "";
+  const dims = extractDimensionFromAttrs(attrs);
 
   const out: Array<{ name: string; option: string }> = [];
 
@@ -1436,8 +1472,11 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
 
     const raw = String(attr?.value || "").trim();
     if (isEanLikeValue(raw)) continue;
-    const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
-    if (option && !isEanLikeValue(option)) out.push({ name: n, option });
+    let option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
+    if (option && !isEanLikeValue(option)) {
+      option = enrichOptionWithDimensions(option, dims);
+      out.push({ name: n, option });
+    }
   }
 
   if (out.length > 0) return out;
