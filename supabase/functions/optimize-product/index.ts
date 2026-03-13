@@ -947,30 +947,136 @@ IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variaçõ
         catalogContext = productCatalogContext;
 
         // Build field-specific instructions using per-field prompts
+        // Default prompts match the frontend defaults in useFieldPrompts.ts
+        const DEFAULT_FIELD_PROMPTS: Record<string, string> = {
+          title: `Gera um título otimizado para SEO (máx 70 chars).
+CONTEXTO: Estes são equipamentos PROFISSIONAIS para hotelaria, restauração, cozinhas industriais e bares.
+REGRAS OBRIGATÓRIAS:
+- Inclui a keyword principal no início
+- NÃO incluas o nome da marca no título (ex: NÃO "Zanussi Fritadeira", NÃO "Lizotel Caixa", SIM "Fritadeira a Gás Linha 700")
+- NÃO incluas códigos EAN, códigos de barras, referências numéricas de fornecedor ou SKUs no título
+- NÃO incluas quantidades de embalagem no título (ex: NÃO "Pack 6 unidades")
+- Inclui linha/série se aplicável (ex: "Linha 700", "Linha 900")
+- Inclui capacidade/dimensão se relevante (ex: "40x40", "4 Bicos", "8 Litros")
+- Mantém o tipo de energia se aplicável (Gás, Elétrico, etc.)
+- Nunca uses palavras genéricas como "Profissional" sem contexto técnico`,
+          description: `Gera uma descrição otimizada com ESTRUTURA OBRIGATÓRIA:
+CONTEXTO: Estes são equipamentos PROFISSIONAIS para hotelaria, restauração, cozinhas industriais e bares.
+1. PARÁGRAFO COMERCIAL (150-250 chars): Benefícios, aplicações, diferenciais. Sem dados técnicos. NÃO menciones a marca.
+2. TABELA HTML de specs: <table> com TODAS as características técnicas (dimensões, peso, material, potência, voltagem, etc.)
+3. FAQ HTML: 3-5 perguntas frequentes em <details><summary>Pergunta</summary><p>Resposta</p></details>
+
+REGRAS OBRIGATÓRIAS:
+- NÃO incluas o nome da marca no texto comercial — foca no equipamento e nas suas capacidades
+- NÃO incluas códigos EAN, códigos de barras ou referências no texto comercial
+- NÃO mistures dados técnicos no texto comercial
+- Menciona aplicações práticas (restaurante, hotel, pastelaria, bar, etc.)
+- Inclui benefícios de eficiência energética se aplicável
+- Menciona conformidade com normas (CE, HACCP) se relevante`,
+          short_description: `Gera uma descrição curta (máx 160 chars) para listagens.
+CONTEXTO: Equipamento profissional para hotelaria, restauração, cozinhas industriais e bares.
+REGRAS OBRIGATÓRIAS:
+- Resumo conciso focado no benefício principal
+- NÃO incluas o nome da marca
+- NÃO incluas códigos EAN ou referências
+- Inclui 1-2 specs chave (dimensão ou capacidade)
+- Inclui tipo de energia se aplicável
+- Tom profissional e direto`,
+          meta_title: `Gera meta title SEO (máx 60 chars).
+CONTEXTO: Equipamento profissional para hotelaria, restauração e bares.
+REGRAS OBRIGATÓRIAS:
+- Keyword principal no início
+- Inclui "Comprar" ou "Preço" para intenção comercial
+- NÃO incluas o nome da marca — foca na linha/série e tipo de equipamento
+- NÃO incluas códigos EAN ou referências
+- Termina com separador e nome da loja se couber`,
+          meta_description: `Gera meta description SEO (máx 155 chars).
+REGRAS OBRIGATÓRIAS:
+- Inclui call-to-action (ex: "Encomende já", "Entrega rápida")
+- Menciona 1-2 benefícios chave
+- Inclui preço ou "Melhor preço" se aplicável
+- NÃO incluas o nome da marca
+- Usa linguagem que gere cliques`,
+          seo_slug: `Gera um slug SEO-friendly.
+REGRAS OBRIGATÓRIAS:
+- Lowercase, sem acentos, com hífens
+- Inclui keyword principal + tipo + linha
+- NÃO incluas marca no slug
+- NÃO incluas códigos EAN ou referências no slug
+- Máx 5-7 palavras
+- Exemplo: fritadeira-gas-linha-700-8-litros`,
+          tags: `Gera 4-8 tags relevantes.
+REGRAS OBRIGATÓRIAS:
+- Inclui categoria principal (ex: "fritadeira")
+- Inclui tipo de energia (ex: "gás", "elétrico")
+- Inclui linha/série (ex: "linha 700")
+- Inclui aplicação (ex: "restaurante", "hotelaria")
+- NÃO incluas códigos EAN ou referências como tags
+- Inclui sinónimos de pesquisa comuns`,
+          price: `Sugere um preço otimizado.
+REGRAS:
+- Mantém o preço original se parecer correto para o mercado
+- Ajusta ligeiramente se for claramente abaixo ou acima do mercado
+- Considera o posicionamento do produto (entrada, médio, premium)`,
+          faq: `Gera 3-5 FAQs sobre o produto.
+REGRAS OBRIGATÓRIAS:
+- Pergunta sobre dimensões/espaço necessário
+- Pergunta sobre instalação/requisitos (gás, electricidade, água)
+- Pergunta sobre manutenção/limpeza
+- Pergunta sobre garantia/assistência se aplicável
+- Pergunta sobre acessórios incluídos/compatíveis
+- Respostas detalhadas e úteis (não genéricas)`,
+          upsells: `Sugere 2-4 produtos SUPERIORES do catálogo como upsell.
+REGRAS OBRIGATÓRIAS:
+- Usa APENAS SKUs reais do catálogo fornecido
+- Prioriza: mesmo tipo mas maior capacidade, mesma linha mas modelo superior
+- NÃO sugiras produtos de categorias completamente diferentes
+- NÃO incluas o próprio produto`,
+          crosssells: `Sugere 2-4 produtos COMPLEMENTARES do catálogo como cross-sell.
+REGRAS OBRIGATÓRIAS:
+- Usa APENAS SKUs reais do catálogo fornecido
+- Prioriza: acessórios, produtos da mesma linha/família, consumíveis
+- Procura produtos que formem uma "estação de trabalho" completa
+- NÃO sugiras produtos redundantes`,
+          image_alt: `Gera alt text SEO para cada imagem do produto (máx 125 chars cada).
+REGRAS OBRIGATÓRIAS:
+- Descritivo e relevante para o produto
+- Inclui keyword principal + linha
+- NÃO incluas a marca no alt text
+- Inclui ângulo/perspetiva se possível
+- Não comeces com "Imagem de" — sê direto`,
+          category: `Analisa o produto e sugere a melhor categoria e subcategoria.
+REGRAS OBRIGATÓRIAS:
+- Usa o formato "Categoria > Subcategoria" (ex: "Cozinha > Fritadeiras")
+- Se a categoria atual parecer incorreta, sugere uma melhor
+- Prioriza categorias que já existam no catálogo
+- NÃO cries categorias novas`,
+        };
+
         const getFieldPrompt = (key: string, fallback: string) => {
-          return fieldPrompts[`prompt_field_${key}`] || fallback;
+          return fieldPrompts[`prompt_field_${key}`] || DEFAULT_FIELD_PROMPTS[key] || fallback;
         };
 
         const fieldInstructions: string[] = [];
-        if (fields.includes("title")) fieldInstructions.push(`TÍTULO:\n${getFieldPrompt("title", "Um título otimizado (máx 70 chars, com keyword principal)")}`);
+        if (fields.includes("title")) fieldInstructions.push(`TÍTULO:\n${getFieldPrompt("title", "Um título otimizado")}`);
         if (fields.includes("description")) {
-          let descPrompt = getFieldPrompt("description", "Uma descrição otimizada com: parágrafo comercial + tabela HTML de specs + secção FAQ HTML");
+          let descPrompt = getFieldPrompt("description", "Uma descrição otimizada");
           if (descriptionTemplate) {
             descPrompt += `\n\nTEMPLATE DE ESTRUTURA OBRIGATÓRIO — segue EXATAMENTE esta estrutura, substituindo as variáveis {{...}} pelo conteúdo gerado:\n${descriptionTemplate}`;
           }
           fieldInstructions.push(`DESCRIÇÃO COMPLETA:\n${descPrompt}`);
         }
-        if (fields.includes("short_description")) fieldInstructions.push(`DESCRIÇÃO CURTA:\n${getFieldPrompt("short_description", "Descrição curta concisa para listagens, máx 160 chars")}`);
-        if (fields.includes("meta_title")) fieldInstructions.push(`META TITLE:\n${getFieldPrompt("meta_title", "Meta title SEO (máx 60 chars)")}`);
-        if (fields.includes("meta_description")) fieldInstructions.push(`META DESCRIPTION:\n${getFieldPrompt("meta_description", "Meta description SEO (máx 155 chars, com call-to-action)")}`);
-        if (fields.includes("seo_slug")) fieldInstructions.push(`SEO SLUG:\n${getFieldPrompt("seo_slug", "SEO slug (url-friendly, lowercase, hífens, sem acentos)")}`);
-        if (fields.includes("tags")) fieldInstructions.push(`TAGS:\n${getFieldPrompt("tags", "Tags relevantes (3-6 palavras-chave)")}`);
+        if (fields.includes("short_description")) fieldInstructions.push(`DESCRIÇÃO CURTA:\n${getFieldPrompt("short_description", "Descrição curta concisa")}`);
+        if (fields.includes("meta_title")) fieldInstructions.push(`META TITLE:\n${getFieldPrompt("meta_title", "Meta title SEO")}`);
+        if (fields.includes("meta_description")) fieldInstructions.push(`META DESCRIPTION:\n${getFieldPrompt("meta_description", "Meta description SEO")}`);
+        if (fields.includes("seo_slug")) fieldInstructions.push(`SEO SLUG:\n${getFieldPrompt("seo_slug", "SEO slug")}`);
+        if (fields.includes("tags")) fieldInstructions.push(`TAGS:\n${getFieldPrompt("tags", "Tags relevantes")}`);
         
-        if (fields.includes("faq")) fieldInstructions.push(`FAQ:\n${getFieldPrompt("faq", "FAQ com 3-5 perguntas e respostas frequentes")}`);
-        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("upsells", "Sugere 2-4 produtos SUPERIORES do catálogo com SKUs REAIS")}`);
-        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("crosssells", "Sugere 2-4 produtos COMPLEMENTARES do catálogo com SKUs REAIS")}`);
+        if (fields.includes("faq")) fieldInstructions.push(`FAQ:\n${getFieldPrompt("faq", "FAQ com 3-5 perguntas")}`);
+        if (fields.includes("upsells")) fieldInstructions.push(`UPSELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("upsells", "Sugere upsells com SKUs REAIS")}`);
+        if (fields.includes("crosssells")) fieldInstructions.push(`CROSS-SELLS (escolhe dos candidatos pré-filtrados acima):\n${getFieldPrompt("crosssells", "Sugere cross-sells com SKUs REAIS")}`);
         if (fields.includes("image_alt") && product.image_urls && product.image_urls.length > 0) {
-          fieldInstructions.push(`ALT TEXT IMAGENS (${product.image_urls.length} imagens):\n${getFieldPrompt("image_alt", "Alt text descritivo e SEO para cada imagem (máx 125 chars)")}`);
+          fieldInstructions.push(`ALT TEXT IMAGENS (${product.image_urls.length} imagens):\n${getFieldPrompt("image_alt", "Alt text descritivo")}`);
         }
         if (fields.includes("category")) {
           // Use semantic matching to find best candidate categories
@@ -990,7 +1096,7 @@ IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variaçõ
           const noCatHint = !product.category 
             ? "\nATENÇÃO: Este produto NÃO tem categoria atribuída. Analisa o título, descrição e especificações técnicas para sugerir a categoria mais adequada da lista."
             : "";
-          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE. NÃO cries categorias novas — usa APENAS as categorias da lista abaixo. Prefere categorias com subcategorias (formato 'Pai > Filho') quando disponíveis. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se nenhuma categoria existente se aplicar, devolve a string vazia.")}${catList}${semanticHint}${noCatHint}`);
+          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE.")}${catList}${semanticHint}${noCatHint}`);
         }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
