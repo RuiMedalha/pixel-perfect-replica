@@ -1460,6 +1460,7 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   const attrs = Array.isArray(product?.attributes) ? product.attributes : [];
   const parentTitle = parent?.optimized_title || parent?.original_title || "";
   const childTitle = product?.optimized_title || product?.original_title || "";
+  const dims = extractDimensionFromAttrs(attrs);
 
   const out: Array<{ name: string; option: string }> = [];
 
@@ -1471,8 +1472,11 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
 
     const raw = String(attr?.value || "").trim();
     if (isEanLikeValue(raw)) continue;
-    const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
-    if (option && !isEanLikeValue(option)) out.push({ name: n, option });
+    let option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
+    if (option && !isEanLikeValue(option)) {
+      option = enrichOptionWithDimensions(option, dims);
+      out.push({ name: n, option });
+    }
   }
 
   if (out.length > 0) return out;
