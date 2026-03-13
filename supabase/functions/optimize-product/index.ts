@@ -1564,8 +1564,19 @@ REGRAS GLOBAIS (MÁXIMA PRIORIDADE — violações resultam em rejeição):
                         const baseSlug = updateData.seo_slug || "";
                         const baseMetaTitle = updateData.meta_title || "";
 
-                        for (const v of extracted.variations) {
+                      for (const v of extracted.variations) {
                           if (!v.child_id || !v.value) continue;
+                          // Reject EAN-like values as variation attributes
+                          if (/^\d{8,14}$/.test(v.value.replace(/\s/g, ""))) {
+                            console.warn(`⚠️ Rejected EAN-like variation value: ${v.value} for child ${v.child_id}`);
+                            continue;
+                          }
+                          // Reject brand/model references as variation values
+                          const lowerVal = v.value.toLowerCase();
+                          if (lowerVal === "lizotel" || lowerVal.startsWith("lz") || /^[a-z]{2}\d{6,}$/i.test(v.value)) {
+                            console.warn(`⚠️ Rejected brand/ref-like variation value: ${v.value} for child ${v.child_id}`);
+                            continue;
+                          }
                           const child = variations.find((c: any) => c.id === v.child_id);
                           if (!child) continue;
                           const existingAttrs = Array.isArray(child.attributes) ? [...child.attributes as any[]] : [];
