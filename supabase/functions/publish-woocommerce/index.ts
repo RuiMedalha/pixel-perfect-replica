@@ -1531,7 +1531,7 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   const attrs = Array.isArray(product?.attributes) ? product.attributes : [];
   const parentTitle = parent?.optimized_title || parent?.original_title || "";
   const childTitle = product?.optimized_title || product?.original_title || "";
-  const dims = extractDimensionFromAttrs(attrs);
+  const dims = extractDimensionForVariation(product);
 
   const out: Array<{ name: string; option: string }> = [];
 
