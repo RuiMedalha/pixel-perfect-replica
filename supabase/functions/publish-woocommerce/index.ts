@@ -1005,9 +1005,20 @@ const DIMENSION_ATTR_NAMES = new Set([
   "dimensões (lxpxa)", "dimensões (cxlxa)", "dim", "measures",
 ]);
 
+const DIMENSION_VALUE_PATTERN = /(\d+(?:[.,]\d+)?\s*(?:x|×)\s*\d+(?:[.,]\d+)?(?:\s*(?:x|×)\s*\d+(?:[.,]\d+)?)?\s*(?:cm|mm|m))/i;
+
 function isDimensionAttrName(name: string): boolean {
   const n = String(name || "").toLowerCase().trim();
   return DIMENSION_ATTR_NAMES.has(n) || n.startsWith("dimensõ") || n.startsWith("dimenso") || n.startsWith("medida");
+}
+
+function stripHtml(value: string): string {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Extract dimension value from a variation's attributes */
@@ -1015,11 +1026,76 @@ function extractDimensionFromAttrs(attrs: any[]): string | null {
   if (!Array.isArray(attrs)) return null;
   for (const attr of attrs) {
     const n = String(attr?.name || "").trim();
-    if (isDimensionAttrName(n)) {
-      const v = String(attr?.value || "").trim();
-      if (v) return v;
+    if (!isDimensionAttrName(n)) continue;
+
+    const candidates = [
+      attr?.value,
+      ...(Array.isArray(attr?.values) ? attr.values : []),
+      ...(Array.isArray(attr?.options) ? attr.options : []),
+    ];
+
+    for (const candidate of candidates) {
+      const parsed = extractDimensionFromText(String(candidate || ""));
+      if (parsed) return parsed;
     }
   }
+  return null;
+}
+
+function extractDimensionFromText(text: string): string | null {
+  const plain = stripHtml(text);
+  if (!plain) return null;
+
+  const match = plain.match(DIMENSION_VALUE_PATTERN);
+  if (!match?.[1]) return null;
+
+  return match[1].replace(/\s+/g, " ").trim();
+}
+
+function extractDimensionFromHtmlTable(html: string): string | null {
+  if (!html || !html.includes("<tr")) return null;
+
+  const rowMatches = html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi);
+  for (const row of rowMatches) {
+    const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((m) => stripHtml(m[1]));
+    if (cells.length < 2) continue;
+
+    const label = cells[0];
+    const value = cells[1];
+    if (!isDimensionAttrName(label) || !value) continue;
+
+    return extractDimensionFromText(value) || value;
+  }
+
+  return null;
+}
+
+function extractDimensionForVariation(variation: any): string | null {
+  const attrs = Array.isArray(variation?.attributes) ? variation.attributes : [];
+  const fromAttrs = extractDimensionFromAttrs(attrs);
+  if (fromAttrs) return fromAttrs;
+
+  const sources = [
+    variation?.optimized_description,
+    variation?.original_description,
+    variation?.technical_specs,
+    variation?.optimized_short_description,
+    variation?.short_description,
+    variation?.optimized_title,
+    variation?.original_title,
+  ];
+
+  for (const source of sources) {
+    const raw = String(source || "");
+    if (!raw) continue;
+
+    const fromTable = extractDimensionFromHtmlTable(raw);
+    if (fromTable) return fromTable;
+
+    const fromText = extractDimensionFromText(raw);
+    if (fromText) return fromText;
+  }
+
   return null;
 }
 
@@ -1032,7 +1108,7 @@ function enrichOptionWithDimensions(option: string, dimensions: string | null): 
 }
 function buildVariationInlineDescription(variation: any, parent?: any): string {
   const attrs = Array.isArray(variation?.attributes) ? variation.attributes : [];
-  const dims = extractDimensionFromAttrs(attrs);
+  const dims = extractDimensionForVariation(variation);
 
   const pieces: string[] = [];
   for (const attr of attrs) {
