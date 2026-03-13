@@ -152,7 +152,7 @@ serve(async (req) => {
 
     function findSemanticCategory(productTitle: string, productCategory: string, existingCats: string[]): string[] {
       const normalized = normalizeForCategoryMatch(`${productTitle} ${productCategory}`);
-      const words = normalized.split(" ");
+      const words = normalized.split(" ").filter(w => w.length >= 3);
       
       // Find matching categories using synonyms
       const matchedCats: { cat: string; score: number }[] = [];
@@ -163,14 +163,12 @@ serve(async (req) => {
         
         // Direct word match
         for (const word of words) {
-          if (word.length < 3) continue;
           if (normalizedCat.includes(word)) score += 10;
         }
         
         // Synonym match
         for (const word of words) {
           const synonyms = CATEGORY_SYNONYMS[word] || [];
-          // Also check if any synonym key matches this word
           for (const [key, syns] of Object.entries(CATEGORY_SYNONYMS)) {
             if (syns.includes(word) || key === word) {
               const allTerms = [key, ...syns];
@@ -182,25 +180,71 @@ serve(async (req) => {
             }
           }
         }
+
+        // Bonus for hierarchical categories (more specific = better)
+        if (cat.includes(">") && score > 0) score += 5;
+        
+        // Bonus for subcategory parts matching product words
+        if (cat.includes(">")) {
+          const parts = cat.split(">").map(p => normalizeForCategoryMatch(p.trim()));
+          const lastPart = parts[parts.length - 1]; // most specific part
+          for (const word of words) {
+            if (lastPart.includes(word)) score += 6; // subcategory match is valuable
+          }
+        }
         
         if (score > 0) matchedCats.push({ cat, score });
       }
       
       return matchedCats
         .sort((a, b) => b.score - a.score)
-        .slice(0, 5)
+        .slice(0, 8)
         .map(m => m.cat);
     }
 
     let existingCategories: string[] = [];
     if (fields.includes("category")) {
+      // 1. Fetch from categories table (proper taxonomy with hierarchy)
+      const { data: catTableData } = await supabase
+        .from("categories")
+        .select("id, name, parent_id")
+        .order("sort_order", { ascending: true });
+
+      if (catTableData && catTableData.length > 0) {
+        // Build hierarchy: "Parent > Child" format
+        const catById = new Map<string, any>(catTableData.map((c: any) => [c.id, c]));
+        const buildPath = (cat: any): string => {
+          const parts: string[] = [cat.name];
+          let current = cat;
+          while (current.parent_id) {
+            const parent = catById.get(current.parent_id);
+            if (!parent) break;
+            parts.unshift(parent.name);
+            current = parent;
+          }
+          return parts.join(" > ");
+        };
+
+        const catPaths = new Set<string>();
+        for (const cat of catTableData) {
+          catPaths.add(buildPath(cat));
+          // Also add individual names for fuzzy matching
+          catPaths.add(cat.name);
+        }
+        existingCategories = Array.from(catPaths).sort();
+      }
+
+      // 2. Also include unique categories from products (for backward compat)
       const { data: catData } = await supabase
         .from("products")
         .select("category")
         .not("category", "is", null);
-      const cats = new Set<string>();
-      (catData || []).forEach((p: any) => { if (p.category) cats.add(p.category); });
-      existingCategories = Array.from(cats).sort();
+      (catData || []).forEach((p: any) => { 
+        if (p.category && !existingCategories.includes(p.category)) {
+          existingCategories.push(p.category);
+        }
+      });
+      existingCategories.sort();
     }
 
     // Mark as processing
@@ -932,16 +976,21 @@ IMPORTANTE: Otimiza o conteúdo BASE que será propagado para todas as variaçõ
           // Use semantic matching to find best candidate categories
           const semanticMatches = findSemanticCategory(
             product.original_title || "",
-            product.category || "",
+            product.category || product.original_description || "",
             existingCategories
           );
+          // Prefer hierarchical categories (with ">") for better context
+          const hierarchicalCats = existingCategories.filter(c => c.includes(">"));
           const catList = existingCategories.length > 0
-            ? `\nCATEGORIAS DISPONÍVEIS (usa APENAS uma destas, NÃO inventes novas): ${existingCategories.join(", ")}`
+            ? `\nCATEGORIAS DISPONÍVEIS (usa APENAS uma destas, NÃO inventes novas):\n${(hierarchicalCats.length > 0 ? hierarchicalCats : existingCategories).join("\n")}`
             : "";
           const semanticHint = semanticMatches.length > 0
             ? `\nCATEGORIAS MAIS RELEVANTES (por análise semântica): ${semanticMatches.join(", ")}`
             : "";
-          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE. NÃO cries categorias novas — usa APENAS as categorias da lista abaixo. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se nenhuma categoria existente se aplicar, devolve a string vazia.")}${catList}${semanticHint}`);
+          const noCatHint = !product.category 
+            ? "\nATENÇÃO: Este produto NÃO tem categoria atribuída. Analisa o título, descrição e especificações técnicas para sugerir a categoria mais adequada da lista."
+            : "";
+          fieldInstructions.push(`CATEGORIA SUGERIDA:\n${getFieldPrompt("category", "Analisa o produto e sugere a melhor categoria EXISTENTE. NÃO cries categorias novas — usa APENAS as categorias da lista abaixo. Prefere categorias com subcategorias (formato 'Pai > Filho') quando disponíveis. Considera sinónimos semânticos (ex: gyros=kebab=döner, fritadeira=fryer, grelhador=grill=chapa). Se nenhuma categoria existente se aplicar, devolve a string vazia.")}${catList}${semanticHint}${noCatHint}`);
         }
 
         const defaultPrompt = `Optimiza o seguinte produto de e-commerce para SEO e conversão em português europeu.
@@ -1016,7 +1065,7 @@ REGRAS GLOBAIS:
           requiredFields.push("image_alt_texts");
         }
         if (fields.includes("category")) {
-          toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'" };
+          toolProperties.suggested_category = { type: "string", description: "Categoria sugerida no formato 'Categoria > Subcategoria'. DEVE ser uma das categorias existentes fornecidas na lista. Se a melhor correspondência for uma subcategoria, usa o caminho completo (ex: 'Equipamento > Fornos'). Se o produto não tiver categoria, analisa o título e descrição para sugerir a mais adequada." };
           requiredFields.push("suggested_category");
         }
         // Only generate focus keywords in phase 1 (or when no phase is set)
