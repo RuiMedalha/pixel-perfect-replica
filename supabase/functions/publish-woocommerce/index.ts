@@ -362,11 +362,9 @@ async function wooFetch(baseUrl: string, auth: string, endpoint: string, method:
   });
   if (!resp.ok) {
     const errBody = await resp.text();
-    // Detect 404 (stale woocommerce_id)
     if (resp.status === 404) {
       throw new WooNotFoundError(endpoint);
     }
-    // Detect SKU conflict and extract existing resource_id for retry
     try {
       const parsed = JSON.parse(errBody);
       if (parsed.code === "product_invalid_sku" && parsed.data?.resource_id) {
@@ -483,7 +481,6 @@ async function handleVariationSkuConflict(
   skuErr: WooSkuConflictError,
   supabase: any
 ): Promise<any> {
-  // Step 1: if the variation already exists under the correct parent, update it
   const realVarId = await findWooVariationBySku(baseUrl, auth, parentWooId, sku);
   if (realVarId) {
     console.log(`Found existing variation ${realVarId} under parent ${parentWooId} for child ${childId}`);
@@ -492,67 +489,42 @@ async function handleVariationSkuConflict(
     return varWooData;
   }
 
-  // Step 1b: sometimes Woo gives us the variation ID directly in resource_id
   const directVar = await getWooVariation(baseUrl, auth, parentWooId, skuErr.resourceId);
   if (directVar?.id) {
     console.log(`SKU conflict resource_id ${skuErr.resourceId} já é variação do pai ${parentWooId}; a atualizar.`);
-    const varWooData = await wooFetch(
-      baseUrl,
-      auth,
-      `/products/${parentWooId}/variations/${skuErr.resourceId}`,
-      "PUT",
-      variationPayload
-    );
+    const varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${skuErr.resourceId}`, "PUT", variationPayload);
     await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", childId);
     return varWooData;
   }
 
-  // Step 2: try to understand what resource_id is (product vs variation under another parent)
   const resource = await getWooResource(baseUrl, auth, skuErr.resourceId);
 
   if (resource?.type === "variation" && resource?.parent_id) {
     const otherParentId = Number(resource.parent_id);
     if (otherParentId === parentWooId) {
-      const varWooData = await wooFetch(
-        baseUrl,
-        auth,
-        `/products/${parentWooId}/variations/${skuErr.resourceId}`,
-        "PUT",
-        variationPayload
-      );
+      const varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations/${skuErr.resourceId}`, "PUT", variationPayload);
       await supabase.from("products").update({ woocommerce_id: skuErr.resourceId }).eq("id", childId);
       return varWooData;
     }
 
-    console.log(
-      `SKU conflict: resource_id ${skuErr.resourceId} é variação do produto ${otherParentId}; a tentar eliminar e recriar sob ${parentWooId}.`
-    );
+    console.log(`SKU conflict: resource_id ${skuErr.resourceId} é variação do produto ${otherParentId}; a tentar eliminar e recriar sob ${parentWooId}.`);
     const deleted = await deleteWooVariation(baseUrl, auth, otherParentId, skuErr.resourceId);
     if (!deleted) {
-      throw new Error(
-        `SKU conflict: o SKU já existe na variação #${skuErr.resourceId} (pai #${otherParentId}) e não foi possível remover automaticamente. Resolva apagando/alterando esse SKU no WooCommerce e tente novamente.`
-      );
+      throw new Error(`SKU conflict: o SKU já existe na variação #${skuErr.resourceId} (pai #${otherParentId}) e não foi possível remover automaticamente.`);
     }
   } else {
-    console.log(
-      `SKU conflict resource_id ${skuErr.resourceId} não é variação do pai ${parentWooId}. A tentar eliminar produto standalone e criar como variação.`
-    );
+    console.log(`SKU conflict resource_id ${skuErr.resourceId} não é variação do pai ${parentWooId}. A tentar eliminar produto standalone e criar como variação.`);
     const deleted = await deleteWooProduct(baseUrl, auth, skuErr.resourceId);
     if (!deleted) {
-      throw new Error(
-        `SKU conflict: o SKU já existe no produto #${skuErr.resourceId} e não foi possível remover automaticamente. Resolva apagando/alterando esse SKU no WooCommerce e tente novamente.`
-      );
+      throw new Error(`SKU conflict: o SKU já existe no produto #${skuErr.resourceId} e não foi possível remover automaticamente.`);
     }
   }
 
-  // Step 3: create the variation again
   try {
     return await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
   } catch (e) {
     if (e instanceof WooSkuConflictError) {
-      throw new Error(
-        `SKU conflict persistente: o SKU continua a existir no WooCommerce (ID #${e.resourceId}). Altere o SKU no Excel/app ou elimine o item com esse SKU no WooCommerce e volte a publicar.`
-      );
+      throw new Error(`SKU conflict persistente: o SKU continua a existir no WooCommerce (ID #${e.resourceId}).`);
     }
     throw e;
   }
@@ -659,7 +631,6 @@ function resetImageCache() {
 }
 
 async function searchWPMediaByFilename(baseUrl: string, auth: string, filename: string): Promise<number | null> {
-  // Strip extension for search (WP media search works on title which usually omits extension)
   const nameWithoutExt = filename.replace(/\.[^.]+$/, "");
   if (!nameWithoutExt) return null;
 
@@ -675,7 +646,6 @@ async function searchWPMediaByFilename(baseUrl: string, auth: string, filename: 
     const items = await resp.json();
     if (!Array.isArray(items) || items.length === 0) return null;
 
-    // Try exact match on source_url filename first
     const filenameLower = filename.toLowerCase();
     for (const item of items) {
       const srcUrl = String(item.source_url || "");
@@ -683,17 +653,14 @@ async function searchWPMediaByFilename(baseUrl: string, auth: string, filename: 
       if (srcFilename === filenameLower) return item.id;
     }
 
-    // Try match without extension (slug-based)
     const nameWithoutExtLower = nameWithoutExt.toLowerCase();
     for (const item of items) {
       const slug = String(item.slug || "").toLowerCase();
       if (slug === nameWithoutExtLower) return item.id;
-      // Also check title
       const title = String(item.title?.rendered || "").toLowerCase().replace(/<[^>]*>/g, "").trim();
       if (title === nameWithoutExtLower) return item.id;
     }
 
-    // Fallback: first result if search term matches closely
     if (items.length === 1) return items[0].id;
 
     return null;
@@ -705,10 +672,6 @@ async function searchWPMediaByFilename(baseUrl: string, auth: string, filename: 
 
 const SUPABASE_STORAGE_PATTERN = /supabase\.co\/storage\/v1\/object\/public\//;
 
-/**
- * Upload an image from a URL directly to WP Media Library.
- * Returns the WP media ID or null on failure.
- */
 async function uploadImageToWPMedia(
   sourceUrl: string,
   baseUrl: string,
@@ -716,7 +679,6 @@ async function uploadImageToWPMedia(
   filename?: string
 ): Promise<number | null> {
   try {
-    // Download the image
     const resp = await fetch(sourceUrl);
     if (!resp.ok) {
       console.warn(`Failed to download image from ${sourceUrl}: ${resp.status}`);
@@ -725,10 +687,8 @@ async function uploadImageToWPMedia(
     const blob = await resp.blob();
     const contentType = resp.headers.get("content-type") || "image/webp";
 
-    // Derive filename from URL
     const fname = filename || sourceUrl.split("/").pop() || `image_${Date.now()}.webp`;
 
-    // Upload to WP Media Library
     const formData = new FormData();
     formData.append("file", new File([blob], fname, { type: contentType }));
 
@@ -766,16 +726,13 @@ async function resolveImageRef(
 
   const img: Record<string, unknown> = { position };
 
-  // 1. Purely numeric → WooCommerce media ID
   if (/^\d+$/.test(trimmed)) {
     img.id = parseInt(trimmed, 10);
     if (hasAlt && altText) img.alt = altText;
     return img;
   }
 
-  // 2. Full URL
   if (trimmed.startsWith("http")) {
-    // 2a. Supabase Storage URL → upload directly to WP Media Library for reliability
     if (SUPABASE_STORAGE_PATTERN.test(trimmed)) {
       const cached = imageCache.get(trimmed);
       if (cached) {
@@ -793,7 +750,6 @@ async function resolveImageRef(
         console.log(`✅ Supabase image uploaded to WP Media: ${trimmed} → ID ${mediaId}`);
         return img;
       }
-      // Fallback: send as src if upload fails
       console.warn(`⚠️ Failed to upload Supabase image to WP, falling back to src: ${trimmed}`);
     }
 
@@ -802,9 +758,7 @@ async function resolveImageRef(
     return img;
   }
 
-  // 3. Filename with image extension → search WP Media Library
   if (IMAGE_EXTENSIONS.test(trimmed)) {
-    // Check cache first
     const cached = imageCache.get(trimmed);
     if (cached) {
       const result = { ...cached, position };
@@ -822,7 +776,6 @@ async function resolveImageRef(
       return img;
     }
 
-    // Fallback: construct probable URL
     const fallbackUrl = `${baseUrl}/wp-content/uploads/${trimmed}`;
     const entry: Record<string, unknown> = { src: fallbackUrl };
     imageCache.set(trimmed, entry);
@@ -832,13 +785,11 @@ async function resolveImageRef(
     return img;
   }
 
-  // 4. Unknown format → send as-is (src)
   img.src = trimmed;
   if (hasAlt && altText) img.alt = altText;
   return img;
 }
 
-// Sync fallback for backward compat (used nowhere now, kept for safety)
 function buildImageEntry(ref: string, position: number, altText?: string, hasAlt?: boolean): Record<string, unknown> {
   const trimmed = String(ref || "").trim();
   const img: Record<string, unknown> = { position };
@@ -982,8 +933,6 @@ async function buildBasePayload(
   }
 
   // ── Attributes (EAN, Marca, Modelo, etc.) for non-variation products ──
-  // For simple products we send ALL attributes as visible, non-variation attributes.
-  // For variable products this is handled separately in publishVariableProduct.
   if (product.product_type !== "variable" && !product.parent_product_id) {
     const productAttrs = Array.isArray(product.attributes) ? product.attributes : [];
     if (productAttrs.length > 0) {
@@ -1007,6 +956,23 @@ async function buildBasePayload(
         wooProduct.attributes = attrPayload;
       }
     }
+
+    // Add brand meta for simple products too (XStore compatibility)
+    if (Array.isArray(product.attributes)) {
+      for (const attr of product.attributes) {
+        const n = String(attr?.name || "").toLowerCase().trim();
+        if (n === "marca" || n === "brand") {
+          const brandVal = String(attr?.value || attr?.options?.[0] || "").trim();
+          if (brandVal) {
+            const existingMeta = Array.isArray(wooProduct.meta_data) ? wooProduct.meta_data as any[] : [];
+            existingMeta.push({ key: "_brand", value: brandVal });
+            existingMeta.push({ key: "xstore_brand", value: brandVal });
+            wooProduct.meta_data = existingMeta;
+          }
+          break;
+        }
+      }
+    }
   }
 
   return wooProduct;
@@ -1025,10 +991,8 @@ const TECHNICAL_ATTR_NAMES = new Set([
 
 const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
 
-/** Detects if a value looks like an EAN/barcode (8-14 digits) */
 const isEanLikeValue = (val: string): boolean => /^\d{8,14}$/.test(String(val || "").trim());
 
-// ── Smart attribute name inference ──
 const SIZE_PATTERN = /\b(\d+[\.,]?\d*)\s*(cm|mm|m|ml|cl|l|lt|kg|g|oz|"|''|pol)\b/i;
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
 const COLOR_WORDS = new Set([
@@ -1043,21 +1007,11 @@ const COLOR_WORDS = new Set([
 
 function inferAttrNameFromOption(option: string): string {
   const lower = option.toLowerCase().trim();
-  
-  // Check for size patterns first (more specific)
   if (SIZE_PATTERN.test(lower)) return "Tamanho";
-  
-  // Check if it's a pure size word
   const words = lower.split(/[\s\-\/]+/).map(w => w.trim()).filter(Boolean);
   if (words.length <= 2 && words.some(w => SIZE_WORDS.has(w))) return "Tamanho";
-  
-  // Check for color words
   if (words.some(w => COLOR_WORDS.has(w))) return "Cor";
-  
-  // If it looks like a dimension (just numbers), it's probably a size
   if (/^\d+[\.,]?\d*$/.test(lower)) return "Tamanho";
-  
-  // Default fallback
   return "Opção";
 }
 
@@ -1076,15 +1030,12 @@ function inferVariationOptionFromTitle(parentTitle: string, childTitle: string):
   const rawParent = String(parentTitle || "").trim();
   if (!rawChild) return null;
 
-  // Method 1: If child title starts with parent title, extract the suffix
   const suffix = extractTitleSuffix(rawParent, rawChild);
   if (suffix && suffix !== rawChild && suffix.length <= 80 && suffix.length > 0) {
-    // Clean up leading separators
     const cleaned = suffix.replace(/^[-–—:,\s]+/, "").trim();
     if (cleaned && cleaned.length <= 80) return cleaned;
   }
 
-  // Method 2: Token-based diff - remove parent tokens from child
   const pTokens = new Set(tokenizeTitle(rawParent).map((t) => t.toLowerCase()));
   const remaining = tokenizeTitle(rawChild).filter((t) => !pTokens.has(t.toLowerCase()));
   const candidate = remaining.join(" ").trim();
@@ -1120,7 +1071,6 @@ function mergeWooAttributes(existing: any[], incoming: any[]): any[] {
     const set = new Set<string>([...(current.options || []), ...inOptions].map((v) => String(v)));
     current.options = Array.from(set);
 
-    // Keep existing id/position; prefer incoming flags when present
     if (typeof a.visible === "boolean") current.visible = a.visible;
     if (typeof a.variation === "boolean") current.variation = a.variation;
   }
@@ -1137,11 +1087,14 @@ async function buildVariationPayload(
   baseUrl: string,
   auth: string
 ): Promise<Record<string, unknown>> {
-  // WooCommerce variations do NOT support many product fields (name, categories, tags, upsells/cross-sells, images[])
   const payload: Record<string, unknown> = {};
 
-  // Evita a “descrição duplicada” no storefront (Woo mostra a descrição da variação separadamente quando existe)
-  payload.description = "";
+  // Inherit description from parent (includes dimensions/specs) instead of clearing it
+  if (has("description")) {
+    const varDesc = variation.optimized_description || variation.original_description || "";
+    const parentDesc = parent?.optimized_description || parent?.original_description || "";
+    payload.description = varDesc || parentDesc || "";
+  }
 
   if (has("price")) {
     let basePrice = parseFloat(variation.optimized_price || variation.original_price || "0") || 0;
@@ -1174,6 +1127,16 @@ async function buildVariationPayload(
   // Only variation-defining attributes go on the variation payload.
   let variationAttrs = buildVariationAttributes(variation, parent);
 
+  // Consolidate size-like attribute names to match the parent's chosen name
+  const SIZE_ATTR_NAMES_VAR = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
+  if (variationAttrs.length > 1) {
+    const sizeAttrs = variationAttrs.filter(a => SIZE_ATTR_NAMES_VAR.has(a.name.toLowerCase().trim()));
+    if (sizeAttrs.length > 1) {
+      const primaryName = sizeAttrs[0].name;
+      variationAttrs = variationAttrs.filter(a => !(SIZE_ATTR_NAMES_VAR.has(a.name.toLowerCase().trim()) && a.name !== primaryName));
+    }
+  }
+
   // If nothing came from structured attrs, infer a safe default (typically Cor)
   if (variationAttrs.length === 0) {
     const parentTitle = parent?.optimized_title || parent?.original_title || "";
@@ -1201,12 +1164,10 @@ function buildAttributesForParent(
   parent: any,
   variations: any[]
 ): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
-  // Variation-defining attributes (Cor, Tamanho, etc.) for the *parent* product.
   const attrMap = new Map<string, Set<string>>();
 
   const parentTitle = parent?.optimized_title || parent?.original_title || "";
 
-  // Collect candidate attribute names from the dataset
   const nameCandidates = new Set<string>();
   for (const v of variations) {
     const attrs = v?.attributes;
@@ -1220,7 +1181,6 @@ function buildAttributesForParent(
     }
   }
 
-  // If no structured attrs found, infer the attr name from first variation's title diff
   let defaultAttrName = "Opção";
   if (nameCandidates.size === 0 && variations.length > 0) {
     const firstChild = variations[0];
@@ -1235,7 +1195,6 @@ function buildAttributesForParent(
     const v = String(value || "").trim();
     if (!n || !v) return;
     if (isTechnicalAttrName(n)) return;
-    // Skip EAN/barcode-like values (8-14 digits) from variation attributes
     if (isEanLikeValue(v)) return;
     if (!attrMap.has(n)) attrMap.set(n, new Set());
     attrMap.get(n)!.add(v);
@@ -1246,34 +1205,46 @@ function buildAttributesForParent(
     const attrs = Array.isArray(v?.attributes) ? v.attributes : [];
 
     for (const name of names) {
-      // Find structured attribute value if present
       const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
       const raw = String(found?.value || "").trim();
-      // If the structured value looks like an EAN, skip it and infer from title instead
       const option = (raw && !isEanLikeValue(raw)) ? raw : inferVariationOptionFromTitle(parentTitle, childTitle);
       if (option) {
-        // If the inferred option changes the logical attribute name (e.g. was "Cor" but value is a size), use the correct name
         const effectiveName = (!raw || isEanLikeValue(raw)) ? inferAttrNameFromOption(option) : name;
         add(effectiveName, option);
       }
     }
   }
 
-  return Array.from(attrMap.entries())
-    .filter(([_, values]) => values.size > 0) // Remove attrs where all values were filtered (e.g. all EANs)
+  const result = Array.from(attrMap.entries())
+    .filter(([_, values]) => values.size > 0)
     .map(([name, values]) => ({
       name,
       options: Array.from(values),
       variation: true,
       visible: true,
     }));
+
+  // Consolidate duplicate size-like attributes at the parent level too
+  const SIZE_ATTR_NAMES_PARENT = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
+  const sizeResults = result.filter(a => SIZE_ATTR_NAMES_PARENT.has(a.name.toLowerCase().trim()));
+  if (sizeResults.length > 1) {
+    const primary = sizeResults[0];
+    const allOpts = new Set<string>(primary.options);
+    for (let i = 1; i < sizeResults.length; i++) {
+      for (const opt of sizeResults[i].options) allOpts.add(opt);
+    }
+    primary.options = Array.from(allOpts);
+    const dupNames = new Set(sizeResults.slice(1).map(a => a.name));
+    return result.filter(a => !dupNames.has(a.name));
+  }
+
+  return result;
 }
 
 function buildStaticAttributesForParent(
   parent: any,
   variations: any[]
 ): Array<{ name: string; options: string[]; variation: boolean; visible: boolean }> {
-  // Technical/non-variation attributes (Marca/EAN/etc.) for the *parent* product.
   const map = new Map<string, Set<string>>();
 
   const add = (name: string, value: string) => {
@@ -1316,7 +1287,6 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
 
   const out: Array<{ name: string; option: string }> = [];
 
-  // Prefer structured attrs from the catalog
   for (const attr of attrs) {
     const n = String(attr?.name || "").trim();
     if (!n) continue;
@@ -1324,7 +1294,6 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
     if (isTechnicalAttrName(n)) continue;
 
     const raw = String(attr?.value || "").trim();
-    // Skip EAN/barcode-like values masquerading as variation options
     if (isEanLikeValue(raw)) continue;
     const option = raw || inferVariationOptionFromTitle(parentTitle, childTitle);
     if (option && !isEanLikeValue(option)) out.push({ name: n, option });
@@ -1332,7 +1301,6 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
 
   if (out.length > 0) return out;
 
-  // If we have parent attributes (rare in DB), try matching options in title
   if (parent && Array.isArray(parent.attributes) && parent.attributes.length > 0) {
     const childLower = String(childTitle || "").toLowerCase();
     for (const attr of parent.attributes) {
@@ -1366,20 +1334,16 @@ async function publishSingleProduct(
   markupPercent: number,
   discountPercent: number
 ): Promise<WooResult> {
-  // Enrich images from images table (optimized/lifestyle)
   const enrichedProduct = has("images") ? await enrichProductImages(product, supabase) : product;
 
-  // Handle variable products
   if (enrichedProduct.product_type === "variable") {
     return await publishVariableProduct(enrichedProduct, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
   }
 
-  // Handle standalone variations
   if (enrichedProduct.parent_product_id) {
     return await publishVariation(enrichedProduct, supabase, adminClient, baseUrl, auth, has, markupPercent, discountPercent);
   }
 
-  // Simple product
   const wooProduct = await buildBasePayload(enrichedProduct, supabase, baseUrl, auth, has, markupPercent, discountPercent);
 
   if (has("upsells")) {
@@ -1441,13 +1405,11 @@ async function publishVariableProduct(
   markupPercent: number,
   discountPercent: number
 ): Promise<WooResult> {
-  // Fetch children
   const { data: rawChildren } = await supabase
     .from("products")
     .select("*")
     .eq("parent_product_id", parent.id);
 
-  // Enrich children images from images table
   const children: any[] = [];
   if (rawChildren && rawChildren.length > 0 && has("images")) {
     for (const child of rawChildren) {
@@ -1494,14 +1456,12 @@ async function publishVariableProduct(
   const SIZE_ATTR_NAMES = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
   const sizeAttrs = variationAttributes.filter(a => SIZE_ATTR_NAMES.has(a.name.toLowerCase().trim()));
   if (sizeAttrs.length > 1) {
-    // Merge all size-like attributes into the first one
     const primary = sizeAttrs[0];
     const allOptions = new Set<string>(primary.options);
     for (let i = 1; i < sizeAttrs.length; i++) {
       for (const opt of sizeAttrs[i].options) allOptions.add(opt);
     }
     primary.options = Array.from(allOptions);
-    // Remove the duplicates
     const sizeNames = new Set(sizeAttrs.slice(1).map(a => a.name));
     variationAttributes = variationAttributes.filter(a => !sizeNames.has(a.name));
     console.log(`[publish-variable] Consolidated ${sizeAttrs.length} size attributes into "${primary.name}" with ${primary.options.length} options`);
@@ -1585,7 +1545,6 @@ async function publishVariableProduct(
       }
     } catch (e) {
       if (e instanceof WooNotFoundError) {
-        // Stale woocommerce_id → clear and create fresh
         console.warn(`Variable parent ${parent.id} WC#${existingParentWooId} not found, will create new.`);
         await supabase.from("products").update({ woocommerce_id: null }).eq("id", parent.id);
         existingParentWooId = null;
@@ -1622,7 +1581,6 @@ async function publishVariableProduct(
     .update({ woocommerce_id: parentWooId, status: "published" as any })
     .eq("id", parent.id);
 
-  // Variations are processed separately (they are added to the job queue), to avoid duplicate creation and SKU conflicts.
   return { id: parent.id, status: parentAction, woocommerce_id: parentWooId };
 }
 
@@ -1638,7 +1596,7 @@ async function publishVariation(
 ): Promise<WooResult> {
   const { data: parentRow } = await supabase
     .from("products")
-    .select("woocommerce_id, attributes, optimized_title, original_title")
+    .select("woocommerce_id, attributes, optimized_title, original_title, optimized_description, original_description")
     .eq("id", variation.parent_product_id)
     .single();
 
@@ -1669,7 +1627,6 @@ async function publishVariation(
         : await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
     } catch (err) {
       if (err instanceof WooNotFoundError && existingVarWooId) {
-        // Stale variation woocommerce_id → clear and create fresh
         console.warn(`Variation ${variation.id} WC#${existingVarWooId} not found, creating new.`);
         await supabase.from("products").update({ woocommerce_id: null }).eq("id", variation.id);
         varWooData = await wooFetch(baseUrl, auth, `/products/${parentWooId}/variations`, "POST", variationPayload);
@@ -1712,7 +1669,6 @@ async function finalizeJob(adminClient: any, jobId: string, job: any, userId: st
   const published = results.filter((r: WooResult) => r.status === "created" || r.status === "updated").length;
   const errors = results.filter((r: WooResult) => r.status === "error").length;
 
-  // ── Second pass: resolve upsell/crosssell now that all products are published ──
   try {
     await resolveUpsellCrosssellPass(adminClient, job, userId);
   } catch (e) {
@@ -1725,7 +1681,6 @@ async function finalizeJob(adminClient: any, jobId: string, job: any, userId: st
     current_product_name: null,
   }).eq("id", jobId);
 
-  // Log activity
   await adminClient.from("activity_log").insert({
     user_id: userId,
     action: "publish" as any,
@@ -1742,7 +1697,6 @@ async function resolveUpsellCrosssellPass(adminClient: any, job: any, userId: st
   const productIds = job.product_ids as string[];
   if (!productIds || productIds.length === 0) return;
 
-  // Get WooCommerce config
   const { data: settings } = await adminClient
     .from("settings")
     .select("key, value")
@@ -1759,7 +1713,6 @@ async function resolveUpsellCrosssellPass(adminClient: any, job: any, userId: st
   const baseUrl = wooUrl.replace(/\/+$/, "");
   const auth = btoa(`${wooKey}:${wooSecret}`);
 
-  // Fetch all products with upsell/crosssell skus that have a woocommerce_id
   const { data: products } = await adminClient
     .from("products")
     .select("id, sku, woocommerce_id, upsell_skus, crosssell_skus, parent_product_id, product_type")
@@ -1772,7 +1725,6 @@ async function resolveUpsellCrosssellPass(adminClient: any, job: any, userId: st
     const upsellSkus = product.upsell_skus || [];
     const crosssellSkus = product.crosssell_skus || [];
     if (upsellSkus.length === 0 && crosssellSkus.length === 0) continue;
-    // Only update parent/simple products (variations don't support upsell/crosssell in WooCommerce)
     if (product.parent_product_id) continue;
 
     const updates: Record<string, unknown> = {};
