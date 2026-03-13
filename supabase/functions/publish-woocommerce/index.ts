@@ -1267,7 +1267,7 @@ async function buildVariationPayload(
   const payload: Record<string, unknown> = {};
 
   const upsertMeta = (key: string, value: string) => {
-    if (!key || !value) return;
+    if (!key || value === undefined || value === null) return;
     const existingMeta = Array.isArray(payload.meta_data)
       ? (payload.meta_data as Array<{ key: string; value: string }>)
       : [];
@@ -1280,21 +1280,13 @@ async function buildVariationPayload(
     payload.meta_data = existingMeta;
   };
 
-  // ── Build variation-specific content for the native Woo variation description field ──
-  // This is theme-agnostic and renders in `.woocommerce-variation-description`.
+  // Keep variation text only in dropdown labels (no inline block under selector).
   if (has("description")) {
-    const inlineDescription = buildVariationInlineDescription(variation, parent);
-
-    // Keep it short and variation-specific (e.g. "1.8L - 22,5 x 15 x 10,5 cm")
-    payload.description = inlineDescription || "";
-
-    // Store in generic meta keys as fallback for themes/builders that read meta
-    if (inlineDescription) {
-      upsertMeta("_variation_description", inlineDescription);
-      upsertMeta("variation_description", inlineDescription);
-      upsertMeta("_variation_tab_description", inlineDescription);
-      upsertMeta("variation_tab_description", inlineDescription);
-    }
+    payload.description = "";
+    upsertMeta("_variation_description", "");
+    upsertMeta("variation_description", "");
+    upsertMeta("_variation_tab_description", "");
+    upsertMeta("variation_tab_description", "");
   }
 
   // ── Pass variation title for themes that support title swapping (XStore) ──
