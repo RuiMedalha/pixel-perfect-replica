@@ -1030,6 +1030,35 @@ function enrichOptionWithDimensions(option: string, dimensions: string | null): 
   if (option.includes(dimensions)) return option;
   return `${option} - ${dimensions}`;
 }
+function buildVariationInlineDescription(variation: any, parent?: any): string {
+  const attrs = Array.isArray(variation?.attributes) ? variation.attributes : [];
+  const dims = extractDimensionFromAttrs(attrs);
+
+  const pieces: string[] = [];
+  for (const attr of attrs) {
+    const name = String(attr?.name || "").trim();
+    const val = String(attr?.value || "").trim();
+    if (!name || !val) continue;
+    if (isTechnicalAttrName(name) || isDimensionAttrName(name) || isEanLikeValue(val)) continue;
+    pieces.push(val);
+  }
+
+  let base = pieces.join(" • ").trim();
+  if (!base) {
+    const parentTitle = parent?.optimized_title || parent?.original_title || "";
+    const childTitle = variation?.optimized_title || variation?.original_title || "";
+    base = inferVariationOptionFromTitle(parentTitle, childTitle) || "";
+  }
+
+  if (dims) {
+    if (!base) return dims;
+    if (base.includes(dims)) return base;
+    return `${base} - ${dims}`;
+  }
+
+  return base;
+}
+
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
 const COLOR_WORDS = new Set([
   "preto","branco","azul","vermelho","verde","amarelo","laranja","roxo","rosa",
@@ -1167,54 +1196,20 @@ async function buildVariationPayload(
     payload.meta_data = existingMeta;
   };
 
-  // ── Build variation-specific content ──
-  // IMPORTANT: keep variation.description empty to avoid rendering near price.
-  // Store full variation content in meta keys so themes/plugins can render it in tabs.
+  // ── Build variation-specific content for the native Woo variation description field ──
+  // This is theme-agnostic and renders in `.woocommerce-variation-description`.
   if (has("description")) {
-    const specLines: string[] = [];
-    const attrs = Array.isArray(variation.attributes) ? variation.attributes : [];
-    for (const attr of attrs) {
-      const n = String(attr?.name || "").trim();
-      if (!n) continue;
-      const val = String(attr?.value || "").trim();
-      if (!val || isEanLikeValue(val)) continue;
-      specLines.push(`<strong>${n}:</strong> ${val}`);
-    }
+    const inlineDescription = buildVariationInlineDescription(variation, parent);
 
-    const varSpecs = variation.technical_specs || "";
-    const varOwnDesc = variation.optimized_description || variation.original_description || "";
-    const parentDesc = parent?.optimized_description || parent?.original_description || "";
-    const baseDesc = varOwnDesc || parentDesc || "";
+    // Keep it short and variation-specific (e.g. "1.8L - 22,5 x 15 x 10,5 cm")
+    payload.description = inlineDescription || "";
 
-    let finalDesc = baseDesc;
-    if (specLines.length > 0) {
-      const specsHtml = `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines
-        .map((l) => `<li>${l}</li>`)
-        .join("")}</ul></div>`;
-      if (!finalDesc.includes("variation-specs")) {
-        finalDesc = finalDesc + specsHtml;
-      }
-    }
-
-    if (varSpecs && !finalDesc.includes(varSpecs.substring(0, 30))) {
-      finalDesc = finalDesc + `<div class="technical-specs">${varSpecs}</div>`;
-    }
-
-    // Keep Woo native variation description empty (avoids rendering near price)
-    payload.description = "";
-
-    const tabDescription = String(finalDesc || "").trim();
-
-    // Store in multiple meta keys for theme/plugin compatibility (XStore + common keys)
-    if (tabDescription) {
-      upsertMeta("_variation_description", tabDescription);
-      upsertMeta("variation_description", tabDescription);
-      upsertMeta("_variation_tab_description", tabDescription);
-      upsertMeta("variation_tab_description", tabDescription);
-      upsertMeta("_xstore_variation_description", tabDescription);
-      upsertMeta("xstore_variation_description", tabDescription);
-      upsertMeta("_et_variation_description", tabDescription);
-      upsertMeta("et_variation_description", tabDescription);
+    // Store in generic meta keys as fallback for themes/builders that read meta
+    if (inlineDescription) {
+      upsertMeta("_variation_description", inlineDescription);
+      upsertMeta("variation_description", inlineDescription);
+      upsertMeta("_variation_tab_description", inlineDescription);
+      upsertMeta("variation_tab_description", inlineDescription);
     }
   }
 
