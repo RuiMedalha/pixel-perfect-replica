@@ -967,6 +967,7 @@ async function buildBasePayload(
             const existingMeta = Array.isArray(wooProduct.meta_data) ? wooProduct.meta_data as any[] : [];
             existingMeta.push({ key: "_brand", value: brandVal });
             existingMeta.push({ key: "xstore_brand", value: brandVal });
+            existingMeta.push({ key: "brand_id", value: brandVal });
             wooProduct.meta_data = existingMeta;
           }
           break;
@@ -1090,12 +1091,8 @@ async function buildVariationPayload(
   const payload: Record<string, unknown> = {};
 
   // ── Build variation-specific description with its own specs ──
+  // Specs go ONLY in the variation description (the tab below), NOT mixed with parent description
   if (has("description")) {
-    const varDesc = variation.optimized_description || variation.original_description || "";
-    const parentDesc = parent?.optimized_description || parent?.original_description || "";
-    const baseDesc = varDesc || parentDesc || "";
-    
-    // Build specs block from this variation's attributes (dimensions, color, capacity, etc.)
     const specLines: string[] = [];
     const attrs = Array.isArray(variation.attributes) ? variation.attributes : [];
     for (const attr of attrs) {
@@ -1105,23 +1102,23 @@ async function buildVariationPayload(
       if (!val || isEanLikeValue(val)) continue;
       specLines.push(`<strong>${n}:</strong> ${val}`);
     }
-    // Add technical_specs if the variation has its own
     const varSpecs = variation.technical_specs || "";
     
-    // Compose: base description + variation-specific specs
+    // Use variation's own description if it has one, otherwise use parent's
+    const varOwnDesc = variation.optimized_description || variation.original_description || "";
+    const parentDesc = parent?.optimized_description || parent?.original_description || "";
+    const baseDesc = varOwnDesc || parentDesc || "";
+    
+    // Append variation-specific specs block to the description
     let finalDesc = baseDesc;
-    if (specLines.length > 0 || varSpecs) {
-      const specsHtml = specLines.length > 0
-        ? `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines.map(l => `<li>${l}</li>`).join("")}</ul></div>`
-        : "";
-      const techHtml = varSpecs ? `<div class="technical-specs">${varSpecs}</div>` : "";
-      // Only append if specs aren't already in the description
-      if (specsHtml && !finalDesc.includes("variation-specs")) {
+    if (specLines.length > 0) {
+      const specsHtml = `<div class="variation-specs"><h4>Especificações desta variação</h4><ul>${specLines.map(l => `<li>${l}</li>`).join("")}</ul></div>`;
+      if (!finalDesc.includes("variation-specs")) {
         finalDesc = finalDesc + specsHtml;
       }
-      if (techHtml && !finalDesc.includes(varSpecs.substring(0, 30))) {
-        finalDesc = finalDesc + techHtml;
-      }
+    }
+    if (varSpecs && !finalDesc.includes(varSpecs.substring(0, 30))) {
+      finalDesc = finalDesc + `<div class="technical-specs">${varSpecs}</div>`;
     }
     payload.description = finalDesc;
   }
@@ -1133,10 +1130,29 @@ async function buildVariationPayload(
       const meta: Array<{ key: string; value: string }> = [];
       meta.push({ key: "_variation_title", value: varTitle });
       meta.push({ key: "variation_title", value: varTitle });
-      // Also set the WooCommerce variation description title for display
       payload.name = varTitle;
       payload.meta_data = meta;
     }
+  }
+
+  // ── Brand meta on variations too (XStore compatibility) ──
+  // Check parent attributes for brand
+  let brandValue: string | null = null;
+  if (Array.isArray(parent?.attributes)) {
+    for (const attr of parent.attributes) {
+      const n = String(attr?.name || "").toLowerCase().trim();
+      if (n === "marca" || n === "brand") {
+        brandValue = String(attr?.value || attr?.options?.[0] || "").trim() || null;
+        break;
+      }
+    }
+  }
+  if (brandValue) {
+    const existingMeta = Array.isArray(payload.meta_data) ? payload.meta_data as any[] : [];
+    existingMeta.push({ key: "_brand", value: brandValue });
+    existingMeta.push({ key: "xstore_brand", value: brandValue });
+    existingMeta.push({ key: "brand_id", value: brandValue });
+    payload.meta_data = existingMeta;
   }
 
   if (has("price")) {
@@ -1161,7 +1177,6 @@ async function buildVariationPayload(
   if (has("images")) {
     const urls: string[] = Array.isArray(variation.image_urls) ? variation.image_urls : [];
     if (urls.length > 0) {
-      // Variation supports only ONE image; use resolveImageRef for ID/URL/filename detection
       const resolved = await resolveImageRef(urls[0], 0, baseUrl, auth);
       if (resolved) payload.image = resolved;
     }
@@ -1180,7 +1195,7 @@ async function buildVariationPayload(
     }
   }
 
-  // If nothing came from structured attrs, infer a safe default (typically Cor)
+  // If nothing came from structured attrs, infer a safe default
   if (variationAttrs.length === 0) {
     const parentTitle = parent?.optimized_title || parent?.original_title || "";
     const childTitle = variation.optimized_title || variation.original_title || "";
@@ -1258,8 +1273,10 @@ function buildAttributesForParent(
     }
   }
 
-  const result = Array.from(attrMap.entries())
-    .filter(([_, values]) => values.size > 0)
+  // Only keep attributes where there are 2+ distinct values (i.e., values actually vary across variations)
+  // If only 1 unique value, it's static and should NOT be a variation attribute (no dropdown needed)
+  let result = Array.from(attrMap.entries())
+    .filter(([_, values]) => values.size > 1)
     .map(([name, values]) => ({
       name,
       options: Array.from(values),
@@ -1267,7 +1284,29 @@ function buildAttributesForParent(
       visible: true,
     }));
 
-  // Consolidate duplicate size-like attributes at the parent level too
+  // If ALL attributes were removed (all had 1 value), fall back to title-based inference
+  if (result.length === 0 && variations.length > 1) {
+    const inferredMap = new Map<string, Set<string>>();
+    for (const v of variations) {
+      const childTitle = v?.optimized_title || v?.original_title || "";
+      const option = inferVariationOptionFromTitle(parentTitle, childTitle);
+      if (option) {
+        const attrName = inferAttrNameFromOption(option);
+        if (!inferredMap.has(attrName)) inferredMap.set(attrName, new Set());
+        inferredMap.get(attrName)!.add(option);
+      }
+    }
+    result = Array.from(inferredMap.entries())
+      .filter(([_, values]) => values.size > 1)
+      .map(([name, values]) => ({
+        name,
+        options: Array.from(values),
+        variation: true,
+        visible: true,
+      }));
+  }
+
+  // Consolidate duplicate size-like attributes at the parent level
   const SIZE_ATTR_NAMES_PARENT = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
   const sizeResults = result.filter(a => SIZE_ATTR_NAMES_PARENT.has(a.name.toLowerCase().trim()));
   if (sizeResults.length > 1) {
@@ -1553,6 +1592,7 @@ async function publishVariableProduct(
     const existingMeta = Array.isArray((parentPayload as any).meta_data) ? (parentPayload as any).meta_data : [];
     existingMeta.push({ key: "_brand", value: brandValue });
     existingMeta.push({ key: "xstore_brand", value: brandValue });
+    existingMeta.push({ key: "brand_id", value: brandValue });
     (parentPayload as any).meta_data = existingMeta;
     console.log(`[publish-variable] Added brand meta: ${brandValue}`);
   }
