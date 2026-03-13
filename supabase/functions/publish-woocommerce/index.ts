@@ -1005,9 +1005,20 @@ const DIMENSION_ATTR_NAMES = new Set([
   "dimensões (lxpxa)", "dimensões (cxlxa)", "dim", "measures",
 ]);
 
+const DIMENSION_VALUE_PATTERN = /(\d+(?:[.,]\d+)?\s*(?:x|×)\s*\d+(?:[.,]\d+)?(?:\s*(?:x|×)\s*\d+(?:[.,]\d+)?)?\s*(?:cm|mm|m))/i;
+
 function isDimensionAttrName(name: string): boolean {
   const n = String(name || "").toLowerCase().trim();
   return DIMENSION_ATTR_NAMES.has(n) || n.startsWith("dimensõ") || n.startsWith("dimenso") || n.startsWith("medida");
+}
+
+function stripHtml(value: string): string {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Extract dimension value from a variation's attributes */
@@ -1015,11 +1026,76 @@ function extractDimensionFromAttrs(attrs: any[]): string | null {
   if (!Array.isArray(attrs)) return null;
   for (const attr of attrs) {
     const n = String(attr?.name || "").trim();
-    if (isDimensionAttrName(n)) {
-      const v = String(attr?.value || "").trim();
-      if (v) return v;
+    if (!isDimensionAttrName(n)) continue;
+
+    const candidates = [
+      attr?.value,
+      ...(Array.isArray(attr?.values) ? attr.values : []),
+      ...(Array.isArray(attr?.options) ? attr.options : []),
+    ];
+
+    for (const candidate of candidates) {
+      const parsed = extractDimensionFromText(String(candidate || ""));
+      if (parsed) return parsed;
     }
   }
+  return null;
+}
+
+function extractDimensionFromText(text: string): string | null {
+  const plain = stripHtml(text);
+  if (!plain) return null;
+
+  const match = plain.match(DIMENSION_VALUE_PATTERN);
+  if (!match?.[1]) return null;
+
+  return match[1].replace(/\s+/g, " ").trim();
+}
+
+function extractDimensionFromHtmlTable(html: string): string | null {
+  if (!html || !html.includes("<tr")) return null;
+
+  const rowMatches = html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi);
+  for (const row of rowMatches) {
+    const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((m) => stripHtml(m[1]));
+    if (cells.length < 2) continue;
+
+    const label = cells[0];
+    const value = cells[1];
+    if (!isDimensionAttrName(label) || !value) continue;
+
+    return extractDimensionFromText(value) || value;
+  }
+
+  return null;
+}
+
+function extractDimensionForVariation(variation: any): string | null {
+  const attrs = Array.isArray(variation?.attributes) ? variation.attributes : [];
+  const fromAttrs = extractDimensionFromAttrs(attrs);
+  if (fromAttrs) return fromAttrs;
+
+  const sources = [
+    variation?.optimized_description,
+    variation?.original_description,
+    variation?.technical_specs,
+    variation?.optimized_short_description,
+    variation?.short_description,
+    variation?.optimized_title,
+    variation?.original_title,
+  ];
+
+  for (const source of sources) {
+    const raw = String(source || "");
+    if (!raw) continue;
+
+    const fromTable = extractDimensionFromHtmlTable(raw);
+    if (fromTable) return fromTable;
+
+    const fromText = extractDimensionFromText(raw);
+    if (fromText) return fromText;
+  }
+
   return null;
 }
 
@@ -1029,34 +1105,6 @@ function enrichOptionWithDimensions(option: string, dimensions: string | null): 
   // Avoid duplicating if already present
   if (option.includes(dimensions)) return option;
   return `${option} - ${dimensions}`;
-}
-function buildVariationInlineDescription(variation: any, parent?: any): string {
-  const attrs = Array.isArray(variation?.attributes) ? variation.attributes : [];
-  const dims = extractDimensionFromAttrs(attrs);
-
-  const pieces: string[] = [];
-  for (const attr of attrs) {
-    const name = String(attr?.name || "").trim();
-    const val = String(attr?.value || "").trim();
-    if (!name || !val) continue;
-    if (isTechnicalAttrName(name) || isDimensionAttrName(name) || isEanLikeValue(val)) continue;
-    pieces.push(val);
-  }
-
-  let base = pieces.join(" • ").trim();
-  if (!base) {
-    const parentTitle = parent?.optimized_title || parent?.original_title || "";
-    const childTitle = variation?.optimized_title || variation?.original_title || "";
-    base = inferVariationOptionFromTitle(parentTitle, childTitle) || "";
-  }
-
-  if (dims) {
-    if (!base) return dims;
-    if (base.includes(dims)) return base;
-    return `${base} - ${dims}`;
-  }
-
-  return base;
 }
 
 const SIZE_WORDS = new Set(["pequeno","medio","médio","grande","extra","xs","s","m","l","xl","xxl","xxxl","2xl","3xl","4xl","pp","p","g","gg","xg","xxg"]);
@@ -1133,6 +1181,14 @@ function mergeWooAttributes(existing: any[], incoming: any[]): any[] {
       continue;
     }
 
+    // For variation attributes, replace options so stale old labels don't persist.
+    if (a.variation === true) {
+      current.options = inOptions.length > 0 ? inOptions : (current.options || []);
+      current.variation = true;
+      if (typeof a.visible === "boolean") current.visible = a.visible;
+      continue;
+    }
+
     const set = new Set<string>([...(current.options || []), ...inOptions].map((v) => String(v)));
     current.options = Array.from(set);
 
@@ -1183,7 +1239,7 @@ async function buildVariationPayload(
   const payload: Record<string, unknown> = {};
 
   const upsertMeta = (key: string, value: string) => {
-    if (!key || !value) return;
+    if (!key || value === undefined || value === null) return;
     const existingMeta = Array.isArray(payload.meta_data)
       ? (payload.meta_data as Array<{ key: string; value: string }>)
       : [];
@@ -1196,21 +1252,13 @@ async function buildVariationPayload(
     payload.meta_data = existingMeta;
   };
 
-  // ── Build variation-specific content for the native Woo variation description field ──
-  // This is theme-agnostic and renders in `.woocommerce-variation-description`.
+  // Keep variation text only in dropdown labels (no inline block under selector).
   if (has("description")) {
-    const inlineDescription = buildVariationInlineDescription(variation, parent);
-
-    // Keep it short and variation-specific (e.g. "1.8L - 22,5 x 15 x 10,5 cm")
-    payload.description = inlineDescription || "";
-
-    // Store in generic meta keys as fallback for themes/builders that read meta
-    if (inlineDescription) {
-      upsertMeta("_variation_description", inlineDescription);
-      upsertMeta("variation_description", inlineDescription);
-      upsertMeta("_variation_tab_description", inlineDescription);
-      upsertMeta("variation_tab_description", inlineDescription);
-    }
+    payload.description = "";
+    upsertMeta("_variation_description", "");
+    upsertMeta("variation_description", "");
+    upsertMeta("_variation_tab_description", "");
+    upsertMeta("variation_tab_description", "");
   }
 
   // ── Pass variation title for themes that support title swapping (XStore) ──
@@ -1347,7 +1395,7 @@ function buildAttributesForParent(
   for (const v of variations) {
     const childTitle = v?.optimized_title || v?.original_title || "";
     const attrs = Array.isArray(v?.attributes) ? v.attributes : [];
-    const dims = extractDimensionFromAttrs(attrs);
+    const dims = extractDimensionForVariation(v);
 
     for (const name of names) {
       const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
@@ -1455,7 +1503,7 @@ function buildVariationAttributes(product: any, parent?: any): Array<{ name: str
   const attrs = Array.isArray(product?.attributes) ? product.attributes : [];
   const parentTitle = parent?.optimized_title || parent?.original_title || "";
   const childTitle = product?.optimized_title || product?.original_title || "";
-  const dims = extractDimensionFromAttrs(attrs);
+  const dims = extractDimensionForVariation(product);
 
   const out: Array<{ name: string; option: string }> = [];
 
