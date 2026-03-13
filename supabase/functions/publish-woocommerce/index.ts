@@ -990,7 +990,10 @@ const TECHNICAL_ATTR_NAMES = new Set([
   "model",
 ]);
 
+const SIZE_LIKE_ATTR_NAMES = new Set(["tamanho", "capacidade", "volume", "size", "capacity"]);
+
 const isTechnicalAttrName = (name: string) => TECHNICAL_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
+const isSizeLikeAttrName = (name: string) => SIZE_LIKE_ATTR_NAMES.has(String(name || "").toLowerCase().trim());
 
 const isEanLikeValue = (val: string): boolean => /^\d{8,14}$/.test(String(val || "").trim());
 
@@ -1076,7 +1079,35 @@ function mergeWooAttributes(existing: any[], incoming: any[]): any[] {
     if (typeof a.variation === "boolean") current.variation = a.variation;
   }
 
-  return Array.from(byName.values());
+  const merged = Array.from(byName.values());
+
+  // Prevent duplicate variation dropdowns for synonyms like "Tamanho" and "Capacidade"
+  const preferredSizeName = (incoming || [])
+    .find((a: any) => a?.variation === true && isSizeLikeAttrName(a?.name))
+    ?.name;
+  const sizeLikeVariationAttrs = merged.filter((a) => a?.variation === true && isSizeLikeAttrName(a?.name));
+
+  if (sizeLikeVariationAttrs.length > 1) {
+    const primary = sizeLikeVariationAttrs.find((a) => preferredSizeName && norm(a.name) === norm(preferredSizeName)) || sizeLikeVariationAttrs[0];
+
+    const allOptions = new Set<string>();
+    for (const attr of sizeLikeVariationAttrs) {
+      for (const opt of (Array.isArray(attr.options) ? attr.options : [])) {
+        allOptions.add(String(opt));
+      }
+    }
+    primary.options = Array.from(allOptions);
+
+    const removeNames = new Set(
+      sizeLikeVariationAttrs
+        .filter((a) => a !== primary)
+        .map((a) => norm(a.name))
+    );
+
+    return merged.filter((a) => !(a?.variation === true && removeNames.has(norm(a?.name))));
+  }
+
+  return merged;
 }
 
 async function buildVariationPayload(
