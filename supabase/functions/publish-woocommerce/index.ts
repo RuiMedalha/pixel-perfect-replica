@@ -1423,7 +1423,7 @@ function buildAttributesForParent(
   for (const v of variations) {
     const childTitle = v?.optimized_title || v?.original_title || "";
     const attrs = Array.isArray(v?.attributes) ? v.attributes : [];
-    const dims = extractDimensionFromAttrs(attrs);
+    const dims = extractDimensionForVariation(v);
 
     for (const name of names) {
       const found = attrs.find((a: any) => String(a?.name || "").toLowerCase().trim() === String(name).toLowerCase().trim());
